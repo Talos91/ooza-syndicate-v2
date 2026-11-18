@@ -126,8 +126,14 @@ class Rack:
 	func at(p: Vector2) -> Vector2:
 		return Vector2(right - (Hud40.W - p.x) * u, top + p.y * u)
 
+	func _draw() -> void:
+		if Hud43.on() and show_rack:                 # hud-43: the trimmed rail (84 pt) in the SKILL zone, its goo pipe = faction
+			Hud43.draw_rail(self, Hud43.zones(get_viewport_rect().size)["skill"], Hud40.goo_of(str(hud.human), hud.human))
+
 	func _draw_pipes(ci: Control) -> void:
 		var vp := ci.get_viewport_rect().size
+		if Hud43.on():
+			return
 		if show_rack:
 			Hud40.art(ci, "PAINT-RACK-MAIN-SHAFT", at(Vector2(706.2, 87.5)), u)
 			var ex := at(Vector2(725.7, 68.2))           # the top run: the B6 straight section on to the physical right edge
@@ -159,6 +165,9 @@ class Rack:
 
 static func topkey_face(b: Button, name: String, u: float, off := false) -> void:
 	## A top key: its 40B4 face (30.5 x 30 pt) in its 33 pt tap; MUTE off = faded + struck, a pressed key dims a little.
+	if Hud43.on():
+		Hud43.topkey_face(b, name, u, off)
+		return
 	var art_at: Vector2 = TOPKEY_ART[name] - TOPKEYS[name]
 	var pressed := b.button_pressed or b.is_hovered()
 	art(b, "KEY-" + name, art_at * u, u, Color(0.9, 0.9, 0.9) if pressed else Color(1, 1, 1, 0.55 if off else 1.0))
@@ -173,6 +182,9 @@ static func draw_key(sl) -> void:
 	## One skill key on the B5 (= B4) art: GEO-SKILL-KEY[-2|-3], the skill icon in its well, the name in the label box;
 	## READY = the seat rim breathing in your seat colour, ARMED = solid in the slot colour, COOLING = the sweep + seconds,
 	## LOCKED = dimmed (MASK DIM) with a padlock; a refused tap flashes the rim red.
+	if Hud43.on():
+		Hud43.draw_key(sl)
+		return
 	var dock = sl.dock
 	var u: float = dock.lab_u
 	var i: int = clampi(sl.index, 0, 2)

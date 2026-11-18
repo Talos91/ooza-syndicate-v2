@@ -3947,7 +3947,7 @@ func _ward_looks(pos: Vector2, dims: Vector2, cat: String, looks: Array, sel: St
 			_ward_sel[cat] = lid
 			show_cosmetics(), "selected" if lid == sel else "secondary", _army)
 		if s["equipped"]:
-			b.add_child(UiKit.rect(Vector2(0, 8.0), Vector2(3.0, th - 16.0), acc))
+			b.add_child(UiKit.rect(Vector2(9, 12.0), Vector2(3.0, th - 24.0), acc))
 		var hh := UiKit.line_h(self, 15, true) + UiKit.line_h(self, 12, true)
 		var tx := 16.0
 		var n := UiKit.label(self, _ward_look_name(cat, lid), 15, UiKit.MUTED if s["locked"] else UiKit.INK, true)
@@ -4405,11 +4405,14 @@ func _fit_fs(t: String, hi: float, lo: float, width: float, bold := true) -> flo
 	return fs
 
 
+const TEXT_IN := 22.0                              # note 2: text inset inside a 43B plate (its 14 pt chamfer + bolt)
+
+
 func _big_btn(r: Rect2, kicker: String, value: String, call: Callable, f := "", pic: Texture2D = null) -> Button:
 	## A big summary button: KICKER (muted) over the value (large), a chevron at the right. Opens its page / sheet.
 	## pic (SETTING): a small picture before the chevron when the words still fit beside it.
 	var b := UiKit.btn(self, "", r.position, r.size, call, "secondary", f if f != "" else shell_f)
-	var room := b.size.x - 14.0 - 26.0
+	var room := b.size.x - TEXT_IN - 26.0          # note 2 (Daniele 11-16): clear of the chamfered corner + bolts
 	if pic != null:
 		var ph := floorf(b.size.y - 16.0)
 		var pw := floorf(ph * 16.0 / 9.0)
@@ -4430,13 +4433,13 @@ func _big_btn(r: Rect2, kicker: String, value: String, call: Callable, f := "", 
 	var vl := UiKit.line_h(self, vfs, true)
 	var ty := maxf(4.0, (b.size.y - kl - 2.0 - vl) / 2.0)
 	var k := UiKit.label(self, kicker, kfs, UiKit.MUTED, true, 2)
-	k.position = Vector2(14, ty)
+	k.position = Vector2(TEXT_IN, ty)
 	b.add_child(k)
 	if value != "":
 		var v := UiKit.label(self, value, vfs, UiKit.INK, true)
 		v.clip_text = true
 		v.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		v.position = Vector2(14, ty + kl + 2.0)
+		v.position = Vector2(TEXT_IN, ty + kl + 2.0)
 		v.size = Vector2(maxf(10.0, room), vl)
 		b.add_child(v)
 	var c := UiKit.label(self, "›", 22, UiKit.MUTED)
@@ -4453,7 +4456,7 @@ func _lobby_map(r: Rect2, can_change: bool) -> void:
 	var pr := Rect2(r.position + Vector2(pad, pad + nl + 4.0), r.size - Vector2(pad * 2.0, pad * 2.0 + nl + 4.0))
 	var sel := _selected_map()
 	var tags := [str(sel.get("name", "")).replace("*", "").to_upper(), "%d NODES" % sel["nodes"].size()]
-	_clip("  ·  ".join(tags), r.position + Vector2(pad + 4.0, pad), 15, UiKit.INK, r.size.x - pad * 2.0, true)
+	_clip("  ·  ".join(tags), r.position + Vector2(TEXT_IN, pad + 2.0), 15, UiKit.INK, r.size.x - TEXT_IN - pad, true)
 	map_preview(pr.position, pr.size)
 	if can_change:
 		var hit := Button.new()
@@ -4518,12 +4521,12 @@ func _ai_seat_chip(seat: String, r: Rect2, team: Dictionary) -> void:
 	var b := UiKit.btn(self, "", r.position, r.size, func(): _open_lobby_sheet("seat:" + seat), "selected" if me else "secondary", shell_f)
 	var h := b.size.y
 	var col: Color = Rules.SEATS.get(seat, Color.WHITE)
-	b.add_child(UiKit.rect(Vector2(0, 5), Vector2(4, h - 10.0), col))
+	b.add_child(UiKit.rect(Vector2(9, 12), Vector2(3, h - 24.0), col))   # note 8: the seat neon inside the plate's face, not on its frame
 	var fl := clampf(h * 0.28, 15.0, 22.0)
 	var sl := UiKit.label(self, seat, fl, col, true)
-	sl.position = Vector2(10, (h - UiKit.line_h(self, fl, true)) / 2.0)
+	sl.position = Vector2(18, (h - UiKit.line_h(self, fl, true)) / 2.0)
 	b.add_child(sl)
-	var tx := 10.0 + UiKit.text_w(self, "W", fl, true) + 4.0
+	var tx := 18.0 + UiKit.text_w(self, "W", fl, true) + 4.0
 	var ts := minf(h - 8.0, floorf(r.size.x * 0.24))
 	MenuSkin.ai_hero(self, pick if pick != "random" else "", Vector2(tx, (h - ts) / 2.0), ts, "", b, col)   # M-K: the AI mark in its socket, SEAT-coloured rim
 	if pick == "random":
@@ -5403,11 +5406,11 @@ func _seat_chip(i: int, id: int, colours: Dictionary, pos: Vector2, dims: Vector
 	var fl := 18.0 * k
 	var fn := 17.0 * k
 	var fs := 13.0 * k
-	b.add_child(UiKit.rect(Vector2(0, 5), Vector2(4, h - 10.0), col))
+	b.add_child(UiKit.rect(Vector2(9, 12), Vector2(3, h - 24.0), col))   # note 8: inside the plate face
 	var sl := UiKit.label(self, seat, fl, col, true)
-	sl.position = Vector2(12, (h - UiKit.line_h(self, fl, true)) / 2.0)
+	sl.position = Vector2(18, (h - UiKit.line_h(self, fl, true)) / 2.0)
 	b.add_child(sl)
-	var tx := 12.0 + UiKit.text_w(self, "W", fl, true) + 6.0
+	var tx := 18.0 + UiKit.text_w(self, "W", fl, true) + 6.0
 	var ts := minf(h - 8.0, floorf(dims.x * 0.22))      # the character never crowds the name out
 	var ty0 := (h - ts) / 2.0
 	var name_t := ""
@@ -5481,7 +5484,7 @@ func _seat_chip_compact(b: Button, i: int, id: int, col: Color, me: bool, sit: b
 	## SIT HERE / AI), the character at the right; the skills wait for the seat's sheet.
 	var h := b.size.y
 	var w := b.size.x
-	b.add_child(UiKit.rect(Vector2(0, 5), Vector2(4, h - 10.0), col))
+	b.add_child(UiKit.rect(Vector2(9, 12), Vector2(3, h - 24.0), col))   # note 8: inside the plate face
 	var ts := minf(h * 0.6, w * 0.3)
 	var want := UiKit.text_w(self, Net.SEATS[i] + " " + ("YOU" if me else (Net.name_of(id).to_upper() if id >= 0 else "OPEN")), 16, true) + 18.0
 	if w - ts - 10.0 < want:                           # a narrow phone: the name wins, the character goes

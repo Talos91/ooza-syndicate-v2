@@ -12,6 +12,8 @@ signal back_pressed
 
 var menu                                           # the Menu (untyped: the pieces load without menu.gd)
 var slim := false
+var _strip_box: StyleBox
+var _strip_glass: StyleBox
 var _ring_c := Vector2.ZERO
 var _ring_r := 0.0
 var _ring_col := UiKit.CYAN
@@ -22,6 +24,8 @@ static func make(m, crumb: String, f := "vex", p_slim := false) -> TopBar:
 	var t := TopBar.new()
 	t.menu = m
 	t.slim = p_slim
+	t._strip_box = MenuSkin.strip(1.0)                # loaded here, not first inside _draw (drew opaque WHITE on SETUP's slim bar)
+	t._strip_glass = MenuSkin.strip(0.6)
 	t._build(crumb, f)
 	return t
 
@@ -197,9 +201,9 @@ func _draw() -> void:
 	var sf: Vector4 = menu.safe                       # the back reaches over the notch bands and the status bar
 	var r := Rect2(-sf.x, -sf.y, size.x + sf.x + sf.z, size.y + sf.y)
 	if slim:
-		draw_style_box(MenuSkin.strip(1.0), r)
+		draw_style_box(_strip_box, r)
 		return
-	draw_style_box(MenuSkin.strip(0.6 if glass else 1.0), r)   # 40B2 dark glass bar (HOME: 60 % glass over the painting)
+	draw_style_box(_strip_glass if glass else _strip_box, r)   # 40B2 dark glass bar (HOME: 60 % glass over the painting)
 	draw_circle(_ring_c, _ring_r, UiKit.BASE)
 	draw_arc(_ring_c, _ring_r, 0.0, TAU, 40, Color(_ring_col, 0.9), 1.5, true)
 	var font := UiKit.BODY

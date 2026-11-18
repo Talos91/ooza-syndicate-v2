@@ -1997,7 +1997,33 @@ func _process(delta: float) -> void:
 		_take_shot(shots.pop_front(), shots.is_empty())
 
 
+func _zone_check() -> void:
+	## Dev (--zone-check, hud-43): every platform rim and troop badge vs the HUD zones; prints one ZONECHECK line.
+	var vp := get_viewport().get_visible_rect().size
+	var z := Hud43.zones(vp)
+	var hits := []
+	for n in sim.nodes:
+		var c := cam.unproject_position(n["pos"])
+		var r := 0.0
+		for k in range(8):
+			var a := TAU * k / 8.0
+			r = maxf(r, cam.unproject_position((n["pos"] as Vector3) + Vector3(cos(a), 0, sin(a)) * Rules.R).distance_to(c))
+		var nr := Rect2(c - Vector2(r, r), Vector2(r, r) * 2.0)
+		for key in ["send", "skill", "score", "ai_l", "ai_r", "util"]:
+			if nr.intersects(z[key]):
+				hits.append("node%d:%s" % [n["id"], key])
+		var b = hud.badges.get(n["id"], {}).get("panel")
+		if b is Control and (b as Control).is_visible_in_tree():
+			for key in ["send", "skill", "score", "util"]:
+				if (b as Control).get_global_rect().intersects(z[key]):
+					hits.append("badge%d:%s" % [n["id"], key])
+	var pr := pit_rect()
+	print("ZONECHECK %s vp=%s pit=%s overlaps=%d %s" % [str(map.get("code", "")), vp, pr, hits.size(), " ".join(hits)])
+
+
 func _take_shot(t: float, last: bool) -> void:
+	if "--zone-check" in OS.get_cmdline_user_args() and hud != null:
+		_zone_check()
 	if clean_shots and hud != null:
 		hud.root.visible = false
 		for l in find_children("*", "Label3D", true, false):   # (the board's text tags: FERRY / IN n)
@@ -2059,6 +2085,8 @@ func _on_captured(node_id: int, new_owner: String, _old: String) -> void:
 	if mission:                                        # CAMPAIGN: a start node / vat / home lost
 		mission.on_captured(node_id, new_owner, _old)
 	_took_from[node_id] = _old
+	if hud and hud.has_method("ai_event"):
+		hud.ai_event(new_owner, _old, node_id)
 	MapBuilder.apply_owner(vis[node_id]["parts"], new_owner)
 	if contact_shade:
 		contact_shade.set_seat(node_id, new_owner)

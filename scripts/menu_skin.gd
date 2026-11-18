@@ -257,17 +257,32 @@ static func ai_hero(m, f: String, pos: Vector2, s: float, mood := "", parent: Co
 	_put(m, parent, t, pos)
 	if f == "":
 		return
-	var mk: TextureRect = MarkAnim.new() if parent == null else TextureRect.new()
-	mk.texture = mark_tex(f)
-	if parent == null:
-		(mk as MarkAnim).start(f)
-	mk.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	mk.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	# note 11 (Daniele 11-16: "AIs should use the high-definition version, not the flat icon"): the AI's HD screen face
+	# (UiKit.ai_screen_path, the VERSUS art) as a disc in the socket, blinking now and then; the flat 36B2 mark is gone.
+	var mk := AiFace.new()
+	mk.f = f
 	mk.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	mk.size = Vector2(s, s) * 0.8
 	if mood == "loss":
 		mk.modulate = Color(0.82, 0.84, 0.9)
 	_put(m, parent, mk, pos + Vector2(s, s) * 0.1)
+
+
+class AiFace extends Control:
+	## The faction AI's HD face in a disc (Hud43.draw_ai_disc), blinking every few seconds.
+	var f := "vex"
+	var _t := randf() * 3.0
+	var _blink := false
+
+	func _process(dt: float) -> void:
+		_t += dt
+		var b := fmod(_t, 4.0) < 0.14
+		if b != _blink:
+			_blink = b
+			queue_redraw()
+
+	func _draw() -> void:
+		Hud43.draw_ai_disc(self, f, size * 0.5, minf(size.x, size.y) * 0.5, Color.WHITE, _blink)
 
 
 static func _lum(c: Color) -> float:
