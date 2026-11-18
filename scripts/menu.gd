@@ -2869,38 +2869,54 @@ func show_armies(f: String = "", back: Callable = Callable()) -> void:
 		var sb := UiKit.make_btn(self, st, Vector2(sw, 44), _save_armies, "primary", _army, 15)
 		top_bar.add_child(sb)                          # in the bar itself (shell_raise keeps the bar on top)
 		sb.position = Vector2(bx, maxf(4.0, (top_bar.bar_height() - sb.size.y) / 2.0))
-	var top := area.position.y + 10.0
-	var th := UiKit.tap_h(self, 54.0)
-	var gap := 8.0
-	var tabs := [["skills", "SKILLS"], ["customize", "CUSTOMIZE"]]
-	var tab_w := UiKit.text_w(self, "CUSTOMIZE", 15, true) + 40.0
-	var tabs_x := x + w - tab_w * 2.0 - gap
-	for i in range(tabs.size()):
-		var tid: String = tabs[i][0]
-		UiKit.btn(self, tabs[i][1], Vector2(tabs_x + i * (tab_w + gap), top), Vector2(tab_w, 54), func():
-			_army_tab = tid
-			show_armies(), "selected" if _army_tab == tid else "secondary", _army, 15)
-	var rw := tabs_x - 16.0 - x
-	var tw := (rw - gap * 4.0) / 5.0
-	for i in range(FACTIONS.size()):
-		_army_tile(FACTIONS[i], Vector2(x + i * (tw + gap), top), Vector2(tw, th))
-	var body := Rect2(x, top + th + 12.0, w, area.end.y - 10.0 - (top + th + 12.0))
+	# 43B (Daniele 2026-11-18 "Yes, import it"): the page is the 43B-pack-ARMIES layout itself (Armies43), scaled evenly
+	# into the free area; CUSTOMIZE keeps its wardrobe body under the pack's faction / section row.
+	var top := area.position.y + 6.0
+	var a43 := Armies43.new()
+	a43.setup(self, Rect2(x, top, w, area.end.y - 6.0 - top), _army, _army_tab, _armies43_tap)
+	content.add_child(a43)
+	_a43 = a43
 	if _army_tab == "customize":
-		_customize_body(body)
+		var rh := Armies43.TOP_ROW_H * a43.s
+		_customize_body(Rect2(x, top + rh + 12.0, w, area.end.y - 10.0 - (top + rh + 12.0)))
 		shell_raise()
 		return
-	var lw := floorf(w * 0.25)
-	# the skill rows need room for their longest word at the phone's font floor (EMERGENCY): the identity panel gives
-	# way (Daniele 2026-11-05: every tile the same text, nothing overflowing)
-	var longest := 0.0
-	for sid in Rules.ACTIVE_SKILLS + Rules.MAP_SKILLS:
-		for word in ArmyPresets.skill_name(sid).to_upper().split(" "):
-			longest = maxf(longest, UiKit.text_w(self, word, 12.0, true))
-	var need := maxi(Rules.ACTIVE_SKILLS.size(), Rules.MAP_SKILLS.size()) * (longest + 22.0) - 10.0
-	lw = minf(lw, floorf(w - 14.0 - need))
-	_army_identity(body.position, Vector2(lw, body.size.y))
-	_skills_body(Rect2(body.position.x + lw + 14.0, body.position.y, w - lw - 14.0, body.size.y), _skills_slot)
+	if _skill_tip != "":
+		var cid := "ULT" if _skill_tip == Rules.FACTION_ULTIMATE_ID[_army] else ""
+		for c in a43._skill_of:
+			if a43._skill_of[c] == _skill_tip:
+				cid = c
+		if cid != "":
+			_skill_popup(_skill_tip, a43.rect_of(cid), _skills_slot)
 	shell_raise()
+
+
+var _a43: Armies43 = null
+
+
+func _armies43_tap(cid: String) -> void:
+	## A tap on the 43B ARMIES page: faction tab, SKILLS / CUSTOMIZE, RESET, the ultimate cabinet ("ULT"), a skill card.
+	if cid.begins_with("FACTION-"):
+		var n := cid.substr(8).to_lower()
+		_skill_tip = ""
+		show_armies("solar" if n == "aegis" else n)
+	elif cid == "SKILLS" or cid == "CUSTOMIZE":
+		_army_tab = cid.to_lower()
+		show_armies()
+	elif cid == "RESET":
+		ArmyPresets.reset(_army)
+		_preset_changed()
+		show_armies()
+	elif cid == "ULT":
+		_toggle_tip(Rules.FACTION_ULTIMATE_ID[_army], _skills_slot)
+	elif is_instance_valid(_a43) and _a43.skill_of(cid) != "":
+		var id := _a43.skill_of(cid)
+		var slot := "active" if id in Rules.ACTIVE_SKILLS else "map"
+		if Progression.is_unlocked("skill:" + id):
+			ArmyPresets.set_pick(_army, slot, id)
+			_preset_changed()
+		_skill_tip = id
+		show_skills(slot)
 
 
 var _army_tab := "skills"                          # ARMIES: the open tab ("skills" | "customize")

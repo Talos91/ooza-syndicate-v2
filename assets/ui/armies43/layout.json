@@ -1,0 +1,3533 @@
+{
+"source": "43B-pack-ARMIES/layout.json (body only, y 190..1300 at 4x)",
+"canvas": {
+"w": 3248,
+"h": 1500,
+"scale": 4,
+"phone_w": 812,
+"phone_h": 375
+},
+"body": [
+64,
+196,
+3120,
+1100
+],
+"elements": [
+{
+"id": "e024",
+"type": "image",
+"file": "FACTION-TAB-SELECTED.png",
+"x": 64,
+"y": 196,
+"w": 416,
+"h": 160,
+"state": "SELECTED",
+"z": 24,
+"control": "FACTION-VEX"
+},
+{
+"id": "e025",
+"type": "image",
+"file": "FACTION-WELL.png",
+"x": 84,
+"y": 210,
+"w": 140,
+"h": 132,
+"state": "STATIC",
+"z": 25,
+"control": "FACTION-VEX"
+},
+{
+"id": "e026",
+"type": "image",
+"file": "HERO-VEX.png",
+"x": 106,
+"y": 218,
+"w": 95,
+"h": 116,
+"state": "STATIC",
+"z": 26,
+"control": "FACTION-VEX"
+},
+{
+"id": "e027",
+"type": "text",
+"file": null,
+"text": "VEX",
+"x": 300,
+"y": 263,
+"w": 81,
+"h": 31,
+"state": "RUNTIME",
+"z": 27,
+"font": {
+"family": "Segoe UI",
+"weight": "bold",
+"size_px": 43,
+"role": "bold"
+},
+"color": "#FAEAD1",
+"anchor": "mm",
+"anchor_position": [
+340,
+276
+],
+"control": "FACTION-VEX",
+"state_colors": {
+"NORMAL": "#FAEAD1",
+"PRESSED": "#FAEAD1",
+"SELECTED": "#FAEAD1",
+"DISABLED": "#FFF0E3"
+}
+},
+{
+"id": "e028",
+"type": "image",
+"file": "FACTION-TAB-NORMAL.png",
+"x": 504,
+"y": 196,
+"w": 416,
+"h": 160,
+"state": "NORMAL",
+"z": 28,
+"control": "FACTION-NULL"
+},
+{
+"id": "e029",
+"type": "image",
+"file": "FACTION-WELL.png",
+"x": 524,
+"y": 210,
+"w": 140,
+"h": 132,
+"state": "STATIC",
+"z": 29,
+"control": "FACTION-NULL"
+},
+{
+"id": "e030",
+"type": "image",
+"file": "HERO-NULL.png",
+"x": 540,
+"y": 218,
+"w": 107,
+"h": 116,
+"state": "STATIC",
+"z": 30,
+"control": "FACTION-NULL"
+},
+{
+"id": "e031",
+"type": "text",
+"file": null,
+"text": "NULL",
+"x": 725,
+"y": 263,
+"w": 109,
+"h": 31,
+"state": "RUNTIME",
+"z": 31,
+"font": {
+"family": "Segoe UI",
+"weight": "bold",
+"size_px": 43,
+"role": "bold"
+},
+"color": "#FAEAD1",
+"anchor": "mm",
+"anchor_position": [
+780,
+276
+],
+"control": "FACTION-NULL",
+"state_colors": {
+"NORMAL": "#FAEAD1",
+"PRESSED": "#FAEAD1",
+"SELECTED": "#FAEAD1",
+"DISABLED": "#FFF0E3"
+}
+},
+{
+"id": "e032",
+"type": "image",
+"file": "FACTION-TAB-NORMAL.png",
+"x": 944,
+"y": 196,
+"w": 416,
+"h": 160,
+"state": "NORMAL",
+"z": 32,
+"control": "FACTION-BLOOM"
+},
+{
+"id": "e033",
+"type": "image",
+"file": "FACTION-WELL.png",
+"x": 964,
+"y": 210,
+"w": 140,
+"h": 132,
+"state": "STATIC",
+"z": 33,
+"control": "FACTION-BLOOM"
+},
+{
+"id": "e034",
+"type": "image",
+"file": "HERO-BLOOM.png",
+"x": 989,
+"y": 218,
+"w": 90,
+"h": 116,
+"state": "STATIC",
+"z": 34,
+"control": "FACTION-BLOOM"
+},
+{
+"id": "e035",
+"type": "text",
+"file": null,
+"text": "BLOOM",
+"x": 1142,
+"y": 263,
+"w": 157,
+"h": 31,
+"state": "RUNTIME",
+"z": 35,
+"font": {
+"family": "Segoe UI",
+"weight": "bold",
+"size_px": 43,
+"role": "bold"
+},
+"color": "#FAEAD1",
+"anchor": "mm",
+"anchor_position": [
+1220,
+276
+],
+"control": "FACTION-BLOOM",
+"state_colors": {
+"NORMAL": "#FAEAD1",
+"PRESSED": "#FAEAD1",
+"SELECTED": "#FAEAD1",
+"DISABLED": "#FFF0E3"
+}
+},
+{
+"id": "e036",
+"type": "image",
+"file": "FACTION-TAB-NORMAL.png",
+"x": 1384,
+"y": 196,
+"w": 416,
+"h": 160,
+"state": "NORMAL",
+"z": 36,
+"control": "FACTION-EMBER"
+},
+{
+"id": "e037",
+"type": "image",
+"file": "FACTION-WELL.png",
+"x": 1404,
+"y": 210,
+"w": 140,
+"h": 132,
+"state": "STATIC",
+"z": 37,
+"control": "FACTION-EMBER"
+},
+{
+"id": "e038",
+"type": "image",
+"file": "HERO-EMBER.png",
+"x": 1416,
+"y": 219,
+"w": 116,
+"h": 114,
+"state": "STATIC",
+"z": 38,
+"control": "FACTION-EMBER"
+},
+{
+"id": "e039",
+"type": "text",
+"file": null,
+"text": "EMBER",
+"x": 1588,
+"y": 263,
+"w": 144,
+"h": 31,
+"state": "RUNTIME",
+"z": 39,
+"font": {
+"family": "Segoe UI",
+"weight": "bold",
+"size_px": 43,
+"role": "bold"
+},
+"color": "#FAEAD1",
+"anchor": "mm",
+"anchor_position": [
+1660,
+276
+],
+"control": "FACTION-EMBER",
+"state_colors": {
+"NORMAL": "#FAEAD1",
+"PRESSED": "#FAEAD1",
+"SELECTED": "#FAEAD1",
+"DISABLED": "#FFF0E3"
+}
+},
+{
+"id": "e040",
+"type": "image",
+"file": "FACTION-TAB-NORMAL.png",
+"x": 1824,
+"y": 196,
+"w": 416,
+"h": 160,
+"state": "NORMAL",
+"z": 40,
+"control": "FACTION-AEGIS"
+},
+{
+"id": "e041",
+"type": "image",
+"file": "FACTION-WELL.png",
+"x": 1844,
+"y": 210,
+"w": 140,
+"h": 132,
+"state": "STATIC",
+"z": 41,
+"control": "FACTION-AEGIS"
+},
+{
+"id": "e042",
+"type": "image",
+"file": "HERO-AEGIS.png",
+"x": 1879,
+"y": 218,
+"w": 71,
+"h": 116,
+"state": "STATIC",
+"z": 42,
+"control": "FACTION-AEGIS"
+},
+{
+"id": "e043",
+"type": "text",
+"file": null,
+"text": "AEGIS",
+"x": 2039,
+"y": 263,
+"w": 122,
+"h": 31,
+"state": "RUNTIME",
+"z": 43,
+"font": {
+"family": "Segoe UI",
+"weight": "bold",
+"size_px": 43,
+"role": "bold"
+},
+"color": "#FAEAD1",
+"anchor": "mm",
+"anchor_position": [
+2100,
+276
+],
+"control": "FACTION-AEGIS",
+"state_colors": {
+"NORMAL": "#FAEAD1",
+"PRESSED": "#FAEAD1",
+"SELECTED": "#FAEAD1",
+"DISABLED": "#FFF0E3"
+}
+},
+{
+"id": "e044",
+"type": "image",
+"file": "SECTION-TAB-SELECTED.png",
+"x": 2280,
+"y": 196,
+"w": 424,
+"h": 160,
+"state": "SELECTED",
+"z": 44,
+"control": "SKILLS"
+},
+{
+"id": "e045",
+"type": "text",
+"file": null,
+"text": "SKILLS",
+"x": 2422,
+"y": 263,
+"w": 139,
+"h": 31,
+"state": "RUNTIME",
+"z": 45,
+"font": {
+"family": "Segoe UI",
+"weight": "bold",
+"size_px": 44,
+"role": "bold"
+},
+"color": "#30202A",
+"anchor": "mm",
+"anchor_position": [
+2492,
+276
+],
+"control": "SKILLS",
+"state_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+},
+{
+"id": "e046",
+"type": "image",
+"file": "SECTION-TAB-NORMAL.png",
+"x": 2728,
+"y": 196,
+"w": 424,
+"h": 160,
+"state": "NORMAL",
+"z": 46,
+"control": "CUSTOMIZE"
+},
+{
+"id": "e047",
+"type": "text",
+"file": null,
+"text": "CUSTOMIZE",
+"x": 2828,
+"y": 264,
+"w": 225,
+"h": 29,
+"state": "RUNTIME",
+"z": 47,
+"font": {
+"family": "Segoe UI",
+"weight": "bold",
+"size_px": 40,
+"role": "bold"
+},
+"color": "#30202A",
+"anchor": "mm",
+"anchor_position": [
+2940,
+276
+],
+"control": "CUSTOMIZE",
+"state_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+},
+{
+"id": "e048",
+"type": "image",
+"file": "HERO-CABINET.png",
+"x": 64,
+"y": 392,
+"w": 680,
+"h": 904,
+"state": "STATIC",
+"z": 48
+},
+{
+"id": "e049",
+"type": "image",
+"file": "BOLT.png",
+"x": 80,
+"y": 408,
+"w": 15,
+"h": 15,
+"state": "STATIC",
+"z": 49
+},
+{
+"id": "e050",
+"type": "image",
+"file": "BOLT.png",
+"x": 80,
+"y": 1264,
+"w": 15,
+"h": 15,
+"state": "STATIC",
+"z": 50
+},
+{
+"id": "e051",
+"type": "image",
+"file": "BOLT.png",
+"x": 712,
+"y": 408,
+"w": 15,
+"h": 15,
+"state": "STATIC",
+"z": 51
+},
+{
+"id": "e052",
+"type": "image",
+"file": "BOLT.png",
+"x": 712,
+"y": 1264,
+"w": 15,
+"h": 15,
+"state": "STATIC",
+"z": 52
+},
+{
+"id": "e053",
+"type": "image",
+"file": "HERO-TITLE-BAR.png",
+"x": 108,
+"y": 432,
+"w": 592,
+"h": 148,
+"state": "STATIC",
+"z": 53
+},
+{
+"id": "e054",
+"type": "text",
+"file": null,
+"text": "R&D",
+"x": 140,
+"y": 457,
+"w": 82,
+"h": 26,
+"state": "RUNTIME",
+"z": 54,
+"font": {
+"family": "Segoe UI",
+"weight": "bold",
+"size_px": 36,
+"role": "bold"
+},
+"color": "#E7B68B",
+"anchor": "lm",
+"anchor_position": [
+140,
+468
+]
+},
+{
+"id": "e055",
+"type": "text",
+"file": null,
+"text": "VEX",
+"x": 140,
+"y": 501,
+"w": 147,
+"h": 60,
+"state": "RUNTIME",
+"z": 55,
+"font": {
+"family": "Bahnschrift",
+"weight": "bold",
+"size_px": 84,
+"role": "title"
+},
+"color": "#FAEAD1",
+"anchor": "lm",
+"anchor_position": [
+140,
+536
+]
+},
+{
+"id": "e056",
+"type": "image",
+"file": "HERO-WELL.png",
+"x": 108,
+"y": 596,
+"w": 592,
+"h": 396,
+"state": "STATIC",
+"z": 56
+},
+{
+"id": "e057",
+"type": "image",
+"file": "HERO-VEX.png",
+"x": 255,
+"y": 612,
+"w": 298,
+"h": 364,
+"state": "STATIC",
+"z": 57
+},
+{
+"id": "e058",
+"type": "image",
+"file": "DIVIDER.png",
+"x": 112,
+"y": 1004,
+"w": 584,
+"h": 8,
+"state": "STATIC",
+"z": 58
+},
+{
+"id": "e059",
+"type": "text",
+"file": null,
+"text": "SWIFT LINES",
+"x": 116,
+"y": 1037,
+"w": 281,
+"h": 34,
+"state": "RUNTIME",
+"z": 59,
+"font": {
+"family": "Bahnschrift",
+"weight": "bold",
+"size_px": 48,
+"role": "title"
+},
+"color": "#FAEAD1",
+"anchor": "lm",
+"anchor_position": [
+116,
+1056
+]
+},
+{
+"id": "e060",
+"type": "text",
+"file": null,
+"text": "Lines move 15% faster.",
+"x": 116,
+"y": 1103,
+"w": 373,
+"h": 28,
+"state": "RUNTIME",
+"z": 60,
+"font": {
+"family": "Segoe UI",
+"weight": "regular",
+"size_px": 37,
+"role": "regular"
+},
+"color": "#D9C0B3",
+"anchor": "lm",
+"anchor_position": [
+116,
+1116
+]
+},
+{
+"id": "e061",
+"type": "text",
+"file": null,
+"text": "Garrisons take +8% damage.",
+"x": 116,
+"y": 1151,
+"w": 469,
+"h": 37,
+"state": "RUNTIME",
+"z": 61,
+"font": {
+"family": "Segoe UI",
+"weight": "regular",
+"size_px": 37,
+"role": "regular"
+},
+"color": "#D9C0B3",
+"anchor": "lm",
+"anchor_position": [
+116,
+1164
+]
+},
+{
+"id": "e062",
+"type": "text",
+"file": null,
+"text": "SPD 115   HP 100   ATK 100",
+"x": 116,
+"y": 1202,
+"w": 520,
+"h": 23,
+"state": "RUNTIME",
+"z": 62,
+"font": {
+"family": "Consolas",
+"weight": "bold",
+"size_px": 36,
+"role": "mono"
+},
+"color": "#FAEAD1",
+"anchor": "lm",
+"anchor_position": [
+116,
+1216
+]
+},
+{
+"id": "e063",
+"type": "text",
+"file": null,
+"text": "PROD 100    GARRISON 93",
+"x": 116,
+"y": 1246,
+"w": 460,
+"h": 23,
+"state": "RUNTIME",
+"z": 63,
+"font": {
+"family": "Consolas",
+"weight": "bold",
+"size_px": 36,
+"role": "mono"
+},
+"color": "#FAEAD1",
+"anchor": "lm",
+"anchor_position": [
+116,
+1260
+]
+},
+{
+"id": "e064",
+"type": "image",
+"file": "OVERDRIVE-CABINET.png",
+"x": 784,
+"y": 392,
+"w": 2152,
+"h": 152,
+"state": "STATIC",
+"z": 64
+},
+{
+"id": "e065",
+"type": "image",
+"file": "BOLT.png",
+"x": 798,
+"y": 406,
+"w": 15,
+"h": 15,
+"state": "STATIC",
+"z": 65
+},
+{
+"id": "e066",
+"type": "image",
+"file": "BOLT.png",
+"x": 798,
+"y": 514,
+"w": 15,
+"h": 15,
+"state": "STATIC",
+"z": 66
+},
+{
+"id": "e067",
+"type": "image",
+"file": "BOLT.png",
+"x": 2906,
+"y": 406,
+"w": 15,
+"h": 15,
+"state": "STATIC",
+"z": 67
+},
+{
+"id": "e068",
+"type": "image",
+"file": "BOLT.png",
+"x": 2906,
+"y": 514,
+"w": 15,
+"h": 15,
+"state": "STATIC",
+"z": 68
+},
+{
+"id": "e069",
+"type": "image",
+"file": "ICON-OVERDRIVE.png",
+"x": 832,
+"y": 434,
+"w": 96,
+"h": 61,
+"state": "STATIC",
+"z": 69
+},
+{
+"id": "e070",
+"type": "text",
+"file": null,
+"text": "OVERDRIVE",
+"x": 976,
+"y": 447,
+"w": 274,
+"h": 37,
+"state": "RUNTIME",
+"z": 70,
+"font": {
+"family": "Bahnschrift",
+"weight": "bold",
+"size_px": 52,
+"role": "title"
+},
+"color": "#FAEAD1",
+"anchor": "lm",
+"anchor_position": [
+976,
+468
+]
+},
+{
+"id": "e071",
+"type": "text",
+"file": null,
+"text": "~75 s charge",
+"x": 1432,
+"y": 454,
+"w": 254,
+"h": 42,
+"state": "RUNTIME",
+"z": 71,
+"font": {
+"family": "Segoe UI",
+"weight": "bold",
+"size_px": 42,
+"role": "bold"
+},
+"color": "#E7B68B",
+"anchor": "lm",
+"anchor_position": [
+1432,
+468
+]
+},
+{
+"id": "e072",
+"type": "image",
+"file": "FLUTED-TRIM.png",
+"x": 2500,
+"y": 452,
+"w": 352,
+"h": 32,
+"state": "STATIC",
+"z": 72
+},
+{
+"id": "e073",
+"type": "image",
+"file": "RESET-BUTTON-DISABLED.png",
+"x": 2968,
+"y": 392,
+"w": 216,
+"h": 152,
+"state": "DISABLED",
+"z": 73,
+"control": "RESET"
+},
+{
+"id": "e074",
+"type": "text",
+"file": null,
+"text": "RESET",
+"x": 3022,
+"y": 457,
+"w": 108,
+"h": 27,
+"state": "RUNTIME",
+"z": 74,
+"font": {
+"family": "Segoe UI",
+"weight": "bold",
+"size_px": 38,
+"role": "bold"
+},
+"color": "#FFF0E3",
+"anchor": "mm",
+"anchor_position": [
+3076,
+468
+],
+"control": "RESET",
+"state_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+},
+{
+"id": "e075",
+"type": "text",
+"file": null,
+"text": "ACTIVE SKILL  /  PICK ONE",
+"x": 788,
+"y": 592,
+"w": 494,
+"h": 33,
+"state": "RUNTIME",
+"z": 75,
+"font": {
+"family": "Segoe UI",
+"weight": "bold",
+"size_px": 40,
+"role": "bold"
+},
+"color": "#E7B68B",
+"anchor": "lm",
+"anchor_position": [
+788,
+604
+]
+},
+{
+"id": "e076",
+"type": "image",
+"file": "DIVIDER.png",
+"x": 1336,
+"y": 604,
+"w": 1832,
+"h": 6,
+"state": "STATIC",
+"z": 76
+},
+{
+"id": "e077",
+"type": "image",
+"file": "SKILL-CARD-SELECTED.png",
+"x": 784,
+"y": 648,
+"w": 320,
+"h": 252,
+"state": "SELECTED",
+"z": 77,
+"control": "SKILL-SURGE"
+},
+{
+"id": "e078",
+"type": "image",
+"file": "SKILL-WELL.png",
+"x": 884,
+"y": 668,
+"w": 120,
+"h": 116,
+"state": "STATIC",
+"z": 78,
+"control": "SKILL-SURGE"
+},
+{
+"id": "e079",
+"type": "image",
+"file": "SKILL-SURGE.png",
+"x": 902,
+"y": 687,
+"w": 84,
+"h": 78,
+"state": "STATIC",
+"z": 79,
+"control": "SKILL-SURGE",
+"alpha_mask_tint": "#B3F9FF"
+},
+{
+"id": "e080",
+"type": "image",
+"file": "SKILL-NAME-FACE-SELECTED.png",
+"x": 804,
+"y": 796,
+"w": 280,
+"h": 88,
+"state": "SELECTED",
+"z": 80,
+"control": "SKILL-SURGE"
+},
+{
+"id": "e081",
+"type": "image",
+"file": "SEAT-LAMP.png",
+"x": 1032,
+"y": 680,
+"w": 36,
+"h": 20,
+"state": "SELECTED",
+"z": 81,
+"control": "SKILL-SURGE",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"id": "e082",
+"type": "text",
+"file": null,
+"text": "SURGE",
+"x": 886,
+"y": 829,
+"w": 115,
+"h": 26,
+"state": "RUNTIME",
+"z": 82,
+"font": {
+"family": "Segoe UI",
+"weight": "bold",
+"size_px": 36,
+"role": "bold"
+},
+"color": "#30202A",
+"anchor": "mm",
+"anchor_position": [
+944,
+840
+],
+"control": "SKILL-SURGE",
+"state_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+},
+{
+"id": "e083",
+"type": "image",
+"file": "SKILL-CARD-NORMAL.png",
+"x": 1128,
+"y": 648,
+"w": 320,
+"h": 252,
+"state": "NORMAL",
+"z": 83,
+"control": "SKILL-SPORE-BURST"
+},
+{
+"id": "e084",
+"type": "image",
+"file": "SKILL-WELL.png",
+"x": 1228,
+"y": 668,
+"w": 120,
+"h": 116,
+"state": "STATIC",
+"z": 84,
+"control": "SKILL-SPORE-BURST"
+},
+{
+"id": "e085",
+"type": "image",
+"file": "SKILL-SPORE-BURST.png",
+"x": 1246,
+"y": 687,
+"w": 84,
+"h": 77,
+"state": "STATIC",
+"z": 85,
+"control": "SKILL-SPORE-BURST",
+"alpha_mask_tint": "#E7B68B"
+},
+{
+"id": "e086",
+"type": "image",
+"file": "SKILL-NAME-FACE-NORMAL.png",
+"x": 1148,
+"y": 796,
+"w": 280,
+"h": 88,
+"state": "NORMAL",
+"z": 86,
+"control": "SKILL-SPORE-BURST"
+},
+{
+"id": "e087",
+"type": "image",
+"file": "SEAT-LAMP.png",
+"x": 1376,
+"y": 680,
+"w": 36,
+"h": 20,
+"state": "NORMAL",
+"z": 87,
+"control": "SKILL-SPORE-BURST",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"id": "e088",
+"type": "text",
+"file": null,
+"text": "SPORE BURST",
+"x": 1170,
+"y": 829,
+"w": 236,
+"h": 26,
+"state": "RUNTIME",
+"z": 88,
+"font": {
+"family": "Segoe UI",
+"weight": "bold",
+"size_px": 36,
+"role": "bold"
+},
+"color": "#30202A",
+"anchor": "mm",
+"anchor_position": [
+1288,
+840
+],
+"control": "SKILL-SPORE-BURST",
+"state_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+},
+{
+"id": "e089",
+"type": "image",
+"file": "SKILL-CARD-NORMAL.png",
+"x": 1472,
+"y": 648,
+"w": 320,
+"h": 252,
+"state": "NORMAL",
+"z": 89,
+"control": "SKILL-FORTIFY"
+},
+{
+"id": "e090",
+"type": "image",
+"file": "SKILL-WELL.png",
+"x": 1572,
+"y": 668,
+"w": 120,
+"h": 116,
+"state": "STATIC",
+"z": 90,
+"control": "SKILL-FORTIFY"
+},
+{
+"id": "e091",
+"type": "image",
+"file": "SKILL-FORTIFY.png",
+"x": 1595,
+"y": 686,
+"w": 74,
+"h": 80,
+"state": "STATIC",
+"z": 91,
+"control": "SKILL-FORTIFY",
+"alpha_mask_tint": "#E7B68B"
+},
+{
+"id": "e092",
+"type": "image",
+"file": "SKILL-NAME-FACE-NORMAL.png",
+"x": 1492,
+"y": 796,
+"w": 280,
+"h": 88,
+"state": "NORMAL",
+"z": 92,
+"control": "SKILL-FORTIFY"
+},
+{
+"id": "e093",
+"type": "image",
+"file": "SEAT-LAMP.png",
+"x": 1720,
+"y": 680,
+"w": 36,
+"h": 20,
+"state": "NORMAL",
+"z": 93,
+"control": "SKILL-FORTIFY",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"id": "e094",
+"type": "text",
+"file": null,
+"text": "FORTIFY",
+"x": 1561,
+"y": 829,
+"w": 143,
+"h": 26,
+"state": "RUNTIME",
+"z": 94,
+"font": {
+"family": "Segoe UI",
+"weight": "bold",
+"size_px": 36,
+"role": "bold"
+},
+"color": "#30202A",
+"anchor": "mm",
+"anchor_position": [
+1632,
+840
+],
+"control": "SKILL-FORTIFY",
+"state_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+},
+{
+"id": "e095",
+"type": "image",
+"file": "SKILL-CARD-NORMAL.png",
+"x": 1816,
+"y": 648,
+"w": 320,
+"h": 252,
+"state": "NORMAL",
+"z": 95,
+"control": "SKILL-SCORCH"
+},
+{
+"id": "e096",
+"type": "image",
+"file": "SKILL-WELL.png",
+"x": 1916,
+"y": 668,
+"w": 120,
+"h": 116,
+"state": "STATIC",
+"z": 96,
+"control": "SKILL-SCORCH"
+},
+{
+"id": "e097",
+"type": "image",
+"file": "SKILL-SCORCH.png",
+"x": 1937,
+"y": 686,
+"w": 78,
+"h": 80,
+"state": "STATIC",
+"z": 97,
+"control": "SKILL-SCORCH",
+"alpha_mask_tint": "#E7B68B"
+},
+{
+"id": "e098",
+"type": "image",
+"file": "SKILL-NAME-FACE-NORMAL.png",
+"x": 1836,
+"y": 796,
+"w": 280,
+"h": 88,
+"state": "NORMAL",
+"z": 98,
+"control": "SKILL-SCORCH"
+},
+{
+"id": "e099",
+"type": "image",
+"file": "SEAT-LAMP.png",
+"x": 2064,
+"y": 680,
+"w": 36,
+"h": 20,
+"state": "NORMAL",
+"z": 99,
+"control": "SKILL-SCORCH",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"id": "e100",
+"type": "text",
+"file": null,
+"text": "SCORCH",
+"x": 1904,
+"y": 829,
+"w": 143,
+"h": 26,
+"state": "RUNTIME",
+"z": 100,
+"font": {
+"family": "Segoe UI",
+"weight": "bold",
+"size_px": 36,
+"role": "bold"
+},
+"color": "#30202A",
+"anchor": "mm",
+"anchor_position": [
+1976,
+840
+],
+"control": "SKILL-SCORCH",
+"state_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+},
+{
+"id": "e101",
+"type": "image",
+"file": "SKILL-CARD-NORMAL.png",
+"x": 2160,
+"y": 648,
+"w": 320,
+"h": 252,
+"state": "NORMAL",
+"z": 101,
+"control": "SKILL-GHOST-LINE"
+},
+{
+"id": "e102",
+"type": "image",
+"file": "SKILL-WELL.png",
+"x": 2260,
+"y": 668,
+"w": 120,
+"h": 116,
+"state": "STATIC",
+"z": 102,
+"control": "SKILL-GHOST-LINE"
+},
+{
+"id": "e103",
+"type": "image",
+"file": "SKILL-GHOST-LINE.png",
+"x": 2278,
+"y": 690,
+"w": 84,
+"h": 72,
+"state": "STATIC",
+"z": 103,
+"control": "SKILL-GHOST-LINE",
+"alpha_mask_tint": "#E7B68B"
+},
+{
+"id": "e104",
+"type": "image",
+"file": "SKILL-NAME-FACE-NORMAL.png",
+"x": 2180,
+"y": 796,
+"w": 280,
+"h": 88,
+"state": "NORMAL",
+"z": 104,
+"control": "SKILL-GHOST-LINE"
+},
+{
+"id": "e105",
+"type": "image",
+"file": "SEAT-LAMP.png",
+"x": 2408,
+"y": 680,
+"w": 36,
+"h": 20,
+"state": "NORMAL",
+"z": 105,
+"control": "SKILL-GHOST-LINE",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"id": "e106",
+"type": "text",
+"file": null,
+"text": "GHOST LINE",
+"x": 2216,
+"y": 829,
+"w": 208,
+"h": 26,
+"state": "RUNTIME",
+"z": 106,
+"font": {
+"family": "Segoe UI",
+"weight": "bold",
+"size_px": 36,
+"role": "bold"
+},
+"color": "#30202A",
+"anchor": "mm",
+"anchor_position": [
+2320,
+840
+],
+"control": "SKILL-GHOST-LINE",
+"state_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+},
+{
+"id": "e107",
+"type": "image",
+"file": "SKILL-CARD-NORMAL.png",
+"x": 2504,
+"y": 648,
+"w": 320,
+"h": 252,
+"state": "NORMAL",
+"z": 107,
+"control": "SKILL-SINKHOLE"
+},
+{
+"id": "e108",
+"type": "image",
+"file": "SKILL-WELL.png",
+"x": 2604,
+"y": 668,
+"w": 120,
+"h": 116,
+"state": "STATIC",
+"z": 108,
+"control": "SKILL-SINKHOLE"
+},
+{
+"id": "e109",
+"type": "image",
+"file": "SKILL-SINKHOLE.png",
+"x": 2624,
+"y": 686,
+"w": 80,
+"h": 80,
+"state": "STATIC",
+"z": 109,
+"control": "SKILL-SINKHOLE",
+"alpha_mask_tint": "#E7B68B"
+},
+{
+"id": "e110",
+"type": "image",
+"file": "SKILL-NAME-FACE-NORMAL.png",
+"x": 2524,
+"y": 796,
+"w": 280,
+"h": 88,
+"state": "NORMAL",
+"z": 110,
+"control": "SKILL-SINKHOLE"
+},
+{
+"id": "e111",
+"type": "image",
+"file": "SEAT-LAMP.png",
+"x": 2752,
+"y": 680,
+"w": 36,
+"h": 20,
+"state": "NORMAL",
+"z": 111,
+"control": "SKILL-SINKHOLE",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"id": "e112",
+"type": "text",
+"file": null,
+"text": "SINKHOLE",
+"x": 2577,
+"y": 829,
+"w": 174,
+"h": 26,
+"state": "RUNTIME",
+"z": 112,
+"font": {
+"family": "Segoe UI",
+"weight": "bold",
+"size_px": 36,
+"role": "bold"
+},
+"color": "#30202A",
+"anchor": "mm",
+"anchor_position": [
+2664,
+840
+],
+"control": "SKILL-SINKHOLE",
+"state_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+},
+{
+"id": "e113",
+"type": "image",
+"file": "SKILL-CARD-NORMAL.png",
+"x": 2848,
+"y": 648,
+"w": 320,
+"h": 252,
+"state": "NORMAL",
+"z": 113,
+"control": "SKILL-EVAC"
+},
+{
+"id": "e114",
+"type": "image",
+"file": "SKILL-WELL.png",
+"x": 2948,
+"y": 668,
+"w": 120,
+"h": 116,
+"state": "STATIC",
+"z": 114,
+"control": "SKILL-EVAC"
+},
+{
+"id": "e115",
+"type": "image",
+"file": "SKILL-EVAC.png",
+"x": 2966,
+"y": 694,
+"w": 84,
+"h": 63,
+"state": "STATIC",
+"z": 115,
+"control": "SKILL-EVAC",
+"alpha_mask_tint": "#E7B68B"
+},
+{
+"id": "e116",
+"type": "image",
+"file": "SKILL-NAME-FACE-NORMAL.png",
+"x": 2868,
+"y": 796,
+"w": 280,
+"h": 88,
+"state": "NORMAL",
+"z": 116,
+"control": "SKILL-EVAC"
+},
+{
+"id": "e117",
+"type": "image",
+"file": "SEAT-LAMP.png",
+"x": 3096,
+"y": 680,
+"w": 36,
+"h": 20,
+"state": "NORMAL",
+"z": 117,
+"control": "SKILL-EVAC",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"id": "e118",
+"type": "text",
+"file": null,
+"text": "EVAC",
+"x": 2963,
+"y": 829,
+"w": 90,
+"h": 26,
+"state": "RUNTIME",
+"z": 118,
+"font": {
+"family": "Segoe UI",
+"weight": "bold",
+"size_px": 36,
+"role": "bold"
+},
+"color": "#30202A",
+"anchor": "mm",
+"anchor_position": [
+3008,
+840
+],
+"control": "SKILL-EVAC",
+"state_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+},
+{
+"id": "e119",
+"type": "text",
+"file": null,
+"text": "MAP SKILL  /  PICK ONE",
+"x": 788,
+"y": 956,
+"w": 448,
+"h": 33,
+"state": "RUNTIME",
+"z": 119,
+"font": {
+"family": "Segoe UI",
+"weight": "bold",
+"size_px": 40,
+"role": "bold"
+},
+"color": "#E7B68B",
+"anchor": "lm",
+"anchor_position": [
+788,
+968
+]
+},
+{
+"id": "e120",
+"type": "image",
+"file": "DIVIDER.png",
+"x": 1336,
+"y": 968,
+"w": 1832,
+"h": 6,
+"state": "STATIC",
+"z": 120
+},
+{
+"id": "e121",
+"type": "image",
+"file": "SKILL-CARD-NORMAL.png",
+"x": 784,
+"y": 1012,
+"w": 320,
+"h": 252,
+"state": "NORMAL",
+"z": 121,
+"control": "SKILL-DEMOLISH"
+},
+{
+"id": "e122",
+"type": "image",
+"file": "SKILL-WELL.png",
+"x": 884,
+"y": 1032,
+"w": 120,
+"h": 116,
+"state": "STATIC",
+"z": 122,
+"control": "SKILL-DEMOLISH"
+},
+{
+"id": "e123",
+"type": "image",
+"file": "SKILL-DEMOLISH.png",
+"x": 902,
+"y": 1054,
+"w": 84,
+"h": 71,
+"state": "STATIC",
+"z": 123,
+"control": "SKILL-DEMOLISH",
+"alpha_mask_tint": "#E7B68B"
+},
+{
+"id": "e124",
+"type": "image",
+"file": "SKILL-NAME-FACE-NORMAL.png",
+"x": 804,
+"y": 1160,
+"w": 280,
+"h": 88,
+"state": "NORMAL",
+"z": 124,
+"control": "SKILL-DEMOLISH"
+},
+{
+"id": "e125",
+"type": "image",
+"file": "SEAT-LAMP.png",
+"x": 1032,
+"y": 1044,
+"w": 36,
+"h": 20,
+"state": "NORMAL",
+"z": 125,
+"control": "SKILL-DEMOLISH",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"id": "e126",
+"type": "text",
+"file": null,
+"text": "DEMOLISH",
+"x": 852,
+"y": 1193,
+"w": 184,
+"h": 26,
+"state": "RUNTIME",
+"z": 126,
+"font": {
+"family": "Segoe UI",
+"weight": "bold",
+"size_px": 36,
+"role": "bold"
+},
+"color": "#30202A",
+"anchor": "mm",
+"anchor_position": [
+944,
+1204
+],
+"control": "SKILL-DEMOLISH",
+"state_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+},
+{
+"id": "e127",
+"type": "image",
+"file": "SKILL-CARD-NORMAL.png",
+"x": 1128,
+"y": 1012,
+"w": 320,
+"h": 252,
+"state": "NORMAL",
+"z": 127,
+"control": "SKILL-RELAY-HACK"
+},
+{
+"id": "e128",
+"type": "image",
+"file": "SKILL-WELL.png",
+"x": 1228,
+"y": 1032,
+"w": 120,
+"h": 116,
+"state": "STATIC",
+"z": 128,
+"control": "SKILL-RELAY-HACK"
+},
+{
+"id": "e129",
+"type": "image",
+"file": "SKILL-RELAY-HACK.png",
+"x": 1246,
+"y": 1052,
+"w": 84,
+"h": 76,
+"state": "STATIC",
+"z": 129,
+"control": "SKILL-RELAY-HACK",
+"alpha_mask_tint": "#E7B68B"
+},
+{
+"id": "e130",
+"type": "image",
+"file": "SKILL-NAME-FACE-NORMAL.png",
+"x": 1148,
+"y": 1160,
+"w": 280,
+"h": 88,
+"state": "NORMAL",
+"z": 130,
+"control": "SKILL-RELAY-HACK"
+},
+{
+"id": "e131",
+"type": "image",
+"file": "SEAT-LAMP.png",
+"x": 1376,
+"y": 1044,
+"w": 36,
+"h": 20,
+"state": "NORMAL",
+"z": 131,
+"control": "SKILL-RELAY-HACK",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"id": "e132",
+"type": "text",
+"file": null,
+"text": "RELAY HACK",
+"x": 1180,
+"y": 1193,
+"w": 217,
+"h": 26,
+"state": "RUNTIME",
+"z": 132,
+"font": {
+"family": "Segoe UI",
+"weight": "bold",
+"size_px": 36,
+"role": "bold"
+},
+"color": "#30202A",
+"anchor": "mm",
+"anchor_position": [
+1288,
+1204
+],
+"control": "SKILL-RELAY-HACK",
+"state_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+},
+{
+"id": "e133",
+"type": "image",
+"file": "SKILL-CARD-NORMAL.png",
+"x": 1472,
+"y": 1012,
+"w": 320,
+"h": 252,
+"state": "NORMAL",
+"z": 133,
+"control": "SKILL-QUAKE"
+},
+{
+"id": "e134",
+"type": "image",
+"file": "SKILL-WELL.png",
+"x": 1572,
+"y": 1032,
+"w": 120,
+"h": 116,
+"state": "STATIC",
+"z": 134,
+"control": "SKILL-QUAKE"
+},
+{
+"id": "e135",
+"type": "image",
+"file": "SKILL-QUAKE.png",
+"x": 1590,
+"y": 1057,
+"w": 84,
+"h": 67,
+"state": "STATIC",
+"z": 135,
+"control": "SKILL-QUAKE",
+"alpha_mask_tint": "#E7B68B"
+},
+{
+"id": "e136",
+"type": "image",
+"file": "SKILL-NAME-FACE-NORMAL.png",
+"x": 1492,
+"y": 1160,
+"w": 280,
+"h": 88,
+"state": "NORMAL",
+"z": 136,
+"control": "SKILL-QUAKE"
+},
+{
+"id": "e137",
+"type": "image",
+"file": "SEAT-LAMP.png",
+"x": 1720,
+"y": 1044,
+"w": 36,
+"h": 20,
+"state": "NORMAL",
+"z": 137,
+"control": "SKILL-QUAKE",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"id": "e138",
+"type": "text",
+"file": null,
+"text": "QUAKE",
+"x": 1572,
+"y": 1193,
+"w": 120,
+"h": 29,
+"state": "RUNTIME",
+"z": 138,
+"font": {
+"family": "Segoe UI",
+"weight": "bold",
+"size_px": 36,
+"role": "bold"
+},
+"color": "#30202A",
+"anchor": "mm",
+"anchor_position": [
+1632,
+1204
+],
+"control": "SKILL-QUAKE",
+"state_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+},
+{
+"id": "e139",
+"type": "image",
+"file": "SKILL-CARD-NORMAL.png",
+"x": 1816,
+"y": 1012,
+"w": 320,
+"h": 252,
+"state": "NORMAL",
+"z": 139,
+"control": "SKILL-SEVER"
+},
+{
+"id": "e140",
+"type": "image",
+"file": "SKILL-WELL.png",
+"x": 1916,
+"y": 1032,
+"w": 120,
+"h": 116,
+"state": "STATIC",
+"z": 140,
+"control": "SKILL-SEVER"
+},
+{
+"id": "e141",
+"type": "image",
+"file": "SKILL-SEVER.png",
+"x": 1934,
+"y": 1054,
+"w": 84,
+"h": 71,
+"state": "STATIC",
+"z": 141,
+"control": "SKILL-SEVER",
+"alpha_mask_tint": "#E7B68B"
+},
+{
+"id": "e142",
+"type": "image",
+"file": "SKILL-NAME-FACE-NORMAL.png",
+"x": 1836,
+"y": 1160,
+"w": 280,
+"h": 88,
+"state": "NORMAL",
+"z": 142,
+"control": "SKILL-SEVER"
+},
+{
+"id": "e143",
+"type": "image",
+"file": "SEAT-LAMP.png",
+"x": 2064,
+"y": 1044,
+"w": 36,
+"h": 20,
+"state": "NORMAL",
+"z": 143,
+"control": "SKILL-SEVER",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"id": "e144",
+"type": "text",
+"file": null,
+"text": "SEVER",
+"x": 1923,
+"y": 1193,
+"w": 107,
+"h": 26,
+"state": "RUNTIME",
+"z": 144,
+"font": {
+"family": "Segoe UI",
+"weight": "bold",
+"size_px": 36,
+"role": "bold"
+},
+"color": "#30202A",
+"anchor": "mm",
+"anchor_position": [
+1976,
+1204
+],
+"control": "SKILL-SEVER",
+"state_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+},
+{
+"id": "e145",
+"type": "image",
+"file": "SKILL-CARD-NORMAL.png",
+"x": 2160,
+"y": 1012,
+"w": 320,
+"h": 252,
+"state": "NORMAL",
+"z": 145,
+"control": "SKILL-BACKWASH"
+},
+{
+"id": "e146",
+"type": "image",
+"file": "SKILL-WELL.png",
+"x": 2260,
+"y": 1032,
+"w": 120,
+"h": 116,
+"state": "STATIC",
+"z": 146,
+"control": "SKILL-BACKWASH"
+},
+{
+"id": "e147",
+"type": "image",
+"file": "SKILL-BACKWASH.png",
+"x": 2278,
+"y": 1058,
+"w": 84,
+"h": 63,
+"state": "STATIC",
+"z": 147,
+"control": "SKILL-BACKWASH",
+"alpha_mask_tint": "#E7B68B"
+},
+{
+"id": "e148",
+"type": "image",
+"file": "SKILL-NAME-FACE-NORMAL.png",
+"x": 2180,
+"y": 1160,
+"w": 280,
+"h": 88,
+"state": "NORMAL",
+"z": 148,
+"control": "SKILL-BACKWASH"
+},
+{
+"id": "e149",
+"type": "image",
+"file": "SEAT-LAMP.png",
+"x": 2408,
+"y": 1044,
+"w": 36,
+"h": 20,
+"state": "NORMAL",
+"z": 149,
+"control": "SKILL-BACKWASH",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"id": "e150",
+"type": "text",
+"file": null,
+"text": "BACKWASH",
+"x": 2219,
+"y": 1193,
+"w": 202,
+"h": 26,
+"state": "RUNTIME",
+"z": 150,
+"font": {
+"family": "Segoe UI",
+"weight": "bold",
+"size_px": 36,
+"role": "bold"
+},
+"color": "#30202A",
+"anchor": "mm",
+"anchor_position": [
+2320,
+1204
+],
+"control": "SKILL-BACKWASH",
+"state_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+},
+{
+"id": "e151",
+"type": "image",
+"file": "SKILL-CARD-NORMAL.png",
+"x": 2504,
+"y": 1012,
+"w": 320,
+"h": 252,
+"state": "NORMAL",
+"z": 151,
+"control": "SKILL-FOG-OF-WAR"
+},
+{
+"id": "e152",
+"type": "image",
+"file": "SKILL-WELL.png",
+"x": 2604,
+"y": 1032,
+"w": 120,
+"h": 116,
+"state": "STATIC",
+"z": 152,
+"control": "SKILL-FOG-OF-WAR"
+},
+{
+"id": "e153",
+"type": "image",
+"file": "SKILL-FOG-OF-WAR.png",
+"x": 2622,
+"y": 1050,
+"w": 84,
+"h": 80,
+"state": "STATIC",
+"z": 153,
+"control": "SKILL-FOG-OF-WAR",
+"alpha_mask_tint": "#E7B68B"
+},
+{
+"id": "e154",
+"type": "image",
+"file": "SKILL-NAME-FACE-NORMAL.png",
+"x": 2524,
+"y": 1160,
+"w": 280,
+"h": 88,
+"state": "NORMAL",
+"z": 154,
+"control": "SKILL-FOG-OF-WAR"
+},
+{
+"id": "e155",
+"type": "image",
+"file": "SEAT-LAMP.png",
+"x": 2752,
+"y": 1044,
+"w": 36,
+"h": 20,
+"state": "NORMAL",
+"z": 155,
+"control": "SKILL-FOG-OF-WAR",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"id": "e156",
+"type": "text",
+"file": null,
+"text": "FOG OF",
+"x": 2600,
+"y": 1173,
+"w": 128,
+"h": 26,
+"state": "RUNTIME",
+"z": 156,
+"font": {
+"family": "Segoe UI",
+"weight": "bold",
+"size_px": 36,
+"role": "bold"
+},
+"color": "#30202A",
+"anchor": "mm",
+"anchor_position": [
+2664,
+1184
+],
+"control": "SKILL-FOG-OF-WAR",
+"state_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+},
+{
+"id": "e157",
+"type": "text",
+"file": null,
+"text": "WAR",
+"x": 2622,
+"y": 1213,
+"w": 86,
+"h": 26,
+"state": "RUNTIME",
+"z": 157,
+"font": {
+"family": "Segoe UI",
+"weight": "bold",
+"size_px": 36,
+"role": "bold"
+},
+"color": "#30202A",
+"anchor": "mm",
+"anchor_position": [
+2664,
+1224
+],
+"control": "SKILL-FOG-OF-WAR",
+"state_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+},
+{
+"id": "e158",
+"type": "image",
+"file": "SKILL-CARD-SELECTED.png",
+"x": 2848,
+"y": 1012,
+"w": 320,
+"h": 252,
+"state": "SELECTED",
+"z": 158,
+"control": "SKILL-PORTAL"
+},
+{
+"id": "e159",
+"type": "image",
+"file": "SKILL-WELL.png",
+"x": 2948,
+"y": 1032,
+"w": 120,
+"h": 116,
+"state": "STATIC",
+"z": 159,
+"control": "SKILL-PORTAL"
+},
+{
+"id": "e160",
+"type": "image",
+"file": "SKILL-PORTAL.png",
+"x": 2966,
+"y": 1057,
+"w": 84,
+"h": 66,
+"state": "STATIC",
+"z": 160,
+"control": "SKILL-PORTAL",
+"alpha_mask_tint": "#B3F9FF"
+},
+{
+"id": "e161",
+"type": "image",
+"file": "SKILL-NAME-FACE-SELECTED.png",
+"x": 2868,
+"y": 1160,
+"w": 280,
+"h": 88,
+"state": "SELECTED",
+"z": 161,
+"control": "SKILL-PORTAL"
+},
+{
+"id": "e162",
+"type": "image",
+"file": "SEAT-LAMP.png",
+"x": 3096,
+"y": 1044,
+"w": 36,
+"h": 20,
+"state": "SELECTED",
+"z": 162,
+"control": "SKILL-PORTAL",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"id": "e163",
+"type": "text",
+"file": null,
+"text": "PORTAL",
+"x": 2940,
+"y": 1193,
+"w": 137,
+"h": 26,
+"state": "RUNTIME",
+"z": 163,
+"font": {
+"family": "Segoe UI",
+"weight": "bold",
+"size_px": 36,
+"role": "bold"
+},
+"color": "#30202A",
+"anchor": "mm",
+"anchor_position": [
+3008,
+1204
+],
+"control": "SKILL-PORTAL",
+"state_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+}
+],
+"controls": [
+{
+"id": "FACTION-VEX",
+"family": "FACTION-TAB",
+"shown_state": "SELECTED",
+"bounds": [
+64,
+196,
+416,
+160
+],
+"label": "VEX",
+"label_retained_when_disabled": true,
+"children": [
+"e024",
+"e025",
+"e026",
+"e027"
+],
+"state_bindings": [
+{
+"element": "e024",
+"files": {
+"NORMAL": "FACTION-TAB-NORMAL.png",
+"PRESSED": "FACTION-TAB-PRESSED.png",
+"SELECTED": "FACTION-TAB-SELECTED.png",
+"DISABLED": "FACTION-TAB-DISABLED.png"
+}
+},
+{
+"element": "e027",
+"text_colors": {
+"NORMAL": "#FAEAD1",
+"PRESSED": "#FAEAD1",
+"SELECTED": "#FAEAD1",
+"DISABLED": "#FFF0E3"
+}
+}
+]
+},
+{
+"id": "FACTION-NULL",
+"family": "FACTION-TAB",
+"shown_state": "NORMAL",
+"bounds": [
+504,
+196,
+416,
+160
+],
+"label": "NULL",
+"label_retained_when_disabled": true,
+"children": [
+"e028",
+"e029",
+"e030",
+"e031"
+],
+"state_bindings": [
+{
+"element": "e028",
+"files": {
+"NORMAL": "FACTION-TAB-NORMAL.png",
+"PRESSED": "FACTION-TAB-PRESSED.png",
+"SELECTED": "FACTION-TAB-SELECTED.png",
+"DISABLED": "FACTION-TAB-DISABLED.png"
+}
+},
+{
+"element": "e031",
+"text_colors": {
+"NORMAL": "#FAEAD1",
+"PRESSED": "#FAEAD1",
+"SELECTED": "#FAEAD1",
+"DISABLED": "#FFF0E3"
+}
+}
+]
+},
+{
+"id": "FACTION-BLOOM",
+"family": "FACTION-TAB",
+"shown_state": "NORMAL",
+"bounds": [
+944,
+196,
+416,
+160
+],
+"label": "BLOOM",
+"label_retained_when_disabled": true,
+"children": [
+"e032",
+"e033",
+"e034",
+"e035"
+],
+"state_bindings": [
+{
+"element": "e032",
+"files": {
+"NORMAL": "FACTION-TAB-NORMAL.png",
+"PRESSED": "FACTION-TAB-PRESSED.png",
+"SELECTED": "FACTION-TAB-SELECTED.png",
+"DISABLED": "FACTION-TAB-DISABLED.png"
+}
+},
+{
+"element": "e035",
+"text_colors": {
+"NORMAL": "#FAEAD1",
+"PRESSED": "#FAEAD1",
+"SELECTED": "#FAEAD1",
+"DISABLED": "#FFF0E3"
+}
+}
+]
+},
+{
+"id": "FACTION-EMBER",
+"family": "FACTION-TAB",
+"shown_state": "NORMAL",
+"bounds": [
+1384,
+196,
+416,
+160
+],
+"label": "EMBER",
+"label_retained_when_disabled": true,
+"children": [
+"e036",
+"e037",
+"e038",
+"e039"
+],
+"state_bindings": [
+{
+"element": "e036",
+"files": {
+"NORMAL": "FACTION-TAB-NORMAL.png",
+"PRESSED": "FACTION-TAB-PRESSED.png",
+"SELECTED": "FACTION-TAB-SELECTED.png",
+"DISABLED": "FACTION-TAB-DISABLED.png"
+}
+},
+{
+"element": "e039",
+"text_colors": {
+"NORMAL": "#FAEAD1",
+"PRESSED": "#FAEAD1",
+"SELECTED": "#FAEAD1",
+"DISABLED": "#FFF0E3"
+}
+}
+]
+},
+{
+"id": "FACTION-AEGIS",
+"family": "FACTION-TAB",
+"shown_state": "NORMAL",
+"bounds": [
+1824,
+196,
+416,
+160
+],
+"label": "AEGIS",
+"label_retained_when_disabled": true,
+"children": [
+"e040",
+"e041",
+"e042",
+"e043"
+],
+"state_bindings": [
+{
+"element": "e040",
+"files": {
+"NORMAL": "FACTION-TAB-NORMAL.png",
+"PRESSED": "FACTION-TAB-PRESSED.png",
+"SELECTED": "FACTION-TAB-SELECTED.png",
+"DISABLED": "FACTION-TAB-DISABLED.png"
+}
+},
+{
+"element": "e043",
+"text_colors": {
+"NORMAL": "#FAEAD1",
+"PRESSED": "#FAEAD1",
+"SELECTED": "#FAEAD1",
+"DISABLED": "#FFF0E3"
+}
+}
+]
+},
+{
+"id": "SKILLS",
+"family": "SECTION-TAB",
+"shown_state": "SELECTED",
+"bounds": [
+2280,
+196,
+424,
+160
+],
+"label": "SKILLS",
+"label_retained_when_disabled": true,
+"children": [
+"e044",
+"e045"
+],
+"state_bindings": [
+{
+"element": "e044",
+"files": {
+"NORMAL": "SECTION-TAB-NORMAL.png",
+"PRESSED": "SECTION-TAB-PRESSED.png",
+"SELECTED": "SECTION-TAB-SELECTED.png",
+"DISABLED": "SECTION-TAB-DISABLED.png"
+}
+},
+{
+"element": "e045",
+"text_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+}
+]
+},
+{
+"id": "CUSTOMIZE",
+"family": "SECTION-TAB",
+"shown_state": "NORMAL",
+"bounds": [
+2728,
+196,
+424,
+160
+],
+"label": "CUSTOMIZE",
+"label_retained_when_disabled": true,
+"children": [
+"e046",
+"e047"
+],
+"state_bindings": [
+{
+"element": "e046",
+"files": {
+"NORMAL": "SECTION-TAB-NORMAL.png",
+"PRESSED": "SECTION-TAB-PRESSED.png",
+"SELECTED": "SECTION-TAB-SELECTED.png",
+"DISABLED": "SECTION-TAB-DISABLED.png"
+}
+},
+{
+"element": "e047",
+"text_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+}
+]
+},
+{
+"id": "RESET",
+"family": "RESET-BUTTON",
+"shown_state": "DISABLED",
+"bounds": [
+2968,
+392,
+216,
+152
+],
+"label": "RESET",
+"label_retained_when_disabled": true,
+"children": [
+"e073",
+"e074"
+],
+"state_bindings": [
+{
+"element": "e073",
+"files": {
+"NORMAL": "RESET-BUTTON-NORMAL.png",
+"PRESSED": "RESET-BUTTON-PRESSED.png",
+"SELECTED": "RESET-BUTTON-SELECTED.png",
+"DISABLED": "RESET-BUTTON-DISABLED.png"
+}
+},
+{
+"element": "e074",
+"text_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+}
+]
+},
+{
+"id": "SKILL-SURGE",
+"family": "SKILL-CARD",
+"shown_state": "SELECTED",
+"bounds": [
+784,
+648,
+320,
+252
+],
+"label": "SURGE",
+"label_retained_when_disabled": true,
+"children": [
+"e077",
+"e078",
+"e079",
+"e080",
+"e081",
+"e082"
+],
+"state_bindings": [
+{
+"element": "e077",
+"files": {
+"NORMAL": "SKILL-CARD-NORMAL.png",
+"PRESSED": "SKILL-CARD-PRESSED.png",
+"SELECTED": "SKILL-CARD-SELECTED.png",
+"DISABLED": "SKILL-CARD-DISABLED.png"
+}
+},
+{
+"element": "e079",
+"alpha_mask_tints": {
+"NORMAL": "#E7B68B",
+"PRESSED": "#E7B68B",
+"SELECTED": "#B3F9FF",
+"DISABLED": "#BDACA8"
+}
+},
+{
+"element": "e080",
+"files": {
+"NORMAL": "SKILL-NAME-FACE-NORMAL.png",
+"PRESSED": "SKILL-NAME-FACE-PRESSED.png",
+"SELECTED": "SKILL-NAME-FACE-SELECTED.png",
+"DISABLED": "SKILL-NAME-FACE-DISABLED.png"
+}
+},
+{
+"element": "e081",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"element": "e082",
+"text_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+}
+]
+},
+{
+"id": "SKILL-SPORE-BURST",
+"family": "SKILL-CARD",
+"shown_state": "NORMAL",
+"bounds": [
+1128,
+648,
+320,
+252
+],
+"label": "SPORE BURST",
+"label_retained_when_disabled": true,
+"children": [
+"e083",
+"e084",
+"e085",
+"e086",
+"e087",
+"e088"
+],
+"state_bindings": [
+{
+"element": "e083",
+"files": {
+"NORMAL": "SKILL-CARD-NORMAL.png",
+"PRESSED": "SKILL-CARD-PRESSED.png",
+"SELECTED": "SKILL-CARD-SELECTED.png",
+"DISABLED": "SKILL-CARD-DISABLED.png"
+}
+},
+{
+"element": "e085",
+"alpha_mask_tints": {
+"NORMAL": "#E7B68B",
+"PRESSED": "#E7B68B",
+"SELECTED": "#B3F9FF",
+"DISABLED": "#BDACA8"
+}
+},
+{
+"element": "e086",
+"files": {
+"NORMAL": "SKILL-NAME-FACE-NORMAL.png",
+"PRESSED": "SKILL-NAME-FACE-PRESSED.png",
+"SELECTED": "SKILL-NAME-FACE-SELECTED.png",
+"DISABLED": "SKILL-NAME-FACE-DISABLED.png"
+}
+},
+{
+"element": "e087",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"element": "e088",
+"text_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+}
+]
+},
+{
+"id": "SKILL-FORTIFY",
+"family": "SKILL-CARD",
+"shown_state": "NORMAL",
+"bounds": [
+1472,
+648,
+320,
+252
+],
+"label": "FORTIFY",
+"label_retained_when_disabled": true,
+"children": [
+"e089",
+"e090",
+"e091",
+"e092",
+"e093",
+"e094"
+],
+"state_bindings": [
+{
+"element": "e089",
+"files": {
+"NORMAL": "SKILL-CARD-NORMAL.png",
+"PRESSED": "SKILL-CARD-PRESSED.png",
+"SELECTED": "SKILL-CARD-SELECTED.png",
+"DISABLED": "SKILL-CARD-DISABLED.png"
+}
+},
+{
+"element": "e091",
+"alpha_mask_tints": {
+"NORMAL": "#E7B68B",
+"PRESSED": "#E7B68B",
+"SELECTED": "#B3F9FF",
+"DISABLED": "#BDACA8"
+}
+},
+{
+"element": "e092",
+"files": {
+"NORMAL": "SKILL-NAME-FACE-NORMAL.png",
+"PRESSED": "SKILL-NAME-FACE-PRESSED.png",
+"SELECTED": "SKILL-NAME-FACE-SELECTED.png",
+"DISABLED": "SKILL-NAME-FACE-DISABLED.png"
+}
+},
+{
+"element": "e093",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"element": "e094",
+"text_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+}
+]
+},
+{
+"id": "SKILL-SCORCH",
+"family": "SKILL-CARD",
+"shown_state": "NORMAL",
+"bounds": [
+1816,
+648,
+320,
+252
+],
+"label": "SCORCH",
+"label_retained_when_disabled": true,
+"children": [
+"e095",
+"e096",
+"e097",
+"e098",
+"e099",
+"e100"
+],
+"state_bindings": [
+{
+"element": "e095",
+"files": {
+"NORMAL": "SKILL-CARD-NORMAL.png",
+"PRESSED": "SKILL-CARD-PRESSED.png",
+"SELECTED": "SKILL-CARD-SELECTED.png",
+"DISABLED": "SKILL-CARD-DISABLED.png"
+}
+},
+{
+"element": "e097",
+"alpha_mask_tints": {
+"NORMAL": "#E7B68B",
+"PRESSED": "#E7B68B",
+"SELECTED": "#B3F9FF",
+"DISABLED": "#BDACA8"
+}
+},
+{
+"element": "e098",
+"files": {
+"NORMAL": "SKILL-NAME-FACE-NORMAL.png",
+"PRESSED": "SKILL-NAME-FACE-PRESSED.png",
+"SELECTED": "SKILL-NAME-FACE-SELECTED.png",
+"DISABLED": "SKILL-NAME-FACE-DISABLED.png"
+}
+},
+{
+"element": "e099",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"element": "e100",
+"text_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+}
+]
+},
+{
+"id": "SKILL-GHOST-LINE",
+"family": "SKILL-CARD",
+"shown_state": "NORMAL",
+"bounds": [
+2160,
+648,
+320,
+252
+],
+"label": "GHOST LINE",
+"label_retained_when_disabled": true,
+"children": [
+"e101",
+"e102",
+"e103",
+"e104",
+"e105",
+"e106"
+],
+"state_bindings": [
+{
+"element": "e101",
+"files": {
+"NORMAL": "SKILL-CARD-NORMAL.png",
+"PRESSED": "SKILL-CARD-PRESSED.png",
+"SELECTED": "SKILL-CARD-SELECTED.png",
+"DISABLED": "SKILL-CARD-DISABLED.png"
+}
+},
+{
+"element": "e103",
+"alpha_mask_tints": {
+"NORMAL": "#E7B68B",
+"PRESSED": "#E7B68B",
+"SELECTED": "#B3F9FF",
+"DISABLED": "#BDACA8"
+}
+},
+{
+"element": "e104",
+"files": {
+"NORMAL": "SKILL-NAME-FACE-NORMAL.png",
+"PRESSED": "SKILL-NAME-FACE-PRESSED.png",
+"SELECTED": "SKILL-NAME-FACE-SELECTED.png",
+"DISABLED": "SKILL-NAME-FACE-DISABLED.png"
+}
+},
+{
+"element": "e105",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"element": "e106",
+"text_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+}
+]
+},
+{
+"id": "SKILL-SINKHOLE",
+"family": "SKILL-CARD",
+"shown_state": "NORMAL",
+"bounds": [
+2504,
+648,
+320,
+252
+],
+"label": "SINKHOLE",
+"label_retained_when_disabled": true,
+"children": [
+"e107",
+"e108",
+"e109",
+"e110",
+"e111",
+"e112"
+],
+"state_bindings": [
+{
+"element": "e107",
+"files": {
+"NORMAL": "SKILL-CARD-NORMAL.png",
+"PRESSED": "SKILL-CARD-PRESSED.png",
+"SELECTED": "SKILL-CARD-SELECTED.png",
+"DISABLED": "SKILL-CARD-DISABLED.png"
+}
+},
+{
+"element": "e109",
+"alpha_mask_tints": {
+"NORMAL": "#E7B68B",
+"PRESSED": "#E7B68B",
+"SELECTED": "#B3F9FF",
+"DISABLED": "#BDACA8"
+}
+},
+{
+"element": "e110",
+"files": {
+"NORMAL": "SKILL-NAME-FACE-NORMAL.png",
+"PRESSED": "SKILL-NAME-FACE-PRESSED.png",
+"SELECTED": "SKILL-NAME-FACE-SELECTED.png",
+"DISABLED": "SKILL-NAME-FACE-DISABLED.png"
+}
+},
+{
+"element": "e111",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"element": "e112",
+"text_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+}
+]
+},
+{
+"id": "SKILL-EVAC",
+"family": "SKILL-CARD",
+"shown_state": "NORMAL",
+"bounds": [
+2848,
+648,
+320,
+252
+],
+"label": "EVAC",
+"label_retained_when_disabled": true,
+"children": [
+"e113",
+"e114",
+"e115",
+"e116",
+"e117",
+"e118"
+],
+"state_bindings": [
+{
+"element": "e113",
+"files": {
+"NORMAL": "SKILL-CARD-NORMAL.png",
+"PRESSED": "SKILL-CARD-PRESSED.png",
+"SELECTED": "SKILL-CARD-SELECTED.png",
+"DISABLED": "SKILL-CARD-DISABLED.png"
+}
+},
+{
+"element": "e115",
+"alpha_mask_tints": {
+"NORMAL": "#E7B68B",
+"PRESSED": "#E7B68B",
+"SELECTED": "#B3F9FF",
+"DISABLED": "#BDACA8"
+}
+},
+{
+"element": "e116",
+"files": {
+"NORMAL": "SKILL-NAME-FACE-NORMAL.png",
+"PRESSED": "SKILL-NAME-FACE-PRESSED.png",
+"SELECTED": "SKILL-NAME-FACE-SELECTED.png",
+"DISABLED": "SKILL-NAME-FACE-DISABLED.png"
+}
+},
+{
+"element": "e117",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"element": "e118",
+"text_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+}
+]
+},
+{
+"id": "SKILL-DEMOLISH",
+"family": "SKILL-CARD",
+"shown_state": "NORMAL",
+"bounds": [
+784,
+1012,
+320,
+252
+],
+"label": "DEMOLISH",
+"label_retained_when_disabled": true,
+"children": [
+"e121",
+"e122",
+"e123",
+"e124",
+"e125",
+"e126"
+],
+"state_bindings": [
+{
+"element": "e121",
+"files": {
+"NORMAL": "SKILL-CARD-NORMAL.png",
+"PRESSED": "SKILL-CARD-PRESSED.png",
+"SELECTED": "SKILL-CARD-SELECTED.png",
+"DISABLED": "SKILL-CARD-DISABLED.png"
+}
+},
+{
+"element": "e123",
+"alpha_mask_tints": {
+"NORMAL": "#E7B68B",
+"PRESSED": "#E7B68B",
+"SELECTED": "#B3F9FF",
+"DISABLED": "#BDACA8"
+}
+},
+{
+"element": "e124",
+"files": {
+"NORMAL": "SKILL-NAME-FACE-NORMAL.png",
+"PRESSED": "SKILL-NAME-FACE-PRESSED.png",
+"SELECTED": "SKILL-NAME-FACE-SELECTED.png",
+"DISABLED": "SKILL-NAME-FACE-DISABLED.png"
+}
+},
+{
+"element": "e125",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"element": "e126",
+"text_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+}
+]
+},
+{
+"id": "SKILL-RELAY-HACK",
+"family": "SKILL-CARD",
+"shown_state": "NORMAL",
+"bounds": [
+1128,
+1012,
+320,
+252
+],
+"label": "RELAY HACK",
+"label_retained_when_disabled": true,
+"children": [
+"e127",
+"e128",
+"e129",
+"e130",
+"e131",
+"e132"
+],
+"state_bindings": [
+{
+"element": "e127",
+"files": {
+"NORMAL": "SKILL-CARD-NORMAL.png",
+"PRESSED": "SKILL-CARD-PRESSED.png",
+"SELECTED": "SKILL-CARD-SELECTED.png",
+"DISABLED": "SKILL-CARD-DISABLED.png"
+}
+},
+{
+"element": "e129",
+"alpha_mask_tints": {
+"NORMAL": "#E7B68B",
+"PRESSED": "#E7B68B",
+"SELECTED": "#B3F9FF",
+"DISABLED": "#BDACA8"
+}
+},
+{
+"element": "e130",
+"files": {
+"NORMAL": "SKILL-NAME-FACE-NORMAL.png",
+"PRESSED": "SKILL-NAME-FACE-PRESSED.png",
+"SELECTED": "SKILL-NAME-FACE-SELECTED.png",
+"DISABLED": "SKILL-NAME-FACE-DISABLED.png"
+}
+},
+{
+"element": "e131",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"element": "e132",
+"text_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+}
+]
+},
+{
+"id": "SKILL-QUAKE",
+"family": "SKILL-CARD",
+"shown_state": "NORMAL",
+"bounds": [
+1472,
+1012,
+320,
+252
+],
+"label": "QUAKE",
+"label_retained_when_disabled": true,
+"children": [
+"e133",
+"e134",
+"e135",
+"e136",
+"e137",
+"e138"
+],
+"state_bindings": [
+{
+"element": "e133",
+"files": {
+"NORMAL": "SKILL-CARD-NORMAL.png",
+"PRESSED": "SKILL-CARD-PRESSED.png",
+"SELECTED": "SKILL-CARD-SELECTED.png",
+"DISABLED": "SKILL-CARD-DISABLED.png"
+}
+},
+{
+"element": "e135",
+"alpha_mask_tints": {
+"NORMAL": "#E7B68B",
+"PRESSED": "#E7B68B",
+"SELECTED": "#B3F9FF",
+"DISABLED": "#BDACA8"
+}
+},
+{
+"element": "e136",
+"files": {
+"NORMAL": "SKILL-NAME-FACE-NORMAL.png",
+"PRESSED": "SKILL-NAME-FACE-PRESSED.png",
+"SELECTED": "SKILL-NAME-FACE-SELECTED.png",
+"DISABLED": "SKILL-NAME-FACE-DISABLED.png"
+}
+},
+{
+"element": "e137",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"element": "e138",
+"text_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+}
+]
+},
+{
+"id": "SKILL-SEVER",
+"family": "SKILL-CARD",
+"shown_state": "NORMAL",
+"bounds": [
+1816,
+1012,
+320,
+252
+],
+"label": "SEVER",
+"label_retained_when_disabled": true,
+"children": [
+"e139",
+"e140",
+"e141",
+"e142",
+"e143",
+"e144"
+],
+"state_bindings": [
+{
+"element": "e139",
+"files": {
+"NORMAL": "SKILL-CARD-NORMAL.png",
+"PRESSED": "SKILL-CARD-PRESSED.png",
+"SELECTED": "SKILL-CARD-SELECTED.png",
+"DISABLED": "SKILL-CARD-DISABLED.png"
+}
+},
+{
+"element": "e141",
+"alpha_mask_tints": {
+"NORMAL": "#E7B68B",
+"PRESSED": "#E7B68B",
+"SELECTED": "#B3F9FF",
+"DISABLED": "#BDACA8"
+}
+},
+{
+"element": "e142",
+"files": {
+"NORMAL": "SKILL-NAME-FACE-NORMAL.png",
+"PRESSED": "SKILL-NAME-FACE-PRESSED.png",
+"SELECTED": "SKILL-NAME-FACE-SELECTED.png",
+"DISABLED": "SKILL-NAME-FACE-DISABLED.png"
+}
+},
+{
+"element": "e143",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"element": "e144",
+"text_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+}
+]
+},
+{
+"id": "SKILL-BACKWASH",
+"family": "SKILL-CARD",
+"shown_state": "NORMAL",
+"bounds": [
+2160,
+1012,
+320,
+252
+],
+"label": "BACKWASH",
+"label_retained_when_disabled": true,
+"children": [
+"e145",
+"e146",
+"e147",
+"e148",
+"e149",
+"e150"
+],
+"state_bindings": [
+{
+"element": "e145",
+"files": {
+"NORMAL": "SKILL-CARD-NORMAL.png",
+"PRESSED": "SKILL-CARD-PRESSED.png",
+"SELECTED": "SKILL-CARD-SELECTED.png",
+"DISABLED": "SKILL-CARD-DISABLED.png"
+}
+},
+{
+"element": "e147",
+"alpha_mask_tints": {
+"NORMAL": "#E7B68B",
+"PRESSED": "#E7B68B",
+"SELECTED": "#B3F9FF",
+"DISABLED": "#BDACA8"
+}
+},
+{
+"element": "e148",
+"files": {
+"NORMAL": "SKILL-NAME-FACE-NORMAL.png",
+"PRESSED": "SKILL-NAME-FACE-PRESSED.png",
+"SELECTED": "SKILL-NAME-FACE-SELECTED.png",
+"DISABLED": "SKILL-NAME-FACE-DISABLED.png"
+}
+},
+{
+"element": "e149",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"element": "e150",
+"text_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+}
+]
+},
+{
+"id": "SKILL-FOG-OF-WAR",
+"family": "SKILL-CARD",
+"shown_state": "NORMAL",
+"bounds": [
+2504,
+1012,
+320,
+252
+],
+"label": "FOG OF WAR",
+"label_retained_when_disabled": true,
+"children": [
+"e151",
+"e152",
+"e153",
+"e154",
+"e155",
+"e156",
+"e157"
+],
+"state_bindings": [
+{
+"element": "e151",
+"files": {
+"NORMAL": "SKILL-CARD-NORMAL.png",
+"PRESSED": "SKILL-CARD-PRESSED.png",
+"SELECTED": "SKILL-CARD-SELECTED.png",
+"DISABLED": "SKILL-CARD-DISABLED.png"
+}
+},
+{
+"element": "e153",
+"alpha_mask_tints": {
+"NORMAL": "#E7B68B",
+"PRESSED": "#E7B68B",
+"SELECTED": "#B3F9FF",
+"DISABLED": "#BDACA8"
+}
+},
+{
+"element": "e154",
+"files": {
+"NORMAL": "SKILL-NAME-FACE-NORMAL.png",
+"PRESSED": "SKILL-NAME-FACE-PRESSED.png",
+"SELECTED": "SKILL-NAME-FACE-SELECTED.png",
+"DISABLED": "SKILL-NAME-FACE-DISABLED.png"
+}
+},
+{
+"element": "e155",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"element": "e156",
+"text_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+},
+{
+"element": "e157",
+"text_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+}
+]
+},
+{
+"id": "SKILL-PORTAL",
+"family": "SKILL-CARD",
+"shown_state": "SELECTED",
+"bounds": [
+2848,
+1012,
+320,
+252
+],
+"label": "PORTAL",
+"label_retained_when_disabled": true,
+"children": [
+"e158",
+"e159",
+"e160",
+"e161",
+"e162",
+"e163"
+],
+"state_bindings": [
+{
+"element": "e158",
+"files": {
+"NORMAL": "SKILL-CARD-NORMAL.png",
+"PRESSED": "SKILL-CARD-PRESSED.png",
+"SELECTED": "SKILL-CARD-SELECTED.png",
+"DISABLED": "SKILL-CARD-DISABLED.png"
+}
+},
+{
+"element": "e160",
+"alpha_mask_tints": {
+"NORMAL": "#E7B68B",
+"PRESSED": "#E7B68B",
+"SELECTED": "#B3F9FF",
+"DISABLED": "#BDACA8"
+}
+},
+{
+"element": "e161",
+"files": {
+"NORMAL": "SKILL-NAME-FACE-NORMAL.png",
+"PRESSED": "SKILL-NAME-FACE-PRESSED.png",
+"SELECTED": "SKILL-NAME-FACE-SELECTED.png",
+"DISABLED": "SKILL-NAME-FACE-DISABLED.png"
+}
+},
+{
+"element": "e162",
+"visible_states": [
+"SELECTED"
+]
+},
+{
+"element": "e163",
+"text_colors": {
+"NORMAL": "#30202A",
+"PRESSED": "#30202A",
+"SELECTED": "#30202A",
+"DISABLED": "#FFF0E3"
+}
+}
+]
+}
+]
+}
