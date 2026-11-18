@@ -70,6 +70,7 @@ var _map_page := -1                                # MAP PICKER: the open page o
 # map filters on 02 BATTLEFIELD (Daniele, 0.18.6: "add in game filters for maps like 1v1 2v2 ffa etc"): players
 # (a mode the map offers) and type (the map's group); static, so they survive a trip through the match
 static var map_filter_mode := "all"
+static var _guide_tab := "basics"                  # GUIDE: the open tab
 static var map_filter_type := "all"
 # MAPS 5.0 (📐 Architect, 2026-09-30): the pool is only the N- maps now (MapPool.POOL_GROUPS), all group "new" -
 # the old BRAWL / SIEGE / CORE / ALPHA 11 / TRAINING groups never match, so TYPE relabels by each map's own "size"
@@ -1018,38 +1019,42 @@ func show_play() -> void:
 
 
 func show_help() -> void:
-	## HELP (screen system 24): the four things to know, and TRAINING.
 	_last_show = show_help
-	var area := shell_open("OOZE / GUIDE", "guide", Callable())   # Daniele 2026-11-05: the quick guide is a tab of its own
-	var x := shell_x()
-	var y := page_title(area, "QUICK GUIDE", "OWN THE CROSSINGS.")
-	var gap := 14.0
-	var cw := (content.size.x - x * 2.0 - gap) / 2.0
-	var tips := [
-		["SEND UNITS", "Drag from your vat to a connected target. Pick 25 %, 50 %, 75 % or 100 % before sending. Grey nodes never regrow: take them."],
-		["INSPECT & UPGRADE", "Tap a node to inspect it. Use UPGRADE in its panel, or double-tap a node you own."],
-		["RELAYS", "Relays move bridges: retract, switch, ferry, conveyor, launcher. A laser relay is a laser tower anyone can take. Neutral relay buildings fire only when attacked."],
-		["ABILITIES", "A ready ability has a bright frame. Tap it, then choose a valid target."],
-	]
-	# iOS: the cards are as tall as their wrapped text needs (the grown text ran out of the 110 they had)
-	var body_y := 14.0 + UiKit.line_h(self, 17, true) + 4.0
-	var need := 0.0
-	for t in tips:
-		need = maxf(need, body_y + UiKit.text_h(self, t[1], 14, cw - 32.0) + 12.0)
-	var chh := minf(maxf(110.0, need), (area.end.y - y - UiKit.tap_h(self, 48.0) - 40.0) / 2.0 - gap)
-	for i in range(tips.size()):
-		var p := Vector2(x + (i % 2) * (cw + gap), y + (i / 2) * (chh + gap))
-		UiKit.panel(self, p, Vector2(cw, chh), shell_f)
-		_shell_add(UiKit.label(self, tips[i][0], 17, UiKit.accent(shell_f), true), p + Vector2(16, 14))
-		var l := UiKit.label(self, tips[i][1], 14, UiKit.MUTED)
-		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		l.custom_minimum_size = Vector2(cw - 32.0, 0)
-		_shell_add(l, p + Vector2(16, body_y))
-	var by := y + 2.0 * (chh + gap) + 8.0
-	_shell_add(UiKit.label(self, "Learn by doing.", 15, UiKit.MUTED), Vector2(x, by + 12.0))
-	var tb := UiKit.btn(self, "TRAINING  →" if TutorialDirector.ENABLED else UiKit.fit_text(self, "TRAINING · COMING SOON", "TRAINING
-COMING SOON", 260.0, 16.0, 40.0), Vector2(content.size.x - x - 260.0, by), Vector2(260, 48), show_tutorial, "primary", shell_f, 16)
-	tb.disabled = not TutorialDirector.ENABLED          # Daniele 2026-11-15: the tutorial is being remade
+	## GUIDE = the remake (45B sizes.json GUIDE; a nav tab, Daniele 11-05): BASICS / FACTIONS / SKILLS / MAPS sub-tabs, the
+	## picture well at the left, the page's four numbered lines at the right, ‹ p / n ›; TRAINING / ARMIES where they help.
+	var st := _stage_page("OOZE / GUIDE", "guide", "GUIDE", "HOW TO PLAY", Callable(), faction)
+	_page = "guide"
+	var tabs := [["basics", "BASICS"], ["factions", "FACTIONS"], ["skills", "SKILLS"], ["maps", "MAPS"]]
+	for i in range(4):
+		var id: String = tabs[i][0]
+		var b := st.key("SUB-TAB", 15 + 197 * i, 74, 191, 34, str(tabs[i][1]), func():
+			_guide_tab = id
+			show_help(), id == _guide_tab, false, "191x34pt")
+		b.size_pt = 13.0
+	var pages: Array = GUIDE.get(_guide_tab, GUIDE["basics"])
+	var p := _pager(st, "guide:" + _guide_tab, pages.size(), show_help)
+	st.piece("HERO-CABINET", 15, 115, 345, 172, "STATIC", "345x172pt")
+	st.piece("HERO-WELL", 26, 126, 323, 150, "STATIC", "323x150pt")
+	match _guide_tab:
+		"factions", "skills":
+			UiKit.hero(self, faction, st.P(110, 128), Vector2(155, 146) * st.u, false)
+		_:
+			st.pic(UiKit.map_thumb(MapPool.thumb(str(_selected_map().get("code", "")))), 30, 130, 315, 142)
+	st.piece("HERO-CABINET", 373, 115, 424, 172, "STATIC", "424x172pt")
+	var pg: Array = pages[p]
+	st.txt(str(pg[0]), 388, 128, 393, 18, 14.0, Kit45.KICK, true)
+	var lines: Array = pg[1]
+	for k in range(lines.size()):
+		var y := 151.0 + 29.0 * k
+		st.txt(str(k + 1), 388, y, 16, 16, 13.0, Kit45.KICK, true)
+		st.txt(str(lines[k]), 410, y - 6, 375, 28, 12.5, UiKit.INK, false, 0, 2)
+	if _guide_tab == "basics":
+		var tb := st.key("KEY-SMALL", 612, 299, 185, 33, "TRAINING  →" if TutorialDirector.ENABLED else "TRAINING · SOON", show_tutorial, false,
+				not TutorialDirector.ENABLED)               # Daniele 2026-11-15: the tutorial is being remade
+		tb.size_pt = 12.5
+	elif _guide_tab in ["factions", "skills"]:
+		st.key("KEY-SMALL", 612, 299, 185, 33, "ARMIES  →", func(): show_armies())
+	shell_raise()
 
 
 static var _opt_tab := "display"                   # SETTINGS: the open tab (kept while the game runs)
@@ -5595,3 +5600,22 @@ func _vol45(st: Kit45.Stage, at: Array, label: String, steps: Array, now: int, s
 		show_options(), false, off or i >= steps.size() - 1)
 	pb.size_pt = 16.0
 	at[1] = y + 41.0
+
+
+
+const GUIDE := {
+	"basics": [
+		["TAKE CONTROL", ["Drag from your vat to a connected target.", "Pick 25 %, 50 %, 75 % or 100 % before sending.",
+				"Grey nodes never regrow: take them.", "Tap a node to inspect it; UPGRADE in its panel, or double-tap a node you own."]],
+		["LEARN BY DOING", ["TRAINING walks you through a first match.", "PLAY VS AI: pick the AI level in MATCH SETUP.",
+				"ONLINE: host a room and share its four-letter code.", "CHALLENGES pay SCRAP and XP: claim them in PROFILE."]]],
+	"factions": [
+		["FIVE SYNDICATES", ["VEX, NULL, BLOOM, EMBER and AEGIS: one army each.", "Every army has its own stats, skills and ultimate.",
+				"ARMIES shows them all and keeps your picks.", "Win with a faction to unlock its own vat."]]],
+	"skills": [
+		["ABILITIES", ["Pick an active, a map skill and the ultimate in ARMIES.", "A ready ability has a bright frame.",
+				"Tap it, then choose a valid target.", "Map skills need relays; without them a fallback skill plays."]]],
+	"maps": [
+		["RELAYS", ["Relays move bridges: retract, switch, ferry, conveyor, launcher.", "A laser relay is a laser tower anyone can take.",
+				"Neutral relay buildings fire only when attacked.", "MAP PICKER shows each map's relays and node count."]]],
+}
