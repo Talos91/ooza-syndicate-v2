@@ -112,15 +112,17 @@ func _wrapped(text: String, size: float, col: Color, pos: Vector2, w: float, hea
 	return h
 
 
-func _hero_block(x0: float, x1: float, top: float, bottom: float, glow := true) -> void:
-	## The faction's original character, as large as the column allows, and its tag under it.
+func _hero_block(x0: float, x1: float, top: float, bottom: float, mood := "") -> void:
+	## 40B2: the faction's AI mark in the 200 socket (seat-colour rim), and its tag plate under it.
 	var tag := str(UiKit.TAGS.get(f, ""))
 	var tag_h := UiKit.line_h(self, 14, true) + 14.0
 	var hs := minf(x1 - x0, bottom - top - tag_h - 8.0)
 	var pos := Vector2(x0 + (x1 - x0 - hs) / 2.0, top + (bottom - top - tag_h - 8.0 - hs) / 2.0)
-	UiKit.hero(self, f, pos, Vector2(hs, hs), glow)
+	MenuSkin.ai_hero(self, f, pos, hs, mood)
 	var tw := UiKit.text_w(self, tag, 14, true) + tag.length() * 2.0 + 30.0
-	UiKit.tag(self, tag, Vector2(pos.x + (hs - tw) / 2.0, pos.y + hs + 8.0), f)
+	var tp := Vector2(pos.x + (hs - tw) / 2.0, pos.y + hs + 8.0)
+	UiKit.band(self, Rect2(tp, Vector2(tw, tag_h)), 0.92)
+	UiKit.add(self, UiKit.label(self, tag.to_upper(), 14, UiKit.INK, true, 2), tp + Vector2(15.0, 7.0))
 
 
 # ------------------------------------------------------------------ 18 / 19: VICTORY / DEFEAT
@@ -151,12 +153,14 @@ func result(d: Dictionary) -> Dictionary:
 	var mg := margin()
 	var out := {"stars": []}
 	var split := _split()
-	_hero_block(mg, split - mg * 0.5, mg, v.y - mg)
+	var won0 := bool(d.get("won", false))
+	_hero_block(mg, split - mg * 0.5, mg, v.y - mg, "win" if won0 else ("" if bool(d.get("draw", false)) else "loss"))
 	var page := _group()
 	var x := split + mg * 0.4
 	var w := v.x - x - mg
 	var y := 0.0
-	var acc := UiKit.accent(f)
+	var title_h := 0.0
+	var acc := MenuSkin.seat()                         # 0.24.5: kickers / accents follow the SEAT (cyan for seat A), never the faction
 	UiKit.add(self, UiKit.label(self, str(d.get("kicker", "")).to_upper(), 13, acc, true, 3), Vector2(x, y))
 	y += UiKit.line_h(self, 13, true) + 2.0
 	var won := bool(d.get("won", false))
@@ -167,6 +171,7 @@ func result(d: Dictionary) -> Dictionary:
 		hsize -= 4.0
 	UiKit.add(self, UiKit.label(self, head, hsize, hcol, true), Vector2(x - 3.0, y))
 	y += UiKit.line_h(self, hsize, true) + 2.0
+	title_h = y
 	var name_text := str(d.get("name", "")).to_upper()
 	if name_text != "":
 		UiKit.add(self, UiKit.label(self, name_text, 20, UiKit.INK, true), Vector2(x, y))
@@ -243,10 +248,65 @@ func result(d: Dictionary) -> Dictionary:
 		UiKit.btn(self, str(q[0]), Vector2(x + (i % per) * (qw + gap), y), Vector2(qw, 44.0), q[1], "secondary", f, 14)
 	if not (d.get("quiet", []) as Array).is_empty():
 		y += UiKit.tap_h(self, 44.0)
+	_result_plates(page, Rect2(x, 0.0, w, y), title_h, won0, bool(d.get("draw", false)))
 	page.position.y = clampf((v.y - y) / 2.0, 8.0, maxf(8.0, v.y - y - 8.0))
 	out["page"] = page
 	content = layer
 	return out
+
+
+func _result_plates(page: Control, col: Rect2, title_h: float, won: bool, draw: bool) -> void:
+	## 40B2 WIN / LOSS: the text column on the dark-glass result plate, its title on the title plate - WIN with a warm light sweep,
+	## LOSS cooler and darker with a faint crack. (Added behind everything already in the page.)
+	var pl := Panel.new()
+	pl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pl.add_theme_stylebox_override("panel", MenuSkin.plate(0.94))
+	pl.position = Vector2(col.position.x - 20.0, -16.0)
+	pl.size = Vector2(col.size.x + 40.0, col.end.y + 32.0)
+	page.add_child(pl)
+	page.move_child(pl, 0)
+	var tr := Rect2(col.position.x - 12.0, -8.0, col.size.x + 24.0, title_h + 12.0)
+	var tp := Panel.new()
+	tp.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tp.add_theme_stylebox_override("panel", MenuSkin.strip(1.0))
+	tp.position = tr.position
+	tp.size = tr.size
+	if not won and not draw:
+		tp.modulate = Color(0.55, 0.68, 0.95)
+	elif won:
+		tp.modulate = Color(1.18, 1.02, 0.8)
+	page.add_child(tp)
+	page.move_child(tp, 1)
+	var fx := ResultFx.new()
+	fx.position = tr.position
+	fx.size = tr.size
+	fx.mood = "win" if won else ("" if draw else "loss")
+	page.add_child(fx)
+	page.move_child(fx, 2)
+
+
+class ResultFx extends Control:
+	## Over the title plate: WIN a warm diagonal light sweep, LOSS a faint crack in the glass.
+	var mood := ""
+
+	func _init() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _draw() -> void:
+		var w := size.x
+		var h := size.y
+		if mood == "win":
+			var warm := Color(1.0, 0.86, 0.5, 0.0)
+			var lit := Color(1.0, 0.86, 0.5, 0.42)
+			draw_polygon(PackedVector2Array([Vector2(w * 0.38, 3.0), Vector2(w * 0.66, 3.0), Vector2(w * 0.54, h - 3.0), Vector2(w * 0.26, h - 3.0)]),
+					PackedColorArray([warm, warm, lit, lit]))
+			draw_rect(Rect2(3.0, 3.0, w - 6.0, h * 0.18), Color(1.0, 0.9, 0.62, 0.07))
+		elif mood == "loss":
+			var c := Color(0.82, 0.9, 1.0, 0.3)
+			var p := PackedVector2Array([Vector2(w * 0.72, 3.0), Vector2(w * 0.69, h * 0.3), Vector2(w * 0.75, h * 0.52), Vector2(w * 0.7, h * 0.78), Vector2(w * 0.73, h - 3.0)])
+			draw_polyline(p, c, 1.5, true)
+			draw_polyline(PackedVector2Array([p[2], Vector2(w * 0.84, h * 0.62), Vector2(w * 0.88, h * 0.8)]), c, 1.2, true)
+			draw_polyline(PackedVector2Array([p[1], Vector2(w * 0.6, h * 0.42)]), c, 1.0, true)
 
 
 # ------------------------------------------------------------------ 20: MATCH DETAILS
@@ -258,7 +318,7 @@ func details(d: Dictionary, table: Dictionary) -> void:
 	var v := vp()
 	var ph := phone()
 	var mg := margin()
-	var acc := UiKit.accent(f)
+	var acc := MenuSkin.seat()                         # 0.24.5: kickers / accents follow the SEAT (cyan for seat A), never the faction
 	var top := mg * (0.4 if ph else 0.7)
 	var y := UiKit.title(self, mg, top, "AFTER ACTION", "MATCH DETAILS.", f, 34.0 * (0.8 if ph else 1.0)) + 10.0
 	UiKit.back_link(self, v.x - mg, top, d.get("back", Callable()))
@@ -419,8 +479,7 @@ func card(d: Dictionary) -> Dictionary:
 	var hs := minf(hero_h, block_h)
 	if rows == 0:
 		return {"buttons": []}
-	UiKit.hero(self, f, Vector2(pos.x + pad + (cw - bw - 3.0 * pad - hs) / 2.0, y + (block_h - hs) / 2.0), Vector2(hs, hs),
-			bool(d.get("glow", true)))
+	MenuSkin.ai_hero(self, f, Vector2(pos.x + pad + (cw - bw - 3.0 * pad - hs) / 2.0, y + (block_h - hs) / 2.0), hs)
 	var bx := pos.x + cw - pad - bw
 	var by := y + (block_h - col_h) / 2.0
 	var out := {"buttons": []}

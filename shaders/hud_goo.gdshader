@@ -19,6 +19,7 @@ uniform float collar = 0.004;         // mode 1: the white collar at each share'
 uniform float pulse_rate = 0.5;       // mode 2: pulses per second along the pipe
 uniform float axis = 0.0;             // mode 2 / 3: 0 = the path runs along x, 1 = along y
 uniform float aspect = 1.0;           // texture width / height (round bubbles)
+uniform bool tube40 = false;          // hud-40b6: mode 1 lit like the vat goo (cylinder shade, glass streak, bubbles, thin meniscus)
 uniform float highlight_u = 0.24;     // the glass highlight's place across the goo (0..1 of its width)
 
 float hash(float n) { return fract(sin(n * 12.9898) * 43758.5453); }
@@ -69,6 +70,27 @@ void fragment() {
 			start = seat_end[i];
 		}
 		col = goo(c, lum, 0.0);
+		if (tube40) {
+			float vy = clamp((UV.y - v_top) / max(v_bot - v_top, 0.0001), 0.0, 1.0);
+			float cyl = sin(vy * 3.14159);
+			col = c * (0.42 + 0.82 * cyl);                                     // darker sides, lit middle (the vat's look)
+			for (int i = 0; i < 5; i++) {                                      // a thin dark meniscus where two shares meet
+				if (i >= seats - 1) { break; }
+				float e = u_left + span * seat_end[i];
+				float d = abs(UV.x - e) / max(span, 0.0001);
+				col = mix(col, col * 0.45, (1.0 - smoothstep(0.002, 0.006, d)) * 0.8);
+				col += vec3(0.18) * (1.0 - smoothstep(0.006, 0.010, d)) * step(0.006, d) * cyl;
+			}
+			for (int i = 0; i < 8; i++) {                                      // small bubbles drifting along the tube
+				float fi = float(i);
+				float bx = u_left + span * fract(hash(fi + 2.0) + t * (0.01 + 0.012 * hash(fi + 7.0)));
+				float by = mix(v_top, v_bot, 0.3 + 0.45 * hash(fi + 13.0));
+				float r = (v_bot - v_top) * (0.07 + 0.05 * hash(fi + 21.0));
+				float dd = length(vec2((UV.x - bx) * aspect, UV.y - by)) / max(r, 0.0001);
+				col += vec3(0.35) * (smoothstep(1.0, 0.75, dd) - smoothstep(0.75, 0.45, dd));
+			}
+			col += vec3(0.30) * exp(-pow((vy - 0.24) / 0.07, 2.0));            // the glass streak along the top
+		} else {
 		float wob = 0.004 * sin(UV.y * 20.0 + t * 3.0);
 		for (int i = 0; i < 5; i++) {                          // the white collar where each share meets the next
 			if (i >= seats - 1) { break; }
@@ -76,6 +98,7 @@ void fragment() {
 			col = mix(col, vec3(1.0), (1.0 - smoothstep(collar * 0.5, collar, abs(UV.x - e))) * 0.9);
 		}
 		col += vec3(0.10) * sin(UV.x * 40.0 - t * 1.6) * 0.5;     // a slow drift in the goo
+		}
 	} else {
 		float p = mix(UV.x, UV.y, axis);
 		float along = (p - v_top) / max(v_bot - v_top, 0.0001);
@@ -89,7 +112,7 @@ void fragment() {
 	if (mode == 0) {
 		float hu = u_left + (u_right - u_left) * highlight_u;
 		col += vec3(0.22) * exp(-pow((UV.x - hu) / max((u_right - u_left) * 0.05, 0.0001), 2.0));
-	} else {
+	} else if (!(mode == 1 && tube40)) {
 		col += vec3(0.12) * lum;
 	}
 	COLOR = vec4(col, a * tint.a);

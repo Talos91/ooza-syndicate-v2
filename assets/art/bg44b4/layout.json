@@ -66,6 +66,46 @@
    ],
    "anchor": "score-box"
   },
+  "MOUNT-AI-L": {
+   "file": "mount_ai_l.png",
+   "pt": [
+    127.25,
+    2.75,
+    70.5,
+    74.0
+   ],
+   "anchor": "ai_group_L"
+  },
+  "MOUNT-AI-R": {
+   "file": "mount_ai_r.png",
+   "pt": [
+    646.75,
+    2.75,
+    70.5,
+    74.0
+   ],
+   "anchor": "ai_group_R"
+  },
+  "MOUNT-AI-MOOD-L": {
+   "file": "mount_ai_mood_l.png",
+   "pt": [
+    188.75,
+    11.75,
+    85.5,
+    41.0
+   ],
+   "anchor": "ai_group_L"
+  },
+  "MOUNT-AI-MOOD-R": {
+   "file": "mount_ai_mood_r.png",
+   "pt": [
+    570.25,
+    11.75,
+    85.75,
+    41.0
+   ],
+   "anchor": "ai_group_R"
+  },
   "MOUNT-UTILITY-SOUND": {
    "file": "mount_utility_sound.png",
    "pt": [

@@ -18,6 +18,41 @@
 - map-shrink 536b97c (off main 8d50c11): the 37 pool maps re-baked with 2/4/6 m bridges at full unit speed (14 pass the ~60 pt limit, 23 need fewer platforms); MapPool.DEMO = those 37 + HX-1..8; VERSION "-demo" so the demo picker offers them. Thumbnails and tube_cache not re-baked. No rule or number changed.
 
 ## (next) "readability D" - branch readability-d, not released yet (Release bumps the version)
+## 0.25.0 "copper punk UI, HUD zones, map pass, max 4 seats" - 2026-11-18 (STAGING only; live is 0.23.21)
+
+- Release release-0.25.0 = main 2340236 + ui-build-43b ac44b3c (fast-forward-able; merge commit, 0 conflicts). net.gd changed (max 4 seats), protocol tag stays ooze20-net-8, so the staging room pack moves with the build.
+  - Copper punk menus and HUD from the director's 43B packs (plum ground, copper art-deco trim); designer 10 FIX rounds applied.
+  - HUD zones per Daniele's frame: notifications on the board (text / icons, no top banners), AI moods on the AI screens (1v1 each, 2v2 per team, FFA alternating), skill column and score goo shading.
+  - Map pass: 17 of 19 G maps refit to the pit (G-14 and G-19: 26 bridges, Daniele's call); zone sweep 0 overlaps.
+  - Max 4 seats (net.gd): FFA5, 3v3 and 2v2v2 archived; no selector, set_mode refuses them. Modes: 1v1, FFA3, FFA4, 2v2.
+  - Known gap: the start note has no home in the hud-43 layout.
+
+## 0.24.6.1 "AI screens centred" - 2026-11-17 (STAGING hotfix; live is 0.23.21)
+
+- Release = main 0c9263e + units-models-1117 f1a6b67 (merge). Daniele saw the AIs sitting too high and cut off in the VERSUS screens: each AI is now centred in the glass, sized by the largest, nothing clipped (only the ai_screen_* PNGs and their builder change). No net.gd / protocol change (ooze20-net-8).
+
+## 0.24.6 "five new oozes, ooze heroes, AI screens in a new frame" - 2026-11-17 (STAGING only; live is 0.23.21)
+
+- Release release-0.24.6 = main 81169f0 + units-models-1117 149043b (fast-forward, 5 commits). No net.gd / protocol change (ooze20-net-8), so no room-server pack.
+  - Five new ooze AI models (Daniele's 2026-11-17 models: VEX, EMBER, AEGIS, BLOOM, NULL) as the game units: original geometry, 1024 textures, neon line tinted the seat colour, sizes from the locked lineup heights.
+  - Ooze-heroes lineup in every unit picture: ARMIES tabs, army picker, cosmetics tabs, lobby army tiles, room seat portrait, frame cards, VERSUS (new hero + seat-colour neon layer).
+  - VERSUS (prematch) AI screens: each seat's ooze with its faction AI on a small screen above it, in Daniele's new bronze / steel frame, blinking on its own beat.
+  - VEX neon fix: the right-side neon wedge beside the glyph now takes the seat colour (it stayed blue); AEGIS albedo 1.0 (no longer mustard).
+
+## 0.24.5.1 "M-15 / N-06 back for 2v2 + FFA" - 2026-11-15 (STAGING hotfix; live is 0.23.21)
+
+- The G pool is all 1v1, so 2v2 / FFA had no map. M-15 and N-06 are offered as is (Daniele: "Use M-15 / N-06 as is") through `MapPool.MULTI_FILL`, only for modes no G map seats, never for 1v1; they stay on REWORK. No net.gd / protocol change (ooze20-net-8).
+
+## 0.24.5 "map pool G, readability D, new menus, HUD 40B6" - 2026-11-15 (STAGING only; live is 0.23.21)
+
+- Release release-0.24.5 = main 8d50c11 + map-pool-g 8573deb, demolish-tap 7eeaf7a, readability-d 0369897, hud-40b6 19f90e1 (contains ui-import 93249a2), merged in that order, no conflicts. No net.gd / protocol change (ooze20-net-8).
+  - Map pool G: 19 shrunk maps G-01..G-19 at 2 / 4 / 6 m; 18 on MapPool.REWORK; G-01/02/03/04/06 bridges straightened (curves kept G-05/10/15/16). Unit speed unchanged.
+  - Demolish / Sever: tap-aim A+X+B on the connectors (piers or two-deck curve junctions); units standing on a connector fall with it.
+  - New menus / navigation / modals / end screens (ui-import, 40B2 look).
+  - Match HUD 40B6 with the 40B5 skill keys.
+  - Readability style D on all five settings (below).
+
+### readability D (branch readability-d)
 
 - Daniele 2026-11-15 ("cream everywhere" -> picked D on all five settings: "yes all five but pay attention you have pit shadows even if pit are actually at ground level"). View only: no rule / number change, no net.gd / protocol change, no new textures.
   - look_theme.gd: node platforms + pillars (Platform_*, Node_Base, Relay_Mount, pillar zone) in the setting's own dark = mix(pit, deck, 0.25 base / 0.35 trim); bridges (Deck_* / Pier_*, new kind "bridge") keep the setting's deck colour. The lab gets its own slate (deck #4B535B / #454D55, rim #30363C / #5E6A72, pillar #3A4148 / #56606A) without becoming an "active" theme (surround, floor, HUD shells, walkway, vats, relays, tubes, glass unchanged). Pits keep every setting's colours.

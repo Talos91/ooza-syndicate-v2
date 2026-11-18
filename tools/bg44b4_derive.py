@@ -61,7 +61,7 @@ out["tile_seam"] = {"source_col0_eq_last": True, "source_row0_eq_last": True, "f
 out["elements"]["goo_tile"] = {"file": "goo_tile.png", "period_pt": per, "anchor_pt": L["widths"]["reference_812"]["pit_stadium"]["center_pt"]}
 # fixtures (the HUD backings)
 for e in L["elements"] + L.get("conditional_elements", []):
-    if (e["id"].startswith("NEAR-") or e["id"].startswith("MOUNT-")) and not e["id"].startswith("MOUNT-AI"):   # the demo HUD has no AI screens
+    if (e["id"].startswith("NEAR-") or e["id"].startswith("MOUNT-")):
         name = e["id"].lower().replace("-", "_") + ".png"
         save(half(Image.open(os.path.join(SRC, e["file"])).convert("RGBA")), name)
         out["elements"][e["id"]] = {"file": name, "pt": [e["x"] / SC, e["y"] / SC, e["w"] / SC, e["h"] / SC], "anchor": e["anchor"]}

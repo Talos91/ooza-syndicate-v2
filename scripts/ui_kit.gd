@@ -36,26 +36,27 @@ static func _add_symbol_fallback() -> bool:
 			fb.append(SYMBOLS)
 			f.fallbacks = fb
 	return true
-const BASE := Color("041016")                      # base surface
-const PANEL := Color("071820")                     # panel surface, opaque beneath text
-const INK := Color("e8f6fa")                       # primary text
-const MUTED := Color("a6bfca")                     # secondary text
-const DIM := Color("5f7a86")                       # captions, unavailable
-const FRAME := Color("255363")                     # quiet frame
+const BASE := Color("1a0e16")                      # base surface (43B copper punk: plum-dark ground)
+const PANEL := Color("2a1421")                     # panel surface, opaque beneath text (burgundy cabinet)
+const INK := Color("f4e7d4")                       # primary text (cream)
+const MUTED := Color("cdb5a3")                     # secondary text (warm)
+const DIM := Color("8a6f76")                       # captions, unavailable
+const FRAME := Color("9a6640")                     # quiet frame (bronze)
+const COPPER := Color("e3a56d")                    # 43B kickers / section titles on plum (proofs: HOME, ARMIES)
 const CYAN := Color("14d3e4")                      # VEX / neutral action
 const STAR := Color("ffce68")                      # earned stars
 const WEAKER := Color("ff4f64")                    # a stat below baseline - a rose red no faction accent is near (Daniele:
                                                   # the old amber read like EMBER / SOLAR)
-const BAR := Color("041016f2")                     # top / bottom bars
-const CARD := Color("071820f0")                    # card fill
+const BAR := Color("1c0e17f2")                     # top / bottom bars
+const CARD := Color("24121df0")                    # card fill
 const ACCENTS := {"vex": Color("14d3e4"), "null": Color("f327c3"), "bloom": Color("a1eb39"),
 		"ember": Color("ff7c19"), "solar": Color("ffce58")}
 const ORDER := ["vex", "null", "bloom", "ember", "solar"]
 ## Daniele 2026-11-02: the faction is BLOOM - no VIRIDIAN anywhere; it has no second word (SUBS "")
 const NAMES := {"vex": "VEX", "null": "NULL", "bloom": "BLOOM", "ember": "EMBER", "solar": "AEGIS"}
-const SUBS := {"vex": "BIOENGINEERS", "null": "CARTEL", "bloom": "", "ember": "MAW", "solar": "SHELLS"}
-const TAGS := {"vex": "VEX / BIOENGINEERS", "null": "NULL / CARTEL", "bloom": "BLOOM",
-		"ember": "EMBER / MAW", "solar": "AEGIS / SHELLS"}
+const SUBS := {"vex": "R&D", "null": "FINANCE", "bloom": "PEOPLE & CULTURE", "ember": "OPERATIONS", "solar": "COMPLIANCE"}   # departments, WORLD-LORE-2026-11 §5 (designer 10, 11-18)
+const TAGS := {"vex": "VEX / R&D", "null": "NULL / FINANCE", "bloom": "BLOOM / PEOPLE & CULTURE",
+		"ember": "EMBER / OPERATIONS", "solar": "AEGIS / COMPLIANCE"}
 const CUT := 10                                    # the standard corner cut
 const CFG := "user://ui.cfg"
 const K := 1280.0 / 1672.0                       # = Menu.K, Menu.MIN_TAP_PT, Menu.MIN_FONT_PT - copied so the pieces
@@ -172,6 +173,17 @@ static func sb(fill: Color, border := Color(0, 0, 0, 0), bw := 0, cut := CUT, gl
 
 
 static func style_button(b: Button, kind: String, f := "vex") -> void:
+	## 0.24.5: the 40B2 chrome (MenuSkin): primary / secondary = ivory keys, selected = dark glass tab with the seat rim,
+	## small = the nav key; tertiary stays text-led. The old flat boxes below remain for kinds the skin does not cover.
+	match kind:
+		"primary", "secondary", "small", "quit":
+			MenuSkin.style_ivory(b, kind)
+			b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+			return
+		"selected":
+			MenuSkin.style_tab(b, true)
+			b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+			return
 	var a := accent(f)
 	var normal: StyleBoxFlat
 	var hover: StyleBoxFlat
@@ -209,6 +221,19 @@ static func style_button(b: Button, kind: String, f := "vex") -> void:
 	b.add_theme_color_override("font_disabled_color", DIM)
 
 
+static func fit_size(m, text: String, width: float, size: float, pad := 60.0) -> float:
+	## The largest font size <= `size` (never under 10) at which `text` fits a key `width` wide (COMING SOON labels).
+	var sz := size
+	while sz > 10.0 and text_w(m, text, sz, true) > width - pad:
+		sz -= 0.5
+	return sz
+
+
+static func fit_text(m, full: String, short: String, width: float, size: float, pad := 60.0) -> String:
+	## `full` if it fits a key `width` wide at the (phone-grown) size, else `short` (the 12.5 pt floor cannot shrink further).
+	return full if text_w(m, full, size, true) <= width - pad else short
+
+
 static func make_btn(m, text: String, dims: Vector2, call: Callable, kind := "secondary", f := "vex", size := 16.0) -> Button:
 	## A button, not yet placed: text in the display face, at least 44 pt tall on phones.
 	var b := Button.new()
@@ -221,12 +246,40 @@ static func make_btn(m, text: String, dims: Vector2, call: Callable, kind := "se
 	dims.y = tap_h(m, dims.y)
 	b.custom_minimum_size = dims
 	b.size = dims
+	_shrink_btn(b, dims.x - 24.0)                     # designer 10 (11-18): "PLA" / "COMING SOO" - the words shrink to fit their key
 	if call.is_valid():
 		var ui := "confirm" if kind == "primary" else "tap"   # SOUND: the primary action confirms, the rest tap (sfx.gd)
 		b.pressed.connect(func():
 			Sfx.play_ui(ui)
 			acknowledge(b, call))
 	return b
+
+
+static func _shrink_btn(b: Button, room: float) -> void:
+	## The longest line of a key's text fits `room`: its font shrinks, down to 80 % of what it was given.
+	if b.text == "" or room <= 0.0:
+		return
+	var f: Font = b.get_theme_font("font")
+	var fs := b.get_theme_font_size("font_size")
+	var lo := int(floor(fs * 0.8))
+	var widest := func(n: int) -> float:
+		var w := 0.0
+		for line in b.text.split("\n"):
+			w = maxf(w, f.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, n).x)
+		return w
+	while fs > lo and widest.call(fs) > room:
+		fs -= 1
+	b.add_theme_font_size_override("font_size", fs)
+
+
+static func shrink_label(l: Label, room: float) -> void:
+	## A one-line label's font shrinks to fit `room`, down to 80 % of its size.
+	var f: Font = l.get_theme_font("font")
+	var fs := l.get_theme_font_size("font_size")
+	var lo := int(floor(fs * 0.8))
+	while fs > lo and f.get_string_size(l.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > room:
+		fs -= 1
+	l.add_theme_font_size_override("font_size", fs)
 
 
 static func acknowledge(b: Control, call: Callable) -> void:
@@ -274,15 +327,30 @@ static func panel(m, pos: Vector2, dims: Vector2, f := "", selected := false, fi
 	var p := Panel.new()
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var a := accent(f)
-	p.add_theme_stylebox_override("panel", sb(Color(a.darkened(0.8), 0.95) if selected else fill, a if selected else FRAME, 2 if selected else 1))
+	if selected:
+		p.add_theme_stylebox_override("panel", MenuSkin.lamp_plate())                                  # picked: bronze ring + seat lamp
+	else:
+		p.add_theme_stylebox_override("panel", MenuSkin.plate())                                         # M-E dark glass
 	p.size = dims
 	return add(m, p, pos) as Panel
 
 
 # ------------------------------------------------------------------ text blocks
+static func band(m, r: Rect2, alpha := 0.82) -> Panel:
+	## A dark-glass band (40B2 M-C strip) behind a title block, so cyan kickers and white headlines hold >= 4.5:1 on any backdrop.
+	var p := Panel.new()
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.add_theme_stylebox_override("panel", MenuSkin.strip(alpha))
+	p.size = r.size
+	return add(m, p, r.position) as Panel
+
+
 static func title(m, x: float, y: float, kicker: String, headline: String, f := "vex", size := 34.0) -> float:
 	## A page's kicker + headline; returns the y under them.
-	var k := label(m, kicker.to_upper(), 12, accent(f), true, 3)
+	var kw := text_w(m, kicker.to_upper(), 12, true) + kicker.length() * 3.0
+	var hw := text_w(m, headline.to_upper(), size, true)
+	band(m, Rect2(x - 14.0, y - 8.0, maxf(kw, hw) + 32.0, line_h(m, 12, true) + 2.0 + line_h(m, size, true) + 16.0))
+	var k := label(m, kicker.to_upper(), 12, COPPER, true, 3)   # kickers = copper (43B), never the faction's
 	add(m, k, Vector2(x, y))
 	y += k.get_minimum_size().y + 2.0
 	var h := label(m, headline.to_upper(), size, INK, true)
@@ -586,6 +654,7 @@ static func warm_menu(f: String) -> void:
 	var paths := ["res://assets/art/ui/page_%s.jpg" % f, "res://assets/art/ui/bg_%s.jpg" % f, "res://assets/art/ui/stage_%s.jpg" % f]
 	for g in ORDER:
 		paths.append(hero_path(g))
+		paths.append("res://assets/art/ui/hero_neon_%s.png" % g)
 		paths.append(emblem_path(g, true))
 		paths.append(emblem_path(g))
 	for c in ["vs_ai", "online", "training"]:
@@ -595,11 +664,35 @@ static func warm_menu(f: String) -> void:
 
 # ------------------------------------------------------------------ art
 static func hero_path(f: String) -> String:
+	## OOZE HEROES 2026-11-17 (Daniele: "use these wherever unit pictures appear"): the locked-lineup oozes, one shared crop
+	## (tools/units/build_heroes_1117.py), so every picture keeps the lineup's relative sizes; the neon line is a separate
+	## white layer (hero_neon) tinted the SEAT colour (goo = faction colour, neon = seat colour).
 	return "res://assets/art/ui/hero_%s.png" % (f if ACCENTS.has(f) else "vex")
 
 
-static func hero(m, f: String, pos: Vector2, dims: Vector2, glow := true) -> TextureRect:
-	## The faction's original character, standing in `dims` (tools/ui_art.py cut them from Alpha 12's references);
+static func hero_neon(r: TextureRect, f: String, col := Color(0, 0, 0, 0)) -> TextureRect:
+	## The hero's neon line over a hero TextureRect `r` (same box, same stretch), in `col` (the viewer's seat colour if unset).
+	var path := "res://assets/art/ui/hero_neon_%s.png" % (f if ACCENTS.has(f) else "vex")
+	if not ResourceLoader.exists(path):
+		return null
+	var n := TextureRect.new()
+	n.texture = tex(path)
+	n.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	n.stretch_mode = r.stretch_mode
+	n.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	n.set_anchors_preset(Control.PRESET_FULL_RECT)
+	n.modulate = Color(MenuSkin.seat() if col.a == 0.0 else col, 1.0)
+	r.add_child(n)
+	return n
+
+
+static func ai_screen_path(f: String, blink := false) -> String:
+	## The faction AI's screen (ai-clean 2026-11-17: back, glitch in the AI colour, the AI, the brass bezel), pre-composited.
+	return "res://assets/art/ui/ai_screen_%s%s.png" % [f if ACCENTS.has(f) else "vex", "_blink" if blink else ""]
+
+
+static func hero(m, f: String, pos: Vector2, dims: Vector2, glow := true, neon := Color(0, 0, 0, 0)) -> TextureRect:
+	## The faction's ooze hero, standing in `dims`, its neon line in `neon` (the viewer's seat colour if unset);
 	## a soft accent glow behind it.
 	if glow:
 		var g := TextureRect.new()
@@ -622,6 +715,7 @@ static func hero(m, f: String, pos: Vector2, dims: Vector2, glow := true) -> Tex
 	r.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	r.size = dims
+	hero_neon(r, f, neon)
 	return add(m, r, pos) as TextureRect
 
 

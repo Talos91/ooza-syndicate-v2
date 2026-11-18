@@ -12,7 +12,7 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.24.4-demo-river2"   # DEMO quota-drill (drill node + launch + splat + NEXT LAUNCH tab); previous: 0.24.4-demo-river1 (river + quota); DEMO SHRINK (map-shrink 536b97c + this VERSION line only: "-demo" turns on Rules.demo = MapPool.DEMO picker); previous: STAGING 0.24.4: finished branches merged as they are - menu bg 35C2, HUD round 37, Rodin units, relay column, play-fixes (2026-11-15)
+const VERSION := "0.24.4-demo-river3"   # DEMO bg-44b4: round 44 B4 background + main 0.25.0 (new HUD / menus) + ui-remake-45b menus; previous: 0.24.4-demo-river2 DEMO quota-drill (drill node + launch + splat + NEXT LAUNCH tab); previous: 0.24.4-demo-river1 (river + quota); DEMO SHRINK (map-shrink 536b97c + this VERSION line only: "-demo" turns on Rules.demo = MapPool.DEMO picker); previous: STAGING 0.24.4: finished branches merged as they are - menu bg 35C2, HUD round 37, Rodin units, relay column, play-fixes (2026-11-15)
 const WORLD_LAB_FLOOR := true   # the demo's lab5 floor on every map (the fog / tube work was tuned on it); was Rules.demo only
 const LOOK_LAB2 := true   # the lab2 world look (cream decks, owner rim band, lab floor + surround) is the default (Daniele 2026-11-12: "the new status quo"); dev --look-old = the 0.24.1 look, --look=lab = test v1
 const HUD_LAB := true    # hud-lab (2026-11-13): the round-29/30 lab HUD pack (HudLab) is THE in-match HUD; dev --hud-old = the pre-lab HUD
@@ -388,6 +388,12 @@ const SEND_RING_PT := 40.0           # the live target ring, points across on a 
 const SEND_FAIL_LOG_KEPT := 200      # user://telemetry/send_failed.json keeps the newest this many failed sends
 const DECK_HIT_PT := 44.0            # a deck's tap band for the deck skills on a phone, points across (SkillDock._deck_at; 2026-11-01,
                                      # Daniele: "bridges are sometimes hard to click"); invisible - the deck keeps its look
+# DEMOLISH-TAP (Daniele 2026-11-15: "if lets say bridge X is destructable and has at its edge connectors A and B the area
+# that is marked for destruction is the whole AXB and when clicked it destroys all 3 starting from X and then AB (in 1
+# second)"). The bridge-dropping skills (Demolish, Sever) aim at the whole span rim to rim: deck X plus its connectors A, B.
+const DROP_SPAN_W := 2.8 + 1.2       # m across: the AXB span's tap / highlight band on the ground (deck width W + a margin)
+const DROP_CONN_LAG := 0.4           # s after X goes: A and B go (X -> A, B well inside Daniele's 1 s)
+const DROP_SPAN_SKILLS := ["demolish", "sever"]   # the skills aimed at a deck that bring it down
 const RELAY_GHOST := Color(0.85, 0.78, 1.0, 0.28)       # OS_Ghost: the neutral violet floor (the Pier_Ghost_v2 fallback)
 const RELAY_GHOST_EDGE := Color(0.92, 0.88, 1.0)        # OS_Ghost_Edge: its bright frame
 # v2g (Daniele: "the ghost should have also different colour so even as ghost you can see what is switch and what is
@@ -690,9 +696,12 @@ const FACTIONS := {
 # size, so a smaller race in more lanes keeps about the same column width. The models are fitted by width, so a tall model
 # stays tall (the v3 Solar egg). Daniele picks the values (2026-11-02: Bloom 0.75 x 4 lanes). Debug: --look=bloom:0.75:4
 static var FACTION_LOOK := {
-	"vex": {"size": 0.95, "across": 3}, "null": {"size": 1.0, "across": 3}, "bloom": {"size": 0.75, "across": 4},
-	"ember": {"size": 1.05, "across": 3}, "solar": {"size": 1.2, "across": 3},   # v4 units differ in size: BLOOM smallest, AEGIS (solar) biggest (Daniele 2026-11-14)
+	"vex": {"size": 0.95, "across": 3}, "null": {"size": 0.84, "across": 3}, "bloom": {"size": 0.82, "across": 4},
+	"ember": {"size": 1.17, "across": 3}, "solar": {"size": 1.02, "across": 3},
 }
+# OOZE MODELS 2026-11-17 (Daniele: "make ooze size as per the direction mockup"): sizes set so the in-game heights keep the
+# locked lineup's ratios (FINAL-LINEUP-LOCKED-2026-11-16, measured px: VEX 358, EMBER 310, AEGIS 397, BLOOM 298, NULL 265),
+# VEX anchored at its 0.95. size = width factor, so size = VEX height x ratio / (1.3 x model h/w).
 
 
 static func look_size(faction: String) -> float:
@@ -848,8 +857,8 @@ static func _balance_set(k: String, v) -> void:
 		"FIGHT_RATE_K": FIGHT_RATE_K = v
 		"FACTION_STATS": FACTION_STATS = v
 		"forge_bonus": forge_bonus = v
-const FACTION_NAMES := {"vex": ["VEX", "BIOENGINEERS"], "null": ["NULL", "DATA CARTEL"], "bloom": ["BLOOM", ""],
-		"ember": ["EMBER", "MAW"], "solar": ["AEGIS", "SHELLS"]}
+const FACTION_NAMES := {"vex": ["VEX", "R&D"], "null": ["NULL", "FINANCE"], "bloom": ["BLOOM", "PEOPLE & CULTURE"],
+		"ember": ["EMBER", "OPERATIONS"], "solar": ["AEGIS", "COMPLIANCE"]}   # departments: WORLD-LORE-2026-11 §5
 const FACTION_TAGLINES := {"vex": "ADAPT. CONNECT. REDIRECT.", "null": "SAME SIGNAL. DIFFERENT TRUTH.",
 		"bloom": "A WILDER TOMORROW.", "ember": "PRESSURE BREEDS PROGRESS.", "solar": "HOLD THE LIGHT."}
 # ARMIES trait (Daniele 2026-10-27, Ooze Desk: "faction trait text rewritten to describe the real stat leans (no new
@@ -937,7 +946,7 @@ const SKILLS := {
 	# ---- map pool (network skills)
 	# 0.23.21 (set R1): cd 60 -> 80 (lift +25 -> +16)
 	"demolish": {"name": "Demolish", "slot": "map", "cd": 80.0, "target": "fixed_deck",
-			"desc": "A deck collapses after 1.5 s; lines pour off it; it rebuilds after 20 s.", "warn": 1.5, "down": 20.0},   # warn 1.5 s: 0.19.2 (was 3 s)
+			"desc": "A bridge and both its connectors collapse after 1.5 s; lines pour off it; it rebuilds after 20 s.", "warn": 1.5, "down": 20.0},   # warn 1.5 s: 0.19.2 (was 3 s)
 	# speed x0.6 = 40 % slower; in SIEGE the stronger of this and the goo corridor slow applies (no stacking)
 	"mire": {"name": "Mire", "slot": "map", "cd": 32.0, "target": "deck",
 			"desc": "Enemy lines on one deck are 40 % slower for 8 s.", "slow": 0.6, "dur": 8.0},
@@ -957,7 +966,7 @@ const SKILLS := {
 			"desc": "A platform shakes: every deck touching it drops after 1.5 s, riders fall; back after 6 s.",
 			"warn": 1.5, "down": 6.0},
 	"sever": {"name": "Sever", "slot": "map", "cd": 90.0, "target": "deck",
-			"desc": "Cut any deck, relay decks too, after 1.5 s: riders fall; it is back after 6 s.",
+			"desc": "Cut any bridge and its connectors after 1.5 s, relay bridges too: riders fall; back after 6 s.",
 			"warn": 1.5, "down": 6.0},
 	"backwash": {"name": "Backwash", "slot": "map", "cd": 32.0, "target": "deck",
 			"desc": "A wave shoves every enemy line on a deck back to the end it came from. No losses."},

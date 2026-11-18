@@ -85,11 +85,13 @@ static func creature(faction: String, seat: String, tex: Texture2D) -> ShaderMat
 
 
 # WALK legs per faction: [amplitude (model units), feet radius from, to] - measured on the Rodin feet (low vertices' radius)
-const V4_LEGS := {"vex": [0.07, 0.30, 0.45], "null": [0.07, 0.42, 0.55], "bloom": [0.04, 0.32, 0.50], "ember": [0.07, 0.50, 0.65], "solar": [0.012, 0.18, 0.30, 0.03]}
+# OOZE MODELS 2026-11-17: radii rescaled by the new feet (median low-vertex radius new / old); AEGIS now has a puddle base like the others
+const V4_LEGS := {"vex": [0.07, 0.40, 0.59], "null": [0.07, 0.52, 0.69], "bloom": [0.04, 0.45, 0.70], "ember": [0.07, 0.60, 0.77], "solar": [0.06, 0.42, 0.60]}
 const V4_TINT_MIX := 0.9             # the neon's albedo -> seat colour
 const V4_TINT_GLOW := 1.6            # the neon's emission in the seat colour (reads at phone scale on the dark board)
 const V4_EYE_GLOW := 0.5
 const V4_ALBEDO := 0.72            # the Rodin goo albedo is near full cyan: a little darker so the board light doesn't bleach it
+const V4_ALBEDO_F := {"solar": 1.0}   # per-faction override (designer 10, 2026-11-17: AEGIS read mustard / olive at 0.72; the others stay)
 static var v4_seat_rim := 0.0     # v4 bodies: > 0 = rim accent in the SEAT colour at this gain (0 = off until Daniele decides; 3.0 was the designer 6 pick, designer 7 says wait)
 const V4_RIM := 0.8                # race rim gain (classic 2.2)
 const V4_SELF_GLOW := 0.05           # body glow (the classic units' 0.45 washes out the glossy goo)
@@ -116,7 +118,7 @@ static func v4_setup(m: ShaderMaterial, faction: String, seat: String, tex: Text
 	m.set_shader_parameter("tint_glow", V4_TINT_GLOW)
 	m.set_shader_parameter("eye_glow", V4_EYE_GLOW)
 	m.set_shader_parameter("self_glow", V4_SELF_GLOW)
-	m.set_shader_parameter("albedo_gain", V4_ALBEDO)
+	m.set_shader_parameter("albedo_gain", float(V4_ALBEDO_F.get(faction, V4_ALBEDO)))
 	m.set_shader_parameter("rim_gain", V4_RIM)
 	var leg: Array = V4_LEGS.get(faction, [0.0, 0.3, 0.45])
 	m.set_shader_parameter("leg_amp", leg[0])

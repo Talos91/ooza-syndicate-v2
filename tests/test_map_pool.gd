@@ -73,12 +73,15 @@ func _init() -> void:
 	# POOL G (Daniele 2026-11-15): the pool is the 19 G maps; the 18 REWORK maps stay baked but are never offered
 	check(MapPool.PROTO.size() == 19 and MapPool.PROTO.all(func(c): return MapPool.all().any(func(p): return p.get_file().begins_with(c))), "POOL G: 19 G maps, all baked")
 	for code in MapPool.REWORK:
-		check(MapPool.all().any(func(p): return p.get_file().begins_with(code)) and not MapPool.mode_offered(code, "1v1") and not MapPool.mode_offered(code, "2v2")
-				and not MapPool.battlefield().any(func(p): return p.get_file().begins_with(code)) and not code in MapPool.DEMO, "%s: REWORK (file kept, offered nowhere)" % code)
+		var fill: bool = code in MapPool.MULTI_FILL   # hotfix 0.24.5.1: M-15 / N-06 are offered as is for the modes no G map seats
+		check(MapPool.all().any(func(p): return p.get_file().begins_with(code)) and not MapPool.mode_offered(code, "1v1")
+				and (fill or (not MapPool.mode_offered(code, "2v2") and not MapPool.battlefield().any(func(p): return p.get_file().begins_with(code)))) and not code in MapPool.DEMO, "%s: REWORK (file kept, %s)" % [code, "offered only for modes the G pool lacks" if fill else "offered nowhere"])
+	for code in MapPool.MULTI_FILL:
+		check(MapPool.mode_offered(code, "2v2") and MapPool.battlefield().any(func(p): return p.get_file().begins_with(code)), "%s: MULTI_FILL offered for 2v2" % code)
 	for old in MapPool.RECODED:
 		check(not MapPool.all().any(func(p): return p.get_file().begins_with(old)), "%s: re-coded %s (no old-coded file left)" % [old, MapPool.RECODED[old]])
 	if not Rules.proto_debug:
-		check(MapPool.battlefield().all(func(p): return p.get_file().begins_with("G-")), "POOL G: 02 BATTLEFIELD offers only G maps")
+		check(MapPool.battlefield().all(func(p): return p.get_file().begins_with("G-") or p.get_file().substr(0, 4) in MapPool.MULTI_FILL), "POOL G: 02 BATTLEFIELD offers only G maps (+ MULTI_FILL for 2v2 / FFA)")
 	# SEAT BIAS: N-24 / N-04 were out of 1v1 from 0.23.15; back in since 0.23.18 (Daniele 2026-11-01, Desk vls-fair: the Very Last
 	# Stand tie-break fixed the bias) - offered in 1v1 and on 02 BATTLEFIELD again
 	for code in ([] if Rules.proto_debug else ["N-24", "N-04"]):   # (old maps: not checked on a proto/demo build, Daniele 2026-11-06)

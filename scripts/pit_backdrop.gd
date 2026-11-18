@@ -5,8 +5,8 @@ extends RefCounted
 ## Source: References/Art direction 2026-11 - syndicate uniforms/DIRECTOR-PACKAGE/deliveries/44-background-B4 (approved,
 ## untouched); game derivatives at 2x in assets/art/bg44b4 (tools/bg44b4_derive.py, layout.json there).
 ##  - BACK (the Environment's background canvas, under the 3D map): goo floor (the tile repeated, pit_goo.gdshader), CRUST
-##    (full viewport, its lake opening shows the goo), PIT-RIM (wet bank) - one 812 x 375 pt frame scaled to COVER the
-##    viewport, centred; the 3D map is fitted into the lake opening (pit_rect, main._fit_nodes).
+##    (full viewport, its lake opening shows the goo), PIT-RIM (wet bank) - one 812 x 375 pt frame whose painted lake is
+##    mapped onto THE PIT (main.pit_rect(), the box the 0.25.0 camera fit frames the map in), covering the viewport.
 ##  - MOUNTS (the HUD's first children, under every HUD control): NEAR-L behind the send tube, NEAR-R behind the skill
 ##    column, the score ledge behind the timer tube, the utility keys behind SOUND / PAUSE (/ CHAT when it shows), each
 ##    fitted round its control's rect every frame (sync), so they follow the HUD at every size.
@@ -17,7 +17,6 @@ extends RefCounted
 const DIR := "res://assets/art/bg44b4/"
 const GOO_SHADER := preload("res://shaders/pit_goo.gdshader")
 const REF := Vector2(812.0, 375.0)
-const PAD := 1.06                    # a mount covers its control's rect plus 3 % round it
 static var on := false
 
 var main: Node
@@ -80,30 +79,39 @@ func build_back(m: Node) -> CanvasLayer:
 	return back
 
 
-func frame_scale(vp: Vector2) -> float:
-	return maxf(vp.x / REF.x, vp.y / REF.y)
+var _s := Vector2.ONE                # frame scale (x, y): the painted lake mapped onto main.pit_rect()
+var _o := Vector2.ZERO               # frame origin on screen
 
 
-func frame_origin(vp: Vector2) -> Vector2:
-	return (vp - REF * frame_scale(vp)) / 2.0
-
-
-func pit_rect(vp: Vector2) -> Rect2:
-	## The lake opening on screen (the stadium box of layout.json pit_stadium_pt), for the camera fit.
+func _stadium() -> Array:
+	## [centre pt, half size pt] of the painted lake's stadium box (layout.json pit_stadium_pt, the 812 x 375 reference).
 	var ps: Dictionary = layout.get("pit_stadium_pt", {})
-	var c: Array = ps.get("center_pt", [406.0, 213.5])
-	var hw := float(ps.get("half_width_pt", 298.0))
-	var hh := float(ps.get("end_radius_pt", 144.8))
-	var s := frame_scale(vp)
-	var o := frame_origin(vp)
-	return Rect2(o + (Vector2(c[0], c[1]) - Vector2(hw, hh)) * s, Vector2(hw, hh) * 2.0 * s)
+	var c: Array = ps.get("center_pt", [422.24, 213.54])
+	return [Vector2(c[0], c[1]), Vector2(float(ps.get("half_width_pt", 298.09)), float(ps.get("end_radius_pt", 144.79)))]
+
+
+func _fit(vp: Vector2) -> void:
+	## The frame's scale and origin: the painted stadium box onto THE PIT (main.pit_rect(), the adaptation rule of layout.json /
+	## SCREEN-LAYOUT-SPEC: side margin max(11.25 % safe width, 88 pt k), top 66 pt k, bottom 16 pt k). At 812 x 375 that is
+	## the art as painted (596 x 290 pt); other widths stretch the frame to the pit (16:9 narrower, the Fold wider), never
+	## less than the viewport (the crust always covers it).
+	var st := _stadium()
+	var c: Vector2 = st[0]
+	var hs: Vector2 = st[1]
+	var pr := Rect2(Vector2(c - hs) * minf(vp.x / REF.x, vp.y / REF.y), hs * 2.0 * minf(vp.x / REF.x, vp.y / REF.y))
+	if main != null and main.has_method("pit_rect"):
+		pr = main.pit_rect()
+	_s = Vector2(pr.size.x / (hs.x * 2.0), pr.size.y / (hs.y * 2.0))
+	_s = Vector2(maxf(_s.x, vp.x / REF.x), maxf(_s.y, vp.y / REF.y))
+	_o = pr.get_center() - c * _s
+	_o = Vector2(clampf(_o.x, vp.x - REF.x * _s.x, 0.0), clampf(_o.y, vp.y - REF.y * _s.y, 0.0))
 
 
 func _relayout(vp: Vector2) -> void:
 	_vp = vp
-	var s := frame_scale(vp)
-	_frame.scale = Vector2(s, s)
-	_frame.position = frame_origin(vp)
+	_fit(vp)
+	_frame.scale = _s
+	_frame.position = _o
 	_goo.position = Vector2.ZERO
 	_goo.size = vp
 	var g := _el("goo_tile")
@@ -111,8 +119,8 @@ func _relayout(vp: Vector2) -> void:
 	var an: Array = g.get("anchor_pt", [422.24, 213.54])
 	var mat := _goo.material as ShaderMaterial
 	mat.set_shader_parameter("rect_px", vp)
-	mat.set_shader_parameter("anchor_px", frame_origin(vp) + Vector2(an[0], an[1]) * s)
-	mat.set_shader_parameter("period_px", Vector2(per[0], per[1]) * s)
+	mat.set_shader_parameter("anchor_px", _o + Vector2(an[0], an[1]) * _s)
+	mat.set_shader_parameter("period_px", Vector2(per[0], per[1]) * _s)
 
 
 # ------------------------------------------------------------------ the mounts under the HUD
@@ -127,7 +135,7 @@ func build_mounts(h: Node) -> void:
 	_mount_root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.add_child(_mount_root)
 	root.move_child(_mount_root, 0)                   # under every HUD control
-	for id in ["NEAR-L", "NEAR-R", "MOUNT-SCORE-LEDGE", "MOUNT-UTILITY-SOUND", "MOUNT-UTILITY-PAUSE", "MOUNT-UTILITY-CHAT"]:
+	for id in ZONE_OF:
 		var e := _el(id)
 		if e.is_empty():
 			continue
@@ -142,34 +150,57 @@ func build_mounts(h: Node) -> void:
 	sync()
 
 
-func _target(id: String) -> Rect2:
-	## The HUD control a mount carries, as a global rect (empty: hide the mount).
-	var c: Control = null
-	match id:
-		"NEAR-L":
-			c = hud.get("side_panel")
-		"NEAR-R":
-			var d: Control = hud.get("dock")
-			if d and d.is_visible_in_tree():
-				var r := d.get_global_rect()
-				if d.has_method("housing_margin"):
-					var hm: Vector4 = d.housing_margin()
-					r = Rect2(r.position - Vector2(hm.x, hm.y), r.size + Vector2(hm.x + hm.z, hm.y + hm.w))
-				return r
+# Each mount follows its HUD zone (Hud43.zones, the 0.25.0 HUD the B4 pack was drawn round: ui-build-43b ac44b3c). layout.json
+# places them at the 812 x 375 reference with a 32.48 pt left safe inset; there the zones are Hud43.zones in pt at hud unit
+# 375 / 360. A mount keeps its offset from its zone's corner and its size, in HUD units. The utility keys are laid by count
+# (MUTE, PAUSE, CHAT, DEBUG right-aligned), so their backings sit on the live buttons instead.
+const ZONE_OF := {"NEAR-L": "send", "NEAR-R": "skill", "MOUNT-SCORE-LEDGE": "score", "MOUNT-AI-L": "ai_l", "MOUNT-AI-MOOD-L": "ai_l",
+		"MOUNT-AI-R": "ai_r", "MOUNT-AI-MOOD-R": "ai_r", "MOUNT-UTILITY-SOUND": "music_button", "MOUNT-UTILITY-PAUSE": "pause_button",
+		"MOUNT-UTILITY-CHAT": "chat_button"}
+const REF_INSET_L := 32.48
+var _ref_zones: Dictionary = {}
+
+
+func _ref_zone(z: String) -> Rect2:
+	## The zone at the pack's reference, in pt (Hud43.zones' formulas, no device: unit = 375 / 360, left inset 32.48 pt).
+	if _ref_zones.is_empty():
+		var u := UiKit.hud_k_for(375.0) / UiKit.hud_k_for(360.0)
+		var l := REF_INSET_L
+		var r := REF.x
+		var cy := REF.y / 2.0
+		var ah := minf(Hud43.AI_PT.y, 66.0 + 2.0 - Hud43.AI_Y)
+		_ref_zones = {"u": u,
+			"send": Rect2(l, cy - Hud43.COL_H * u / 2.0, Hud43.SEND_W * u, Hud43.COL_H * u),
+			"skill": Rect2(r - Hud43.SKILL_W * u, cy - Hud43.COL_H * u / 2.0, Hud43.SKILL_W * u, Hud43.COL_H * u),
+			"score": Rect2((l + r) / 2.0 - Hud43.SCORE_PT.x * u / 2.0, 0.0, Hud43.SCORE_PT.x * u, Hud43.SCORE_PT.y * u),
+			"ai_l": Rect2(l + Hud43.AI_X * u, Hud43.AI_Y * u, Hud43.AI_PT.x * u, ah * u),
+			"ai_r": Rect2(r - (Hud43.AI_X + Hud43.AI_PT.x) * u, Hud43.AI_Y * u, Hud43.AI_PT.x * u, ah * u)}
+	return _ref_zones.get(z, Rect2())
+
+
+func _target(id: String, zones: Dictionary, upx: float) -> Rect2:
+	## Where a mount goes now (global px; empty: hidden).
+	var e := _el(id)
+	var m: Array = e.get("pt", [0, 0, 0, 0])
+	var mr := Rect2(m[0], m[1], m[2], m[3])
+	var z: String = ZONE_OF[id]
+	var k: float = upx / float(_ref_zones.get("u", 1.0))   # px per reference pt
+	if z.ends_with("_button"):
+		var b: Control = hud.get(z)
+		if b == null or not b.is_visible_in_tree():
 			return Rect2()
-		"MOUNT-SCORE-LEDGE":
-			c = hud.get("lab_tube")
-			if c == null or not c.is_visible_in_tree():
-				c = hud.get("top_panel")
-		"MOUNT-UTILITY-SOUND":
-			c = hud.get("music_button")
-		"MOUNT-UTILITY-PAUSE":
-			c = hud.get("pause_button")
-		"MOUNT-UTILITY-CHAT":
-			c = hud.get("chat_button")
-	if c == null or not c.is_visible_in_tree():
+		return Rect2(b.get_global_rect().get_center() - mr.size * k / 2.0, mr.size * k)
+	if not zones.has(z):
 		return Rect2()
-	return c.get_global_rect()
+	if z == "skill":
+		var d: Control = hud.get("dock")
+		if d == null or not d.is_visible_in_tree():
+			return Rect2()
+	if z.begins_with("ai_") and hud.get("ai_screens") == null:
+		return Rect2()
+	var zr: Rect2 = zones[z]
+	var ref := _ref_zone(z)
+	return Rect2(zr.position + (mr.position - ref.position) * k, mr.size * k)
 
 
 func sync() -> void:
@@ -177,17 +208,19 @@ func sync() -> void:
 		var vp: Vector2 = main.get_viewport().get_visible_rect().size
 		if vp != _vp:
 			_relayout(vp)
-	if _mount_root == null:
+	if _mount_root == null or hud == null:
 		return
+	var vp2: Vector2 = hud.get_viewport().get_visible_rect().size
+	var zones := Hud43.zones(vp2) if Hud43.on() else {}
+	_ref_zone("send")
+	var upx := Hud43.unit(vp2) if Hud43.on() else 1.0      # px per HUD pt now
 	var o := _mount_root.get_global_rect().position
 	for id in _mounts:
 		var t: TextureRect = _mounts[id]
-		var r := _target(id)
+		var r := _target(id, zones, upx) if Hud43.on() else Rect2()
 		if r.size.x < 2.0 or r.size.y < 2.0:
 			t.visible = false
 			continue
-		var ts := t.texture.get_size()
-		var k := maxf(r.size.x / ts.x, r.size.y / ts.y) * PAD   # cover the control, aspect kept
-		t.size = ts * k
-		t.position = r.get_center() - t.size / 2.0 - o
+		t.position = r.position - o
+		t.size = r.size
 		t.visible = true

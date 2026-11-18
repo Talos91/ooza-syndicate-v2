@@ -65,6 +65,8 @@ static func tex(n: String) -> Texture2D:
 
 static func u_for(vp: Vector2, mobile: bool) -> float:
 	## Screen px per layout pt: the HUD's pt (phones: real pt x hud_k), desktop x 1.2 (as the tank and HudR19).
+	if Hud43.on():                                   # hud-43: THE PIT's unit everywhere (zones and pit always meet)
+		return Hud43.unit(vp)
 	return UiKit.hud_px_per_pt(vp, mobile) * (1.0 if mobile else 1.2)
 
 
@@ -196,6 +198,9 @@ class Tube:
 				seats.append(s)
 			if gi == 0:
 				seats.append("")                     # Daniele 2026-11-13: the neutral share in GREY, after your side
+		if Hud40.on():
+			_setup40()
+			return
 		var win := HudLab.Pic.new([["r30-tube-window"]])
 		add_child(win)
 		elbows = HudLab.Goo.new(HudLab.tex("r30-tube-goo-white"), 1)
@@ -211,8 +216,78 @@ class Tube:
 		add_child(over)
 		set_meta("parts", [win, glass, over])
 
+	var h40 := false                             # hud-40b6: the 40B4 score (frame, MASK-SCORE-TUBE goo, glass, timer plate, seat caps)
+	var mounts: Array = []                       # [PipeLayer, seat] per B5 mount (behind the frame)
+	var players: Array = []                      # the non-neutral seats, left to right
+
+	func _setup40() -> void:
+		h40 = true
+		if "--h40-4p" in OS.get_cmdline_user_args():     # dev review shot only: the 4-seat score (no 4-player map in the pool yet)
+			seats = [seats[0], "B", "", "C", "D"]
+			if _force.is_empty():
+				_force = [30.0, 22.0, 12.0, 20.0, 24.0]
+		for s in seats:
+			if str(s) != "":
+				players.append(str(s))
+		var four := players.size() > 2
+		var places := [[0.0, "LEFT", 8.0]]          # B5 mounts (x in the score canvas), B6 sage connector centres
+		if four:
+			places += [[42.0, "LEFT", 50.0], [209.0, "RIGHT", 224.0]]
+		places.append([251.0, "RIGHT", 266.0])
+		for i in range(places.size()):
+			var pl: Array = places[i]
+			var seat: String = players[mini(i, players.size() - 1)] if i < places.size() - 1 else players[players.size() - 1]
+			var layer := HudLab.Hud40Mount.make(pl)
+			add_child(layer)
+			mounts.append([layer, seat])
+		strip = HudLab.Goo.new(Hud40.tex("MASK-SCORE-TUBE"), 1)
+		strip.p("u_left", Hud40.SCORE_GOO_U.x)
+		strip.p("u_right", Hud40.SCORE_GOO_U.y)
+		strip.p("v_top", 14.0 / 80.0)               # MASK-SCORE-TUBE's alpha rows (2x px of 80)
+		strip.p("v_bot", 72.0 / 80.0)
+		strip.p("tube40", true)
+		elbows = null
+		var under := Control.new()               # the frame, above the mounts, under the goo
+		under.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		under.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		under.draw.connect(func(): Hud40.art(under, "PAINT-SCORE-4P-FRAME" if players.size() > 2 else "PAINT-SCORE-FRAME", Vector2.ZERO, u))
+		add_child(under)
+		add_child(strip)
+		var over := Control.new()
+		over.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		over.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		over.draw.connect(_draw_over40.bind(over))
+		add_child(over)
+		set_meta("parts", [under, over])
+
+	func _draw_over40(ci: Control) -> void:
+		Hud40.art(ci, "PAINT-SCORE-TUBE-GLASS", Vector2.ZERO, u)
+		Hud40.art(ci, "PAINT-SCORE-TIMER", Hud40.TIMER_AT * u, u)
+		var t: float = hud.sim.time
+		HudLab.text_c(ci, "%02d:%02d" % [int(t) / 60, int(t) % 60], (Hud40.TIMER_AT + Vector2(33, 13.5)) * u, int(round(15.0 * u)),
+				Hud40.TIMER_INK, HudLab.bold())
+		var four := players.size() > 2
+		var caps: Array = Hud40.CAPS_4 if four else Hud40.CAPS_2
+		for i in range(mini(players.size(), caps.size())):
+			var seat: String = players[i]
+			var at: Vector2 = (caps[i] as Vector2) - Vector2(11, 11)
+			var out: bool = hud.sim.factions.has(seat) and hud._seat_out(seat)
+			Hud40.art(ci, "PAINT-SCORE-CAP-4P" if four else "PAINT-SCORE-CAP", at * u, u, Color(1, 1, 1, 0.55) if out else Color.WHITE)
+			Hud40.art(ci, "MASK-SCORE-CAP-SEAT-4P" if four else "MASK-SCORE-CAP-SEAT", at * u, u,
+					Color(Rules.seat_color(seat), 0.35 if out else 1.0))
+
 	func lay(vp: Vector2, scale_u: float) -> void:
 		u = scale_u
+		if h40:
+			size = Hud40.SCORE_PT * u
+			position = Vector2(vp.x / 2.0 + (Hud40.SCORE_AT.x - Hud40.W / 2.0) * u, 0.0)
+			for c in get_meta("parts"):
+				HudLab.place(c, Vector2.ZERO, size)
+			HudLab.place(strip, Vector2.ZERO, size)
+			for m in mounts:
+				(m[0] as Hud40.PipeLayer).position = Vector2((m[0] as Hud40.PipeLayer).get_meta("x") * u, 0)
+				(m[0] as Hud40.PipeLayer).size = Vector2(30, 23) * u
+			return
 		size = HudLab.TUBE_PT * u
 		position = Vector2(vp.x / 2.0 - size.x / 2.0, 0.0)
 		for c in get_meta("parts"):
@@ -227,7 +302,7 @@ class Tube:
 			var v := 0.0
 			if s == "":
 				v = _neutral_strength()
-			elif not hud._seat_out(s):
+			elif hud.sim.factions.has(s) and not hud._seat_out(s):
 				v = maxf(float(hud.sim.seat_strength(s)), 0.0)
 			if vals.size() < _force.size():
 				v = _force[vals.size()]
@@ -240,10 +315,20 @@ class Tube:
 		for i in range(n):
 			acc += (float(vals[i]) / tot) if tot > 0.0 else 1.0 / float(n)
 			ends.append(acc if i < n - 1 else 1.0)
-			cols.append(NEUTRAL_GOO if str(seats[i]) == "" else HudLab.seat_goo(str(seats[i]), hud.human))
+			cols.append((NEUTRAL_GOO_40 if h40 else NEUTRAL_GOO) if str(seats[i]) == "" else (Hud40.goo_of(str(seats[i]), hud.human) if h40 else HudLab.seat_goo(str(seats[i]), hud.human)))
 		while ends.size() < 6:
 			ends.append(1.0)
 			cols.append(Color.WHITE)
+		if h40:
+			strip.p("seats", n)
+			strip.p("seat_end", ends)
+			strip.p("seat_tint", cols)
+			strip.p("collar", 0.004)
+			strip.visible = show_shares
+			for m in mounts:
+				(m[0] as Hud40.PipeLayer).set_goo(Hud40.goo_of(str(m[1]), hud.human))
+			get_child(get_child_count() - 1).queue_redraw()
+			return
 		for g in [strip, elbows]:
 			(g as HudLab.Goo).p("seats", n)
 			(g as HudLab.Goo).p("seat_end", ends)
@@ -261,8 +346,11 @@ class Tube:
 		get_child(get_child_count() - 1).queue_redraw()
 
 	func _draw() -> void:
+		if h40:
+			return
 		HudLab.art(self, "r30-tube-shell", Vector2.ZERO, u)
 
+	const NEUTRAL_GOO_40 := Color("3c474b")         # hud-40b6 (designer 10): a dark neutral middle, as the proof
 	const NEUTRAL_GOO := Color("7a8285")            # neutral = grey goo (Daniele 2026-11-13)
 
 	func _neutral_strength() -> float:
@@ -329,6 +417,20 @@ class Tube:
 		HudLab.text_c(ci, txt, HudLab.TUBE_TIMER_C * u, fs, HudLab.LIGHT, HudLab.bold())
 
 
+class Hud40Mount:
+	## hud-40b6: one B5 score mount (23 x 23 pt, goo recoloured to its seat's faction) + its B6 sage connector (15 x 9 pt).
+	static func make(pl: Array) -> Hud40.PipeLayer:
+		var side: String = pl[1]
+		var cx: float = float(pl[2]) - float(pl[0])
+		var layer: Hud40.PipeLayer
+		layer = Hud40.PipeLayer.new(func(ci: Control):
+			var k: float = ci.size.y / 23.0
+			Hud40.art(ci, "PAINT-SCORE-MOUNT-" + side, Vector2.ZERO, k)
+			Hud40.art(ci, "PAINT-CONNECTOR-SCORE", Vector2(cx - 7.5, 4.0 - 4.5) * k, k))
+		layer.set_meta("x", float(pl[0]))
+		return layer
+
+
 static func seat_goo(seat: String, human: String) -> Color:
 	## A seat's goo in the HUD: yours = your faction's goo tone (as the vat), the others their seat colour (room colours rule).
 	var c := Rules.seat_color(seat)
@@ -392,6 +494,9 @@ static func draw_key(sl) -> void:
 	## One skill key: shell + icon window + the skill's icon, its name in the strip; states made at run time:
 	## READY = KEY-NEON-EDGE in your accent (breathing), COOLING = KEY-SWEEP-COOLING clipped to the time left + the seconds,
 	## LOCKED = dimmed with a padlock; ARMED = the edge solid in the slot colour; a refused tap flashes it red.
+	if Hud40.on():                                      # hud-40b6: the 40B5 key
+		Hud40.draw_key(sl)
+		return
 	var dock = sl.dock
 	var u: float = dock.lab_u
 	var k := KEY_K * u

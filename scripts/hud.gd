@@ -96,6 +96,7 @@ var version_label: Label
 var lab_tube: HudLab.Tube                  # hud-lab (2026-11-13): the round-30 score tube (timer only) - the lab HUD's top
 var lab_feed: HudLab.SkillFeed             # hud-lab: the round-30 skill feed beside the keys
 var quota_bar: QuotaBar                    # LAST STAND = QUOTA (Rules.quota): the match score under the tube
+var h40_rack: Hud40.Rack                  # hud-40b6 (2026-11-15): the 40B6 rack + top-key bracket (Hud40)
 var r19_top: HudR19.TopLayer             # ui-r19-import: the round-19 top capsule, pills, clock and banner slot (HudR19)
 var ui_scale := 1.0
 # --- TUTORIAL reveal set (TUTORIAL-DESIGN.md §6) ---
@@ -413,6 +414,19 @@ func setup(m: Node3D) -> void:
 	# Alpha 24 Neon Noir: the line sits on the red status pill, as wide as its words (_fit_status); empty, nothing shows. The
 	# seconds ("9 s") sit in an amber capsule (_draw_status_secs, like the board's NEXT DROP 6s)
 	status_label.add_theme_stylebox_override("normal", HudNoir.box("status_pill", Color(0, 0, 0, 0), Vector4(16.0, 1.0, 16.0, 1.0) * ui_scale))
+	if Hud43.on():                                    # hud-43 (Daniele 11-18: no text strips): the words alone, outlined, on the board
+		var pill := StyleBoxFlat.new()                  # designer 10: the same dark pill as the on-board callouts
+		pill.bg_color = Color(0.12, 0.05, 0.09, 0.88)
+		pill.border_color = Color("ff6b6b", 0.9)
+		pill.set_border_width_all(maxi(1, int(round(1.5 * ui_scale))))
+		pill.set_corner_radius_all(int(round(10.0 * ui_scale)))
+		pill.content_margin_left = 10.0 * ui_scale
+		pill.content_margin_right = 10.0 * ui_scale
+		pill.content_margin_top = 2.0 * ui_scale
+		pill.content_margin_bottom = 2.0 * ui_scale
+		status_label.add_theme_stylebox_override("normal", pill)
+		status_label.add_theme_constant_override("outline_size", maxi(3, int(round(4.0 * ui_scale))))
+		status_label.add_theme_color_override("font_outline_color", Color(0.08, 0.03, 0.06, 0.9))
 	_status_secs = Control.new()
 	_status_secs.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_status_secs.draw.connect(_draw_status_secs)
@@ -570,11 +584,30 @@ func _lab_setup() -> void:
 	root.move_child(quota_bar, lab_tube.get_index())  # under the tube: its rounded ends sit over the capsules
 	quota_bar.setup(self)
 	top_panel.modulate.a = 0.0
+	var u := HudLab.u_of(self)
+	if Hud40.on():                                    # hud-40b6: the rack + bracket behind the keys; MUTE / PAUSE on the 40B4 keys
+		h40_rack = Hud40.Rack.new()
+		root.add_child(h40_rack)
+		root.move_child(h40_rack, top_panel.get_index())
+		h40_rack.setup(self)
+		for pair in [[pause_button, "PAUSE"], [music_button, "MUTE"]]:
+			_h40_key(pair[0], pair[1])
+		_lab_banner(u)
+		if Hud43.on():                                # hud-43: the 2p / 4p score with the AIs in its sockets; the AI screens
+			lab_tube.visible = false
+			score43 = Hud43.Score.new()
+			root.add_child(score43)
+			root.move_child(score43, top_panel.get_index())
+			score43.setup(self)
+			ai_screens = AiScreens.new()
+			root.add_child(ai_screens)
+			root.move_child(ai_screens, top_panel.get_index())
+			ai_screens.setup(self)
+		return
 	lab_feed = HudLab.SkillFeed.new()
 	root.add_child(lab_feed)
 	root.move_child(lab_feed, dock.get_index())
 	lab_feed.setup(dock)
-	var u := HudLab.u_of(self)
 	for pair in [[pause_button, "pause-glyph"], [music_button, "music-glyph"]]:
 		var b: Button = pair[0]
 		var empty := StyleBoxEmpty.new()
@@ -589,6 +622,30 @@ func _lab_setup() -> void:
 		b.size = b.custom_minimum_size
 		var g: String = pair[1]
 		b.draw.connect(func(): HudLab.button_face(b, g, HudLab.u_of(self), g == "music-glyph" and not Music.music_on()))
+	_lab_banner(u)
+
+
+func _h40_key(b: Button, nm: String) -> void:
+	## hud-40b6: a top key = its 40B4 face in a 33 pt tap (its logic and its other children untouched).
+	if b == null or b.has_meta("h40"):
+		return
+	b.set_meta("h40", nm)
+	var empty := StyleBoxEmpty.new()
+	for st in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
+		b.add_theme_stylebox_override(st, empty)
+	b.icon = null
+	b.text = ""
+	for c in b.get_children():
+		if c is CanvasItem and c != _chat_dot:
+			(c as CanvasItem).visible = false
+	var u := HudLab.u_of(self)
+	b.custom_minimum_size = Vector2.ONE * Hud40.TOPKEY_HIT * u
+	b.size = b.custom_minimum_size
+	b.draw.connect(func(): Hud40.topkey_face(b, str(b.get_meta("h40")), HudLab.u_of(self),
+			nm == "MUTE" and not Music.music_on()))
+
+
+func _lab_banner(u: float) -> void:
 	var frame := Control.new()                        # the banner's plate, behind its words
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	frame.show_behind_parent = true
@@ -613,12 +670,109 @@ func _lab_layout(vp: Vector2) -> void:
 	var u := HudLab.u_of(self)
 	lab_tube.lay(vp, u)
 	var ins := margins
+	if h40_rack:
+		_h40_layout(vp, u, ins)
+		return
 	pause_button.position = Vector2(vp.x - ins.z - HudLab.BUTTON_HIT * u, ins.y + 2.0 * u)
 	music_button.position = pause_button.position - Vector2(34.0 * u, 0)
 	if quota_bar:                                    # QUOTA: the score on both flanks of the tube, clear of MUSIC
 		quota_bar.lay(Rect2(lab_tube.position, lab_tube.size), u, ins.x, music_button.position.x)
 	if dock.slots.size() > 0:
 		lab_feed.lay(dock.position + (dock.slots[0] as Control).position, u)
+
+
+var score43: Hud43.Score
+var ai_screens: AiScreens
+
+
+func _h43_layout(vp: Vector2, u: float) -> void:
+	## hud-43: every piece in its zone (Hud43.zones = Daniele's frame round THE PIT).
+	var z := Hud43.zones(vp)
+	var r := h40_rack
+	r.u = u
+	r.show_rack = dock.visible
+	var keys := []
+	for pair in [[music_button, "MUTE"], [pause_button, "PAUSE"], [chat_button, "CHAT"], [debug_button, "DEBUG"]]:
+		var b: Button = pair[0]
+		if b == null:
+			continue
+		_h40_key(b, pair[1])
+		if b.visible:
+			keys.append(b)
+	var ur: Rect2 = z["util"]
+	var step := Hud43.UTIL_PT.y * u + 0.5 * u
+	var x1 := ur.end.x - Hud43.UTIL_PT.y * u / 2.0      # the last key's centre, right-aligned in the zone
+	for i in range(keys.size()):
+		var b: Button = keys[i]
+		b.size = Vector2.ONE * Hud40.TOPKEY_HIT * u
+		var cx := x1 - (keys.size() - 1 - i) * step
+		b.position = Vector2(cx, ur.get_center().y) - b.size / 2.0
+	if dock.slots.size() > 0:
+		var sk: Rect2 = z["skill"]
+		dock.position = sk.position + Vector2(Hud43.KEY_X, Hud43.KEY_TOP) * u - (dock.slots[0] as Control).position
+		dock._place_hint()
+	if send_tank:
+		var sr: Rect2 = z["send"]
+		var want := sr.position + Vector2((Hud43.SEND_W - Hud43.VAT_PT.x) / 2.0 * u, 0.0)
+		side_panel.position += want - send_tank.global_position
+	var nr: Rect2 = z["name"]
+	map_title.position = nr.position + Vector2(Hud43.FOOT_IN * u, 0.0)     # designer 10: clear of the bezel / camera strip
+	map_title.size.x = maxf(map_title.size.x, nr.size.x)
+	var vr: Rect2 = z["ver"]
+	for lb in [map_title, version_label]:          # cream, outlined: readable on any floor (the version was lost on the flowers)
+		lb.add_theme_color_override("font_color", Color("f4e7d4"))
+		lb.add_theme_constant_override("outline_size", maxi(3, int(round(3.0 * u))))
+		lb.add_theme_color_override("font_outline_color", Color(0.1, 0.04, 0.08, 0.9))
+	version_label.visible = true
+	version_label.size = version_label.get_combined_minimum_size()
+	version_label.position = Vector2(vr.end.x - version_label.size.x - Hud43.FOOT_IN * u, vr.position.y)
+	if score43:
+		score43.lay(z["score"])
+		if quota_bar:                                  # QUOTA demo (bg-44b4): the score's flanks, between the two AI screens
+			quota_bar.lay(z["score"], u, (z["ai_l"] as Rect2).end.x, (z["ai_r"] as Rect2).position.x)
+		status_label.position = Vector2((vp.x - status_label.size.x) / 2.0, (z["score"] as Rect2).end.y + 2.0 * u)
+	if ai_screens:
+		ai_screens.lay(z["ai_l"], z["ai_r"])
+	r.queue_redraw()
+	r.pipes.queue_redraw()
+
+
+func _h40_layout(vp: Vector2, u: float, ins: Vector4) -> void:
+	if Hud43.on():
+		_h43_layout(vp, u)
+		return
+	## hud-40b6: the pack's places - the top keys right-aligned in the bracket (PAUSE, MUTE, then DEBUG / CHAT when they show),
+	## the skill keys on their registered boxes, the vat at (10.5, 66.5) from the safe left, centred on the height.
+	var r := h40_rack
+	r.u = u
+	r.right = vp.x - ins.z
+	r.top = ins.y
+	var slots := ["PAUSE", "MUTE", "DEBUG", "CHAT"]
+	var n := 0
+	for pair in [[pause_button, "PAUSE"], [music_button, "MUTE"], [debug_button, "DEBUG"], [chat_button, "CHAT"]]:
+		var b: Button = pair[0]
+		if b == null:
+			continue
+		_h40_key(b, pair[1])
+		if not b.visible:
+			continue
+		var place: String = slots[n]
+		b.size = Vector2.ONE * Hud40.TOPKEY_HIT * u
+		b.position = r.at(Hud40.TOPKEYS[place])
+		n += 1
+	r.keys = maxi(n, 1)
+	r.show_rack = dock.visible
+	if dock.slots.size() > 0:
+		dock.position = r.at(Hud40.KEYS[0].position) - (dock.slots[0] as Control).position
+		dock._place_hint()
+	if send_tank:
+		var oy := maxf((vp.y - Hud40.H * u) / 2.0, ins.y)
+		var want := Vector2(ins.x + Hud40.VAT_AT.x * u, oy + Hud40.VAT_AT.y * u)
+		var d := want - send_tank.global_position
+		side_panel.position += d
+		map_title.position.x = ins.x + 8.0
+	r.refresh(GooTone.mine(HudNoir.accent))
+	r.queue_redraw()
 
 
 func _r19_button(b: Button) -> void:
@@ -934,6 +1088,8 @@ func right_used() -> float:
 	if dock and dock.visible:
 		var hm := dock.housing_margin()
 		w = maxf(w, dock.size.x + hm.x + hm.z)
+		if h40_rack:                                  # hud-40b6: the rack pipe runs at x 705.7 of 812
+			w = maxf(w, (Hud40.W - 705.7) * HudLab.u_of(self))
 		if lab_feed:                                  # hud-lab: the skill feed runs down the keys' outside (19 pt at x1.2)
 			w = maxf(w, dock.size.x - HudLab.SKILL_FEED_OFF.x * HudLab.KEY_K * HudLab.u_of(self))
 	return margins.z + w + 12.0
@@ -1025,7 +1181,7 @@ func sync(dt: float, cam: Camera3D) -> void:
 		lab_tube.sync()
 		if quota_bar:
 			quota_bar.sync(dt)
-			quota_bar.visible = quota_bar.visible and lab_tube.visible
+			quota_bar.visible = quota_bar.visible and (lab_tube.visible or score43 != null)   # hud-43: on the score's flanks
 		if is_instance_valid(lab_feed) and dock.slots.size() > 0:
 			lab_feed.lay(dock.position + (dock.slots[0] as Control).position, HudLab.u_of(self))
 	top_left.visible = show_chips
@@ -2906,7 +3062,7 @@ func toast(msg: String, kind := "") -> void:
 	kind = kind_of(msg, kind)
 	var named := _SEAT_WORD.search(msg)
 	var seat := named.get_string(1).to_upper() if named else ""
-	if seat != "" and named.get_start() == 0 and top_chips.has(seat) and top_panel.visible and top_left.visible:
+	if seat != "" and named.get_start() == 0 and top_chips.has(seat) and top_panel.visible and top_left.visible and not Hud43.on():
 		callout_chip(seat, ("%s %s" % [seat_label(seat), msg.substr(named.get_end()).strip_edges()]).strip_edges(), kind)
 		return
 	note_line(named_text(msg), kind, seat if sim.factions.has(seat) else "")
@@ -2974,6 +3130,12 @@ func callout_at(pos: Vector3, place: String, text: String, kind := "warn", seat 
 	var col := kind_color(kind)
 	var opts := _icon_opts(seat, kind)
 	opts["world"] = pos + Vector3(0, Rules.HUD_CALLOUT_LIFT, 0)
+	if Hud43.on():                                    # hud-43 (designer 10): short, fading fast, on a dark pill BESIDE the node
+		opts["life"] = ON_BOARD_LIFE                  # (clear of its hub and its count), three at most
+		opts["pill"] = true
+		opts["beside"] = 26.0 * ui_scale
+		if callouts.find(place).is_empty():
+			callouts.trim_world(2)
 	callouts.add(place, [[text, callout_px(Rules.HUD_CALLOUT_FONT, Rules.HUD_CALLOUT_MIN_PT), col.lerp(Color.WHITE, 0.15)]], col, opts)
 
 
@@ -3001,13 +3163,16 @@ func skill_refusal(slot: int, msg: String) -> void:
 	var col := kind_color("warn")
 	callouts.add("slot:%d" % slot, [[msg, callout_px(Rules.HUD_REFUSAL_FONT, Rules.HUD_REFUSAL_MIN_PT), col.lerp(Color.WHITE, 0.25)]], col,
 			{"anchor": func(): return Vector2(b.get_global_rect().position.x - 6.0 * ui_scale, b.get_global_rect().get_center().y),
-			"glyph": "warn", "life": Rules.HUD_REFUSAL_LIFE, "arrow": false, "rise": 6.0})
+			"glyph": "warn", "life": Rules.HUD_REFUSAL_LIFE, "arrow": false, "rise": 6.0, "pill": Hud43.on()})
 
 
 func note_line(text: String, kind := "info", seat := "") -> void:
 	## A line with no place of its own: centred under the top bar and the status line (and a mission's strip,
 	## which pushes `notices` down under it - mission_overlay.gd).
 	if not shows("notices") or callouts == null:
+		return
+	if Hud43.on():
+		_on_board(text, kind, seat)
 		return
 	var col := kind_color(kind)
 	var opts := _icon_opts(seat, kind)
@@ -3029,13 +3194,15 @@ func start_banner(title: String, lines: Array) -> void:
 	## play (its clock stands still while the match is held - under the VERSUS card).
 	if not shows("notices") or callouts == null or (title == "" and lines.is_empty()):
 		return
+	if Hud43.on():                                    # designer 10 (11-18): no map-name watermark and no start box over the pit (it stayed
+		return                                        # near-invisible: its clock holds at the start). Follow-up: the relay note elsewhere
 	var rows := []
 	if title != "":
 		rows.append([title, callout_px(Rules.HUD_BANNER_FONT, Rules.HUD_CALLOUT_MIN_PT + 6.0), Color("f2fbff"), true])
 	for l in lines:
 		rows.append([str(l), callout_px(Rules.HUD_CALLOUT_FONT * 0.9, Rules.HUD_CALLOUT_MIN_PT), Color("c8e6ee")])
 	callouts.add("banner", rows, Rules.seat_color(human), {"anchor": func(): return root.get_viewport_rect().size * Vector2(0.5, 0.3),
-			"side": "center", "arrow": false, "life": Rules.HUD_BANNER_LIFE, "rise": 0.0,
+			"side": "center", "arrow": false, "life": Rules.HUD_BANNER_LIFE, "rise": 0.0, "pill": Hud43.on(),
 			"hold": func(): return bool(main.paused) and not sim.over})
 
 
@@ -3117,6 +3284,8 @@ func callout_area(vp: Vector2) -> Rect2:
 	if vp != _ins_vp:
 		_ins_vp = vp
 		_ins = UiKit.safe_insets(vp)
+	if Hud43.on() and main and main.has_method("pit_rect"):   # hud-43: every message lives ON the board (Daniele 11-18)
+		return main.pit_rect()
 	var ins := _ins
 	var l := maxf(ins.x, margins.x * 0.5)
 	var t := maxf(ins.y, margins.y * 0.5)
@@ -3129,6 +3298,11 @@ func callout_blocked() -> Array:
 	## The HUD parts a message never covers: the top bar (and the band it heads), PAUSE, the SEND panel, the dock
 	## and its hint, the inspector, the coach card, the corner buttons.
 	var out := []
+	if Hud43.on():                                    # hud-43 (Daniele 11-18): on-board messages never sit over a troop count
+		for id in badges:
+			var bp = badges[id].get("panel")
+			if bp is Control and (bp as Control).is_visible_in_tree():
+				out.append((bp as Control).get_global_rect().grow(2.0 * ui_scale))
 	var vp := root.get_viewport_rect().size
 	if top_panel.visible:
 		out.append(Rect2(0, 0, vp.x, top_panel.position.y + top_panel.size.y + 3.0 * ui_scale))
@@ -3185,7 +3359,7 @@ func _sync_status_pulse(dt: float) -> void:
 	var font := status_label.get_theme_font("font")
 	var sw := font.get_string_size(status_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, status_label.get_theme_font_size("font_size")).x
 	var gw := sw + 36.0 * ui_scale
-	status_glow.visible = true
+	status_glow.visible = not Hud43.on()
 	status_glow.size = Vector2(gw, status_label.size.y + 4.0 * ui_scale)
 	status_glow.position = Vector2(status_label.position.x + (status_label.size.x - gw) * 0.5, status_label.position.y - 2.0 * ui_scale)
 	status_glow.modulate = Color(1, 1, 1, (0.45 + 0.55 * wave) * fade)
@@ -3199,7 +3373,40 @@ func skill_event(ev: Dictionary) -> void:
 		dock.on_event(ev)
 
 
+const ON_BOARD_LIFE := 1.8
+
+
+func _on_board(text: String, kind := "info", seat := "", place := "line", life := ON_BOARD_LIFE) -> void:
+	## hud-43 (Daniele 11-18: "notifications on the board, no top banners"): a line with no node of its own goes ON the board -
+	## at the seat's strongest node when it names a seat, else in the pit's upper middle - text only (no plate), fading fast.
+	var col := kind_color(kind)
+	var best := -1
+	if seat != "":
+		for n in sim.nodes:
+			if str(n["owner"]) == seat and (best < 0 or float(n["units"]) > float(sim.nodes[best]["units"])):
+				best = int(n["id"])
+	if best >= 0:
+		callout_at(sim.nodes[best]["pos"], place, text, kind, seat)
+		return
+	var opts := {"glyph": "good" if kind == "good" else ("warn" if kind == "warn" else "info"), "side": "center", "arrow": false,
+			"life": life, "rise": 8.0, "pill": true}
+	opts["anchor"] = func():
+		var pr: Rect2 = main.pit_rect()
+		return Vector2(pr.get_center().x, pr.position.y + pr.size.y * 0.3)
+	callouts.add(place, [[text, callout_px(Rules.HUD_CALLOUT_FONT, Rules.HUD_CALLOUT_MIN_PT), col.lerp(Color.WHITE, 0.15)]], col, opts)
+
+
+func ai_event(new_owner: String, old_owner: String, node_id: int) -> void:
+	## A node changed hands: the AI screens' moods (hud-43).
+	if ai_screens and node_id >= 0 and node_id < sim.nodes.size():
+		ai_screens.on_capture(new_owner, old_owner, float(sim.nodes[node_id]["units"]))
+
+
 func show_banner(msg: String, seconds := 4.0) -> void:
+	if Hud43.on() and callouts != null:              # hud-43: no banner panel - the words on the board
+		banner.visible = false
+		_on_board(msg, kind_of(msg), "", "banner")
+		return
 	banner.text = msg
 	banner.visible = true
 	banner.size = Vector2.ZERO                        # re-fit the frame to the new text, centred

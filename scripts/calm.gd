@@ -27,7 +27,8 @@ static func world() -> bool:
 
 
 static func labels() -> bool:
-	return level == "b" or level == "c"
+	## hud-43: on too (note 12, Daniele 11-16: "troop counts too in-your-face") - the neutral garrisons' counts small and grey.
+	return level == "b" or level == "c" or (Hud43.on() and level != "off")
 
 
 static func colour() -> bool:
