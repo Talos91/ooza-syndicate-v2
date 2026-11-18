@@ -65,6 +65,8 @@ static func tex(n: String) -> Texture2D:
 
 static func u_for(vp: Vector2, mobile: bool) -> float:
 	## Screen px per layout pt: the HUD's pt (phones: real pt x hud_k), desktop x 1.2 (as the tank and HudR19).
+	if Hud43.on():                                   # hud-43: THE PIT's unit everywhere (zones and pit always meet)
+		return Hud43.unit(vp)
 	return UiKit.hud_px_per_pt(vp, mobile) * (1.0 if mobile else 1.2)
 
 

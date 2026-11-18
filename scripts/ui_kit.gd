@@ -36,26 +36,27 @@ static func _add_symbol_fallback() -> bool:
 			fb.append(SYMBOLS)
 			f.fallbacks = fb
 	return true
-const BASE := Color("041016")                      # base surface
-const PANEL := Color("071820")                     # panel surface, opaque beneath text
-const INK := Color("e8f6fa")                       # primary text
-const MUTED := Color("a6bfca")                     # secondary text
-const DIM := Color("5f7a86")                       # captions, unavailable
-const FRAME := Color("255363")                     # quiet frame
+const BASE := Color("1a0e16")                      # base surface (43B copper punk: plum-dark ground)
+const PANEL := Color("2a1421")                     # panel surface, opaque beneath text (burgundy cabinet)
+const INK := Color("f4e7d4")                       # primary text (cream)
+const MUTED := Color("cdb5a3")                     # secondary text (warm)
+const DIM := Color("8a6f76")                       # captions, unavailable
+const FRAME := Color("9a6640")                     # quiet frame (bronze)
+const COPPER := Color("e3a56d")                    # 43B kickers / section titles on plum (proofs: HOME, ARMIES)
 const CYAN := Color("14d3e4")                      # VEX / neutral action
 const STAR := Color("ffce68")                      # earned stars
 const WEAKER := Color("ff4f64")                    # a stat below baseline - a rose red no faction accent is near (Daniele:
                                                   # the old amber read like EMBER / SOLAR)
-const BAR := Color("041016f2")                     # top / bottom bars
-const CARD := Color("071820f0")                    # card fill
+const BAR := Color("1c0e17f2")                     # top / bottom bars
+const CARD := Color("24121df0")                    # card fill
 const ACCENTS := {"vex": Color("14d3e4"), "null": Color("f327c3"), "bloom": Color("a1eb39"),
 		"ember": Color("ff7c19"), "solar": Color("ffce58")}
 const ORDER := ["vex", "null", "bloom", "ember", "solar"]
 ## Daniele 2026-11-02: the faction is BLOOM - no VIRIDIAN anywhere; it has no second word (SUBS "")
 const NAMES := {"vex": "VEX", "null": "NULL", "bloom": "BLOOM", "ember": "EMBER", "solar": "AEGIS"}
-const SUBS := {"vex": "BIOENGINEERS", "null": "CARTEL", "bloom": "", "ember": "MAW", "solar": "SHELLS"}
-const TAGS := {"vex": "VEX / BIOENGINEERS", "null": "NULL / CARTEL", "bloom": "BLOOM",
-		"ember": "EMBER / MAW", "solar": "AEGIS / SHELLS"}
+const SUBS := {"vex": "R&D", "null": "FINANCE", "bloom": "PEOPLE & CULTURE", "ember": "OPERATIONS", "solar": "COMPLIANCE"}   # departments, WORLD-LORE-2026-11 §5 (designer 10, 11-18)
+const TAGS := {"vex": "VEX / R&D", "null": "NULL / FINANCE", "bloom": "BLOOM / PEOPLE & CULTURE",
+		"ember": "EMBER / OPERATIONS", "solar": "AEGIS / COMPLIANCE"}
 const CUT := 10                                    # the standard corner cut
 const CFG := "user://ui.cfg"
 const K := 1280.0 / 1672.0                       # = Menu.K, Menu.MIN_TAP_PT, Menu.MIN_FONT_PT - copied so the pieces
@@ -175,7 +176,7 @@ static func style_button(b: Button, kind: String, f := "vex") -> void:
 	## 0.24.5: the 40B2 chrome (MenuSkin): primary / secondary = ivory keys, selected = dark glass tab with the seat rim,
 	## small = the nav key; tertiary stays text-led. The old flat boxes below remain for kinds the skin does not cover.
 	match kind:
-		"primary", "secondary", "small":
+		"primary", "secondary", "small", "quit":
 			MenuSkin.style_ivory(b, kind)
 			b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 			return
@@ -245,12 +246,40 @@ static func make_btn(m, text: String, dims: Vector2, call: Callable, kind := "se
 	dims.y = tap_h(m, dims.y)
 	b.custom_minimum_size = dims
 	b.size = dims
+	_shrink_btn(b, dims.x - 24.0)                     # designer 10 (11-18): "PLA" / "COMING SOO" - the words shrink to fit their key
 	if call.is_valid():
 		var ui := "confirm" if kind == "primary" else "tap"   # SOUND: the primary action confirms, the rest tap (sfx.gd)
 		b.pressed.connect(func():
 			Sfx.play_ui(ui)
 			acknowledge(b, call))
 	return b
+
+
+static func _shrink_btn(b: Button, room: float) -> void:
+	## The longest line of a key's text fits `room`: its font shrinks, down to 80 % of what it was given.
+	if b.text == "" or room <= 0.0:
+		return
+	var f: Font = b.get_theme_font("font")
+	var fs := b.get_theme_font_size("font_size")
+	var lo := int(floor(fs * 0.8))
+	var widest := func(n: int) -> float:
+		var w := 0.0
+		for line in b.text.split("\n"):
+			w = maxf(w, f.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, n).x)
+		return w
+	while fs > lo and widest.call(fs) > room:
+		fs -= 1
+	b.add_theme_font_size_override("font_size", fs)
+
+
+static func shrink_label(l: Label, room: float) -> void:
+	## A one-line label's font shrinks to fit `room`, down to 80 % of its size.
+	var f: Font = l.get_theme_font("font")
+	var fs := l.get_theme_font_size("font_size")
+	var lo := int(floor(fs * 0.8))
+	while fs > lo and f.get_string_size(l.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > room:
+		fs -= 1
+	l.add_theme_font_size_override("font_size", fs)
 
 
 static func acknowledge(b: Control, call: Callable) -> void:
@@ -299,7 +328,7 @@ static func panel(m, pos: Vector2, dims: Vector2, f := "", selected := false, fi
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var a := accent(f)
 	if selected:
-		p.add_theme_stylebox_override("panel", sb(Color(a.darkened(0.8), 0.95), MenuSkin.seat(), 2))   # picked: the SEAT rim
+		p.add_theme_stylebox_override("panel", MenuSkin.lamp_plate())                                  # picked: bronze ring + seat lamp
 	else:
 		p.add_theme_stylebox_override("panel", MenuSkin.plate())                                         # M-E dark glass
 	p.size = dims
@@ -321,7 +350,7 @@ static func title(m, x: float, y: float, kicker: String, headline: String, f := 
 	var kw := text_w(m, kicker.to_upper(), 12, true) + kicker.length() * 3.0
 	var hw := text_w(m, headline.to_upper(), size, true)
 	band(m, Rect2(x - 14.0, y - 8.0, maxf(kw, hw) + 32.0, line_h(m, 12, true) + 2.0 + line_h(m, size, true) + 16.0))
-	var k := label(m, kicker.to_upper(), 12, MenuSkin.seat(), true, 3)   # kickers = the SEAT colour, never the faction's
+	var k := label(m, kicker.to_upper(), 12, COPPER, true, 3)   # kickers = copper (43B), never the faction's
 	add(m, k, Vector2(x, y))
 	y += k.get_minimum_size().y + 2.0
 	var h := label(m, headline.to_upper(), size, INK, true)

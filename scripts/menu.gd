@@ -19,7 +19,7 @@ const UI_FONT := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")
 const HEAD_FONT := preload("res://assets/fonts/RussoOne-Regular.ttf")
 const FACTIONS := ["vex", "null", "bloom", "ember", "solar"]
 const K := 1280.0 / 1672.0
-const NAMES := {"vex": "VEX\nBIOENGINEERS", "null": "NULL\nCARTEL", "bloom": "BLOOM", "ember": "EMBER\nMAW", "solar": "AEGIS\nSHELLS"}
+const NAMES := {"vex": "VEX\nR&D", "null": "NULL\nFINANCE", "bloom": "BLOOM\nPEOPLE & CULTURE", "ember": "EMBER\nOPERATIONS", "solar": "AEGIS\nCOMPLIANCE"}
 
 var main: Node3D
 var content: Control
@@ -32,7 +32,7 @@ var map_path := ""                                # setup() takes main's, or the
 var ai_level := "Standard"
 var mode := "1v1"
 var colour := "A"
-const MODE_NAMES := {"1v1": "1 V 1", "2v2": "2 V 2", "3v3": "3 V 3", "2v2v2": "2V2V2", "FFA3": "FFA 3", "FFA4": "FFA 4", "FFA5": "FFA 5"}
+const MODE_NAMES := {"1v1": "1 V 1", "2v2": "2 V 2", "FFA3": "FFA 3", "FFA4": "FFA 4"}   # max 4 seats: FFA5 / 3v3 / 2v2v2 archived (Daniele 2026-11-18)
 const COLOUR_NAMES := {"A": "CYAN", "B": "GREEN", "C": "PURPLE", "D": "RED", "E": "GOLD", "F": "ROSE", "faction": "FACTION"}
 var maps: Array = []
 var _is_main := false
@@ -554,7 +554,7 @@ func page_title(area: Rect2, kicker: String, headline: String, size := 34.0) -> 
 		if kw + 18.0 + hw <= content.size.x * 0.62 - x:
 			var ty := area.position.y + 10.0
 			var hl := UiKit.label(self, headline.to_upper(), hs, UiKit.INK, true)
-			var kl := UiKit.label(self, kicker.to_upper(), 12, UiKit.accent(shell_f), true, 3)
+			var kl := UiKit.label(self, kicker.to_upper(), 12, UiKit.COPPER, true, 3)
 			var rowh := UiKit.line_h(self, hs, true)      # (font measures: a label off the tree reports its default size)
 			UiKit.band(self, Rect2(x - 14.0, ty - 6.0, kw + 18.0 + hw + 32.0, rowh + 12.0))
 			_shell_add(kl, Vector2(x, ty + (rowh - UiKit.line_h(self, 12, true)) / 2.0 + 2.0))
@@ -867,14 +867,15 @@ COMING SOON"   # (a name is never dropped: two lines when one will not fit)
 			var bw: float = maxf(UiKit.text_w(self, str(words[0]), 13, true) + str(words[0]).length() * 3.0, UiKit.text_w(self, long_line, st[0], true))
 			if need <= free:
 				UiKit.band(self, Rect2(hx - 16.0, hy - 8.0, minf(bw + 40.0, qr - hx + 40.0), need + 18.0))   # 40B2 title plate: dark glass under tagline + title
-			_shell_add(UiKit.label(self, str(words[0]), 13, acc, true, 3), Vector2(hx, hy))
+			_shell_add(UiKit.label(self, str(words[0]), 13, UiKit.COPPER, true, 3), Vector2(hx, hy))
 			hy += UiKit.line_h(self, 13, true) + 6.0
 			if need <= free:
 				_shell_add(UiKit.label(self, st[1], st[0], UiKit.INK, true), Vector2(hx - 3.0, hy))
 				hy += UiKit.line_h(self, st[0], true) * lines + 6.0
 			break
 	var fb := UiKit.flat_button(self, "FULLSCREEN" if OS.has_feature("web") else "QUIT", 13, UiKit.MUTED)
-	fb.size = Vector2(UiKit.text_w(self, fb.text, 13, true) + 20.0, fh)
+	MenuSkin.style_ivory(fb, "quit")                   # 43B: QUIT is a control (the dark QUIT key), not loose text
+	fb.size = Vector2(UiKit.text_w(self, fb.text, 13, true) + 48.0, fh)
 	fb.pressed.connect(func():
 		if OS.has_feature("web"):
 			FullscreenGate.request()
@@ -894,7 +895,14 @@ COMING SOON"   # (a name is never dropped: two lines when one will not fit)
 
 func _col_back(r: Rect2) -> void:
 	## HOME's column rows sit on an (almost) opaque dark plate: the painting never shows through a button (designer 8).
-	content.add_child(UiKit.rect(r.position, r.size, Color(UiKit.BASE, 0.9)))
+	## Note 3 (Daniele 11-16: CHALLENGES / TRAINING "not overlaid properly, background wrong"): the plate is the chamfered
+	## M-E cabinet, a margin wider than the keys, never a square dark box.
+	var p := Panel.new()
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.add_theme_stylebox_override("panel", MenuSkin.plate(0.92))
+	p.position = r.position - Vector2(10, 10)
+	p.size = r.size + Vector2(20, 20)
+	content.add_child(p)
 
 
 var _home_install_x := 0.0
@@ -927,7 +935,7 @@ func _home_tile(r: Rect2, pad: float, kicker: String, title: String, sub: String
 		pn.add_theme_stylebox_override("panel", MenuSkin.plate(0.6))            # HOME: container fill 60 % over the painting
 	var y := r.position.y + pad
 	var iw := r.size.x - pad * 2.0
-	_clip(kicker, Vector2(r.position.x + pad, y), 12, UiKit.accent(faction), iw, true)
+	_clip(kicker, Vector2(r.position.x + pad, y), 12, UiKit.COPPER, iw, true)
 	y += UiKit.line_h(self, 12, true) + 4.0
 	_clip(title, Vector2(r.position.x + pad, y), 16, UiKit.INK, iw, true)
 	y += UiKit.line_h(self, 16, true)
@@ -1772,6 +1780,7 @@ func _say(text: String, pos: Vector2, size: float, col := UiKit.INK, width := 0.
 func _clip(text: String, pos: Vector2, size: float, col: Color, width: float, head := false) -> Label:
 	## A one-line label cut to `width` with an ellipsis (names, map names in a row).
 	var l := UiKit.label(self, text, size, col, head)
+	UiKit.shrink_label(l, width)                      # designer 10 (11-18): shrink to fit first (to 80 % of the floor), then cut
 	l.clip_text = true
 	l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	l.size = Vector2(maxf(width, 10.0), UiKit.line_h(self, size, head))
@@ -2861,38 +2870,59 @@ func show_armies(f: String = "", back: Callable = Callable()) -> void:
 		var sb := UiKit.make_btn(self, st, Vector2(sw, 44), _save_armies, "primary", _army, 15)
 		top_bar.add_child(sb)                          # in the bar itself (shell_raise keeps the bar on top)
 		sb.position = Vector2(bx, maxf(4.0, (top_bar.bar_height() - sb.size.y) / 2.0))
-	var top := area.position.y + 10.0
-	var th := UiKit.tap_h(self, 54.0)
-	var gap := 8.0
-	var tabs := [["skills", "SKILLS"], ["customize", "CUSTOMIZE"]]
-	var tab_w := UiKit.text_w(self, "CUSTOMIZE", 15, true) + 40.0
-	var tabs_x := x + w - tab_w * 2.0 - gap
-	for i in range(tabs.size()):
-		var tid: String = tabs[i][0]
-		UiKit.btn(self, tabs[i][1], Vector2(tabs_x + i * (tab_w + gap), top), Vector2(tab_w, 54), func():
-			_army_tab = tid
-			show_armies(), "selected" if _army_tab == tid else "secondary", _army, 15)
-	var rw := tabs_x - 16.0 - x
-	var tw := (rw - gap * 4.0) / 5.0
-	for i in range(FACTIONS.size()):
-		_army_tile(FACTIONS[i], Vector2(x + i * (tw + gap), top), Vector2(tw, th))
-	var body := Rect2(x, top + th + 12.0, w, area.end.y - 10.0 - (top + th + 12.0))
+	# 43B (Daniele 2026-11-18 "Yes, import it"): the page is the 43B-pack-ARMIES layout itself (Armies43), scaled evenly
+	# into the free area; CUSTOMIZE keeps its wardrobe body under the pack's faction / section row.
+	var top := area.position.y + 6.0
+	if _backdrop:                                      # designer 10 (11-18): the pack's own room (ARMIES-PLATE), not the sky city
+		var plate := UiKit.tex(Armies43.DIR + "ARMIES-PLATE.jpg")
+		if plate != null:
+			_backdrop.texture = plate
+			_backdrop.modulate = Color(0.9, 0.9, 0.9)
+	var a43 := Armies43.new()
+	a43.setup(self, Rect2(x, top, w, area.end.y - 6.0 - top), _army, _army_tab, _armies43_tap)
+	content.add_child(a43)
+	_a43 = a43
 	if _army_tab == "customize":
-		_customize_body(body)
+		var rh := Armies43.TOP_ROW_H * a43.s
+		_customize_body(Rect2(x, top + rh + 12.0, w, area.end.y - 10.0 - (top + rh + 12.0)))
 		shell_raise()
 		return
-	var lw := floorf(w * 0.25)
-	# the skill rows need room for their longest word at the phone's font floor (EMERGENCY): the identity panel gives
-	# way (Daniele 2026-11-05: every tile the same text, nothing overflowing)
-	var longest := 0.0
-	for sid in Rules.ACTIVE_SKILLS + Rules.MAP_SKILLS:
-		for word in ArmyPresets.skill_name(sid).to_upper().split(" "):
-			longest = maxf(longest, UiKit.text_w(self, word, 12.0, true))
-	var need := maxi(Rules.ACTIVE_SKILLS.size(), Rules.MAP_SKILLS.size()) * (longest + 22.0) - 10.0
-	lw = minf(lw, floorf(w - 14.0 - need))
-	_army_identity(body.position, Vector2(lw, body.size.y))
-	_skills_body(Rect2(body.position.x + lw + 14.0, body.position.y, w - lw - 14.0, body.size.y), _skills_slot)
+	if _skill_tip != "":
+		var cid := "ULT" if _skill_tip == Rules.FACTION_ULTIMATE_ID[_army] else ""
+		for c in a43._skill_of:
+			if a43._skill_of[c] == _skill_tip:
+				cid = c
+		if cid != "":
+			_skill_popup(_skill_tip, a43.rect_of(cid), _skills_slot)
 	shell_raise()
+
+
+var _a43: Armies43 = null
+
+
+func _armies43_tap(cid: String) -> void:
+	## A tap on the 43B ARMIES page: faction tab, SKILLS / CUSTOMIZE, RESET, the ultimate cabinet ("ULT"), a skill card.
+	if cid.begins_with("FACTION-"):
+		var n := cid.substr(8).to_lower()
+		_skill_tip = ""
+		show_armies("solar" if n == "aegis" else n)
+	elif cid == "SKILLS" or cid == "CUSTOMIZE":
+		_army_tab = cid.to_lower()
+		show_armies()
+	elif cid == "RESET":
+		ArmyPresets.reset(_army)
+		_preset_changed()
+		show_armies()
+	elif cid == "ULT":
+		_toggle_tip(Rules.FACTION_ULTIMATE_ID[_army], _skills_slot)
+	elif is_instance_valid(_a43) and _a43.skill_of(cid) != "":
+		var id := _a43.skill_of(cid)
+		var slot := "active" if id in Rules.ACTIVE_SKILLS else "map"
+		if Progression.is_unlocked("skill:" + id):
+			ArmyPresets.set_pick(_army, slot, id)
+			_preset_changed()
+		_skill_tip = id
+		show_skills(slot)
 
 
 var _army_tab := "skills"                          # ARMIES: the open tab ("skills" | "customize")
@@ -3923,7 +3953,7 @@ func _ward_looks(pos: Vector2, dims: Vector2, cat: String, looks: Array, sel: St
 			_ward_sel[cat] = lid
 			show_cosmetics(), "selected" if lid == sel else "secondary", _army)
 		if s["equipped"]:
-			b.add_child(UiKit.rect(Vector2(0, 8.0), Vector2(3.0, th - 16.0), acc))
+			b.add_child(UiKit.rect(Vector2(9, 12.0), Vector2(3.0, th - 24.0), acc))
 		var hh := UiKit.line_h(self, 15, true) + UiKit.line_h(self, 12, true)
 		var tx := 16.0
 		var n := UiKit.label(self, _ward_look_name(cat, lid), 15, UiKit.MUTED if s["locked"] else UiKit.INK, true)
@@ -4237,7 +4267,7 @@ func _pool_modes() -> Array:
 	for e in maps:
 		for md in _modes_of(e["data"]):
 			have[md] = true
-	return ["1v1", "2v2", "3v3", "2v2v2", "FFA3", "FFA4", "FFA5"].filter(func(md): return have.has(md))
+	return ["1v1", "2v2", "FFA3", "FFA4"].filter(func(md): return have.has(md))
 
 
 func _refilter() -> void:
@@ -4256,7 +4286,7 @@ func _relay_kinds(m: Dictionary) -> String:
 
 func _modes_of(m: Dictionary) -> Array:
 	var out := []
-	for k in ["1v1", "2v2", "3v3", "2v2v2", "FFA3", "FFA4", "FFA5"]:
+	for k in ["1v1", "2v2", "FFA3", "FFA4"]:
 		if m.get("seats", {}).has(k) and MapPool.mode_offered(str(m.get("code", "")), k):   # 0.23.0: a kept older map fills gaps only
 			out.append(k)
 	return out if not out.is_empty() else ["1v1"]
@@ -4381,11 +4411,14 @@ func _fit_fs(t: String, hi: float, lo: float, width: float, bold := true) -> flo
 	return fs
 
 
+const TEXT_IN := 22.0                              # note 2: text inset inside a 43B plate (its 14 pt chamfer + bolt)
+
+
 func _big_btn(r: Rect2, kicker: String, value: String, call: Callable, f := "", pic: Texture2D = null) -> Button:
 	## A big summary button: KICKER (muted) over the value (large), a chevron at the right. Opens its page / sheet.
 	## pic (SETTING): a small picture before the chevron when the words still fit beside it.
 	var b := UiKit.btn(self, "", r.position, r.size, call, "secondary", f if f != "" else shell_f)
-	var room := b.size.x - 14.0 - 26.0
+	var room := b.size.x - TEXT_IN - 26.0          # note 2 (Daniele 11-16): clear of the chamfered corner + bolts
 	if pic != null:
 		var ph := floorf(b.size.y - 16.0)
 		var pw := floorf(ph * 16.0 / 9.0)
@@ -4406,13 +4439,13 @@ func _big_btn(r: Rect2, kicker: String, value: String, call: Callable, f := "", 
 	var vl := UiKit.line_h(self, vfs, true)
 	var ty := maxf(4.0, (b.size.y - kl - 2.0 - vl) / 2.0)
 	var k := UiKit.label(self, kicker, kfs, UiKit.MUTED, true, 2)
-	k.position = Vector2(14, ty)
+	k.position = Vector2(TEXT_IN, ty)
 	b.add_child(k)
 	if value != "":
 		var v := UiKit.label(self, value, vfs, UiKit.INK, true)
 		v.clip_text = true
 		v.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		v.position = Vector2(14, ty + kl + 2.0)
+		v.position = Vector2(TEXT_IN, ty + kl + 2.0)
 		v.size = Vector2(maxf(10.0, room), vl)
 		b.add_child(v)
 	var c := UiKit.label(self, "›", 22, UiKit.MUTED)
@@ -4429,7 +4462,7 @@ func _lobby_map(r: Rect2, can_change: bool) -> void:
 	var pr := Rect2(r.position + Vector2(pad, pad + nl + 4.0), r.size - Vector2(pad * 2.0, pad * 2.0 + nl + 4.0))
 	var sel := _selected_map()
 	var tags := [str(sel.get("name", "")).replace("*", "").to_upper(), "%d NODES" % sel["nodes"].size()]
-	_clip("  ·  ".join(tags), r.position + Vector2(pad + 4.0, pad), 15, UiKit.INK, r.size.x - pad * 2.0, true)
+	_clip("  ·  ".join(tags), r.position + Vector2(TEXT_IN, pad + 2.0), 15, UiKit.INK, r.size.x - TEXT_IN - pad, true)
 	map_preview(pr.position, pr.size)
 	if can_change:
 		var hit := Button.new()
@@ -4494,12 +4527,12 @@ func _ai_seat_chip(seat: String, r: Rect2, team: Dictionary) -> void:
 	var b := UiKit.btn(self, "", r.position, r.size, func(): _open_lobby_sheet("seat:" + seat), "selected" if me else "secondary", shell_f)
 	var h := b.size.y
 	var col: Color = Rules.SEATS.get(seat, Color.WHITE)
-	b.add_child(UiKit.rect(Vector2(0, 5), Vector2(4, h - 10.0), col))
+	b.add_child(UiKit.rect(Vector2(9, 12), Vector2(3, h - 24.0), col))   # note 8: the seat neon inside the plate's face, not on its frame
 	var fl := clampf(h * 0.28, 15.0, 22.0)
 	var sl := UiKit.label(self, seat, fl, col, true)
-	sl.position = Vector2(10, (h - UiKit.line_h(self, fl, true)) / 2.0)
+	sl.position = Vector2(18, (h - UiKit.line_h(self, fl, true)) / 2.0)
 	b.add_child(sl)
-	var tx := 10.0 + UiKit.text_w(self, "W", fl, true) + 4.0
+	var tx := 18.0 + UiKit.text_w(self, "W", fl, true) + 4.0
 	var ts := minf(h - 8.0, floorf(r.size.x * 0.24))
 	MenuSkin.ai_hero(self, pick if pick != "random" else "", Vector2(tx, (h - ts) / 2.0), ts, "", b, col)   # M-K: the AI mark in its socket, SEAT-coloured rim
 	if pick == "random":
@@ -4949,13 +4982,13 @@ func show_seats() -> void:
 		UiKit.panel(self, p, Vector2(cw, card_h), faction, s == "A")
 		var ry := p.y + pad_y + kl + 6.0
 		if s == "level":
-			_shell_add(UiKit.label(self, "AI LEVEL", 12, UiKit.accent(faction), true, 3), Vector2(p.x + 14.0, p.y + pad_y))
+			_shell_add(UiKit.label(self, "AI LEVEL", 12, UiKit.COPPER, true, 3), Vector2(p.x + 14.0, p.y + pad_y))
 			_difficulty(Vector2(p.x + 14.0, ry), cw - 28.0)
 			continue
 		var ally: bool = s == "A" or (team.has(s) and team.get(s) == team.get("A", -1))
 		var role := "YOU" if s == "A" else ("AI ALLY" if ally else "AI RIVAL")
 		var kick := "SEAT %s  ·  %s%s" % [s, role, ("  ·  TEAM %d" % (int(team[s]) + 1)) if team.has(s) else ""]
-		_shell_add(UiKit.label(self, kick, 12, UiKit.accent(faction), true, 3), Vector2(p.x + 14.0, p.y + pad_y))
+		_shell_add(UiKit.label(self, kick, 12, UiKit.COPPER, true, 3), Vector2(p.x + 14.0, p.y + pad_y))
 		if s == "A":
 			_shell_add(_cutout(faction, Vector2.ZERO, Vector2(ph, ph)), Vector2(p.x + 14.0, ry))
 			var nl := UiKit.line_h(self, 15, true)
@@ -5379,11 +5412,11 @@ func _seat_chip(i: int, id: int, colours: Dictionary, pos: Vector2, dims: Vector
 	var fl := 18.0 * k
 	var fn := 17.0 * k
 	var fs := 13.0 * k
-	b.add_child(UiKit.rect(Vector2(0, 5), Vector2(4, h - 10.0), col))
+	b.add_child(UiKit.rect(Vector2(9, 12), Vector2(3, h - 24.0), col))   # note 8: inside the plate face
 	var sl := UiKit.label(self, seat, fl, col, true)
-	sl.position = Vector2(12, (h - UiKit.line_h(self, fl, true)) / 2.0)
+	sl.position = Vector2(18, (h - UiKit.line_h(self, fl, true)) / 2.0)
 	b.add_child(sl)
-	var tx := 12.0 + UiKit.text_w(self, "W", fl, true) + 6.0
+	var tx := 18.0 + UiKit.text_w(self, "W", fl, true) + 6.0
 	var ts := minf(h - 8.0, floorf(dims.x * 0.22))      # the character never crowds the name out
 	var ty0 := (h - ts) / 2.0
 	var name_t := ""
@@ -5457,7 +5490,7 @@ func _seat_chip_compact(b: Button, i: int, id: int, col: Color, me: bool, sit: b
 	## SIT HERE / AI), the character at the right; the skills wait for the seat's sheet.
 	var h := b.size.y
 	var w := b.size.x
-	b.add_child(UiKit.rect(Vector2(0, 5), Vector2(4, h - 10.0), col))
+	b.add_child(UiKit.rect(Vector2(9, 12), Vector2(3, h - 24.0), col))   # note 8: inside the plate face
 	var ts := minf(h * 0.6, w * 0.3)
 	var want := UiKit.text_w(self, Net.SEATS[i] + " " + ("YOU" if me else (Net.name_of(id).to_upper() if id >= 0 else "OPEN")), 16, true) + 18.0
 	if w - ts - 10.0 < want:                           # a narrow phone: the name wins, the character goes

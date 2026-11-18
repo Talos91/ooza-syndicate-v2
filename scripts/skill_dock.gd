@@ -535,7 +535,11 @@ func setup(m, s: Sim, seat: String, scale_ui: float, is_mobile: bool, h = null, 
 		if mobile:
 			_floor_px = 12.5 * lab_u
 		add_theme_constant_override("separation", int(round((HudLab.KEY_PITCH - HudLab.KEY_PT.y) * kk)))
-		if Hud40.on():                            # hud-40b6: the 40B5 keys at their registered places (slot = 77 x 68.5 pt, pitch 70.25)
+		if Hud43.on():                            # hud-43: 66 x 58 pt keys, pitch 72, in the 84 pt rail
+			slot_w = Hud43.SLOT_PT.x * lab_u / ui_scale
+			plate_h = Hud43.SLOT_PT.y * lab_u
+			add_theme_constant_override("separation", int(round(Hud43.SLOT_GAP * lab_u)))
+		elif Hud40.on():                          # hud-40b6: the 40B5 keys at their registered places (slot = 77 x 68.5 pt, pitch 70.25)
 			slot_w = Hud40.SLOT_PT.x * lab_u / ui_scale
 			plate_h = Hud40.SLOT_PT.y * lab_u
 			add_theme_constant_override("separation", int(round(Hud40.SLOT_GAP * lab_u)))

@@ -2,7 +2,7 @@ extends Node
 ## Ooze Syndicate 2.0 - online rooms (autoload "Net"). Began as Alpha 11's PeerJS approach, ported from
 ## Game/Alpha 11/scripts/network.gd (the P2P half) to 2.0's seats, maps and Sim:
 ## - the transport is RelayBridge (the room server, see ROOM SERVER below; the PeerJS rooms were removed in Alpha 21);
-## - four-character room codes, 2-6 players: free-for-all (1v1, FFA 3-5) and teams (2v2, 3v3, 2v2v2),
+## - four-character room codes, 2-4 players: free-for-all (1v1, FFA 3-4) and teams (2v2) (5-6 seat modes archived 2026-11-18),
 ##   host-assigned seats (join order); in team modes every player can switch team in the lobby (JOIN
 ##   TEAM, host-validated: a team never exceeds its seats; the host can move players too) and the team
 ##   decides the seat the player gets at DEPLOY (Daniele, 0.18.7: "there should be so i can switch to my
@@ -77,10 +77,12 @@ signal order_feedback(message: String)
 signal seats_changed                               # host: which seats the AI plays changed
 
 const VERSION_TAG := "ooze20-net-8"               # plus Rules.VERSION: guests must match the host exactly (2: team switch, room colours; 3: structures 2.1, teams; 4: server-hosted rooms, room owner; 5: delta snapshots, binary frames; 6: READY; 7: player names; 8: POWERS - new horde keys, Portal [entrance, exit])
-const MODES := ["1v1", "FFA3", "FFA4", "FFA5", "2v2", "3v3", "2v2v2"]
-const MODE_LABELS := {"1v1": "1 V 1", "FFA3": "FFA 3", "FFA4": "FFA 4", "FFA5": "FFA 5", "2v2": "2 V 2", "3v3": "3 V 3", "2v2v2": "2V2V2"}
-const SLOTS := {"1v1": 2, "FFA3": 3, "FFA4": 4, "FFA5": 5, "2v2": 4, "3v3": 6, "2v2v2": 6}
-const TEAM_MODES := ["2v2", "3v3", "2v2v2"]
+# MAX 4 SEATS (Daniele 2026-11-18, screen layout): FFA5, 3v3 and 2v2v2 are ARCHIVED - no selector, no room offers them, a request for
+# one is refused (set_mode). Git history keeps them (before map-pass: MODES 1v1 FFA3 FFA4 FFA5 2v2 3v3 2v2v2, SLOTS up to 6).
+const MODES := ["1v1", "FFA3", "FFA4", "2v2"]
+const MODE_LABELS := {"1v1": "1 V 1", "FFA3": "FFA 3", "FFA4": "FFA 4", "2v2": "2 V 2"}
+const SLOTS := {"1v1": 2, "FFA3": 3, "FFA4": 4, "2v2": 4}
+const TEAM_MODES := ["2v2"]
 const SEATS := ["A", "B", "C", "D", "E", "F"]
 const FACTIONS := ["vex", "null", "bloom", "ember", "solar"]
 const ACTIONS := ["send", "recall", "upgrade", "build_cannon", "build_forge", "restore", "switch", "cast",

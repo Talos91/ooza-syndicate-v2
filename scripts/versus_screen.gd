@@ -416,7 +416,7 @@ func _stage_half(r: Rect2) -> TextureRect:
 	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	t.stretch_mode = TextureRect.STRETCH_SCALE
 	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	t.modulate = Color(0.82, 0.84, 0.88)
+	t.modulate = Color(0.42, 0.33, 0.38)                 # designer 10 (11-18): a dark plum room behind the heroes, not the bright sky city
 	clip.add_child(t)
 	return t
 

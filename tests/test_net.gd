@@ -156,7 +156,7 @@ func _versus_card(m: Node3D, n: Node) -> Node:
 func _run() -> void:
 	MapPool.dir = "res://maps"                     # the legacy roster offers every mode, whatever pack ships
 	# ---------------------------------------------------------------- lobby, every mode
-	for mode in ["1v1", "FFA3", "FFA4", "FFA5", "2v2"]:
+	for mode in ["1v1", "FFA3", "FFA4", "2v2"]:   # map-pass 11-18: FFA5 / 3v3 / 2v2v2 archived (max 4 seats)
 		_open_room(mode)
 		for i in range(1, host.slots()):
 			_join("g%d" % i, ["null", "ember", "bloom", "solar"][i - 1])
@@ -865,11 +865,10 @@ func _test_colours() -> void:
 	host._fix_colours()
 	var c1 := _join("g1", "null")
 	var c2 := _join("g2", "ember")
-	var c3 := _join("g3", "bloom")
-	_deliver()
+	_deliver()                                         # map-pass: three in FFA4 so the newcomer below still has a seat (FFA5 archived)
 	var cols := _colours_of(host).values()
-	check(cols.size() == 4 and cols.all(func(c): return Rules.HUES.has(c)) and _uniq(cols).size() == 4, "FFA: every player gets a distinct colour")
-	check(_colours_of(c1) == _colours_of(host) and _colours_of(c3) == _colours_of(host), "FFA: every guest sees the same colour list")
+	check(cols.size() == 3 and cols.all(func(c): return Rules.HUES.has(c)) and _uniq(cols).size() == 3, "FFA: every player gets a distinct colour")
+	check(_colours_of(c1) == _colours_of(host) and _colours_of(c2) == _colours_of(host), "FFA: every guest sees the same colour list")
 	var taken: String = host.roster[1]["colour"]
 	_to_host("g1", {"op": "colour", "colour": taken})
 	_deliver()
@@ -885,22 +884,21 @@ func _test_colours() -> void:
 	late.remote_host = "host"
 	late.room_code = "AB7K"
 	guests["late"] = late
-	host.set_mode("FFA5")
 	host.links["late"] = host.next_peer
 	host.next_peer += 1
 	_to_host("late", {"op": "register", "version": host.version(), "faction": "solar", "colour": free})
 	_deliver()
-	check(late.assigned_id > 0 and host.roster[late.assigned_id]["colour"] != free and _uniq(_colours_of(host).values()).size() == 5, "a newcomer's taken colour gives way (still unique)")
+	check(late.assigned_id > 0 and host.roster[late.assigned_id]["colour"] != free and _uniq(_colours_of(host).values()).size() == 4, "a newcomer's taken colour gives way (still unique)")
 	host.set_colour("orange" if not "orange" in _colours_of(host).values() else "cyan")
 	check(host.roster[1]["colour"] in ["orange", "cyan"], "the host picks its own colour")
 	# ---------------------------------------------------------------- the launch carries the map, same on both
 	host.set_ai_fill("Casual")
-	host.set_mode("FFA5")
+	host.set_mode("FFA4")
 	_ready_all()
 	host.start_match()
 	_deliver()
 	var hc: Dictionary = host.match_info.get("colours", {})
-	check(hc.size() == 5 and _uniq(hc.values()).size() == 5, "launch: a colour for every seat, all different")
+	check(hc.size() == 4 and _uniq(hc.values()).size() == 4, "launch: a colour for every seat, all different")
 	for id in host.roster:
 		check(hc[host.seat_of(id)] == host.roster[id]["colour"], "launch: seat %s keeps its player's pick" % host.seat_of(id))
 	check(c1.match_info["colours"] == hc and late.match_info["colours"] == hc, "every guest receives the same seat -> colour map")
@@ -1017,25 +1015,25 @@ func _test_teams() -> void:
 	check(host.seat_of(1) == "A" and host.seat_of(m1.assigned_id) == "B" and m1.mode == "FFA3", "FFA: no teams, seats packed in seat order")
 	host.set_mode("3v3")
 	_deliver()
-	check(host.team_of(m1.assigned_id) == host.team_of(1) and host.map_path != "" and host.map_offers(host.map_path, "3v3"), "3v3: the pair stays on one team")
+	check(host.mode == "FFA3", "3v3 is archived (map-pass 11-18, max 4 seats): the room refuses it")
 	host.set_mode("2v2")
 	host.set_map("res://maps4/A-01-orbital-nexus.json")
 	_deliver()
 	check(host.team_of(m1.assigned_id) == host.team_of(1) and host.seat_of(m1.assigned_id) == "C", "back to 2v2 on A-01: still together (A + C)")
 	check(_uniq(_colours_of(host).values()).size() == 2 and host.family_of(host.families(), host.roster[1]["colour"]) == host.family_of(host.families(), host.roster[m1.assigned_id]["colour"]), "after every change the pair keeps one hue family, different hues")
-	# a smaller mode never overfills a team: three on one 3v3 team, then 2v2
-	_open_room("3v3")
+	# a smaller mode never overfills a team: three players, then 2v2 (was three on one 3v3 team; 3v3 archived 11-18)
+	_open_room("FFA4")
 	host._fix_colours()
 	_join("p2", "bloom")
 	_join("p3", "ember")
 	_deliver()
-	check([1, 2, 3].all(func(id): return host.team_of(id) == host.team_of(1)), "3v3: three players on the first team")
+	check(host.roster.size() == 3, "three players in the room")
 	host.set_mode("2v2")
 	_deliver()
 	var sizes := {}
 	for id in host.roster:
 		sizes[host.team_of(id)] = int(sizes.get(host.team_of(id), 0)) + 1
-	check(sizes.values().all(func(n): return n <= 2) and _uniq(host.roster.values().map(func(r): return r["slot"])).size() == 3, "3v3 -> 2v2: the third player moves to the other team (no team over two)")
+	check(sizes.values().all(func(n): return n <= 2) and _uniq(host.roster.values().map(func(r): return r["slot"])).size() == 3, "three -> 2v2: the third player goes to the other team (no team over two)")
 	check(guests["p3"].team_of(3) == host.team_of(3) and guests["p3"].local_seat() == host.seat_of(3), "the guests see the re-validated seats")
 	m1 = guests["p2"]
 	# FFA refuses team switches

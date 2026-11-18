@@ -132,6 +132,9 @@ func _h40_setup(u: float) -> void:
 	## hud-40b6: the control = the vat canvas (66 x 244 pt). Stack: the two B5 feeds (behind, run on to the physical left edge),
 	## PAINT-VAT-FRAME + its neon in your seat colour (this _draw), the goo (hud_goo through MASK-VAT-GOO), glass, the bolted ticks.
 	h40 = true
+	if Hud43.on():
+		_h43_setup(u)
+		return
 	custom_minimum_size = (Hud40.VAT_PT * u).round()
 	_h40_pipes = Hud40.PipeLayer.new(_draw_h40_pipes)
 	_h40_pipes.show_behind_parent = true
@@ -150,6 +153,65 @@ func _h40_setup(u: float) -> void:
 	HudLab.place(_lab_over, Vector2.ZERO, Hud40.VAT_PT * u)
 	_lab_over.draw.connect(_draw_h40_over)
 	add_child(_lab_over)
+
+
+var h43 := false
+
+
+func _h43_setup(u: float) -> void:
+	## hud-43: the 43 vat housing fitted to the SEND column (78 x 239 pt), the neutral liquid master as the goo (faction colour
+	## through hud_goo, 0 % at its bottom), the cable to the left edge (its goo = faction colour), live tick labels.
+	h43 = true
+	custom_minimum_size = (Hud43.VAT_PT * u).round()
+	_lab_goo = HudLab.Goo.new(Hud43.tex("vat_liquid_neutral"), 0)
+	_lab_goo.p("v_top", 0.0)
+	_lab_goo.p("v_bot", 1.0)
+	_lab_goo.p("u_left", 0.0)
+	_lab_goo.p("u_right", 1.0)
+	HudLab.place(_lab_goo, Hud43.VAT_GOO.position * u, Hud43.VAT_GOO.size * u)
+	add_child(_lab_goo)
+	_lab_over = Control.new()
+	_lab_over.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_lab_over.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	HudLab.place(_lab_over, Vector2.ZERO, Hud43.VAT_PT * u)
+	_lab_over.draw.connect(_draw_h43_over)
+	add_child(_lab_over)
+
+
+func _draw_h43_over() -> void:
+	## The share ticks (live text on the glass): the picked one in cream on a seat-neon bar, the others dim; the units under it.
+	var c := _lab_over
+	var u := lab_u
+	var seat := Rules.seat_color(str(main.HUMAN))
+	var fs := maxi(int(round(12.0 * u)), _floor_px())
+	for l in Hud43.VAT_TICKS:
+		var on := is_equal_approx(float(l), float(main.fraction))
+		var p := Vector2(Hud43.VAT_PT.x * 0.5, float(Hud43.VAT_TICKS[l]) * Hud43.VAT_PT.y) * u
+		if on:
+			c.draw_rect(Rect2(p - Vector2(22, 8) * u, Vector2(44, 16) * u), Color(0.1, 0.05, 0.08, 0.55))
+			c.draw_rect(Rect2(p - Vector2(22, 8) * u, Vector2(44, 16) * u), Color(seat, 0.95), false, 1.6 * u, true)
+		HudLab.text_c(c, "%d%%" % int(round(float(l) * 100.0)), p, fs, HudLab.LIGHT if on else Color(HudLab.LIGHT, 0.6), HudLab.bold(),
+				maxi(2, int(2.0 * u)), Color(0, 0, 0, 0.7))
+	var units := _units_line()
+	if units != "":
+		var b := body_rect()
+		HudLab.text_c(c, units, Vector2(b.get_center().x, Hud43.VAT_PT.y * 0.93 * u), maxi(int(round(12.0 * u)), _floor_px()),
+				HudLab.LIGHT, HudLab.bold(), maxi(2, int(2.0 * u)), Color(0, 0, 0, 0.75))
+
+
+func _draw_h43_cable() -> void:
+	## The cable from the physical left edge into the housing's foot (base + goo layer in the faction colour).
+	var u := lab_u
+	var left := (get_global_transform_with_canvas().affine_inverse() * Vector2.ZERO).x - 2.0
+	var y := 211.0 * u
+	var x1 := 9.0 * u
+	var r := Rect2(Vector2(minf(left, -6.0 * u), y), Vector2(x1 - minf(left, -6.0 * u), 9.5 * u))
+	var b := Hud43.tex("vat_cable")
+	var g := Hud43.tex("vat_cable_goo")
+	if b:
+		draw_texture_rect(b, r, false)
+	if g:
+		draw_texture_rect(g, r, false, Hud43.goo_tint(Hud40.goo_of(str(main.HUMAN), str(main.HUMAN))))
 
 
 func _draw_h40_pipes(c: Control) -> void:
@@ -219,6 +281,8 @@ func gmn() -> bool:
 
 func body_rect() -> Rect2:
 	## The tank's inside (the goo's room): the frame's rect minus its rim and the drips under it.
+	if h43:
+		return Rect2(Hud43.VAT_GOO.position * lab_u, Hud43.VAT_GOO.size * lab_u)
 	if h40:                                       # hud-40b6: MASK-VAT-GOO's box
 		return Rect2(Hud40.VAT_GOO.position * lab_u, Hud40.VAT_GOO.size * lab_u)
 	if lab:                                       # hud-lab: the goo master's box: 0 % at its bottom, 100 % at its top
@@ -296,7 +360,8 @@ func _process(dt: float) -> void:
 		_lab_goo.p("slosh", _slosh)
 		_lab_goo.p("tint", tint)
 		if h40:
-			_h40_pipes.set_goo(tint)
+			if _h40_pipes:
+				_h40_pipes.set_goo(tint)
 			_lab_over.queue_redraw()
 			return
 		_lab_feed.p("tint", tint)
@@ -351,6 +416,12 @@ func _draw_lab_over() -> void:
 
 
 func _draw() -> void:
+	if h43:
+		_draw_h43_cable()
+		var t := Hud43.tex("vat_sender_housing")
+		if t:
+			draw_texture_rect(t, Rect2(Vector2.ZERO, Hud43.VAT_PT * lab_u), false)
+		return
 	if h40:
 		Hud40.art(self, "PAINT-VAT-FRAME", Vector2.ZERO, lab_u)
 		Hud40.art(self, "MASK-VAT-NEON-B4", Vector2.ZERO, lab_u, Color(Rules.seat_color(str(main.HUMAN)), 0.85))
