@@ -281,7 +281,7 @@ class Score extends Control:
 			var out: bool = hud.sim.factions.has(seat) and hud._seat_out(seat)
 			var f: String = str(hud.sim.factions.get(seat, "vex"))
 			Hud43.draw_ai_disc(ci, f, c, rad, Color(1, 1, 1, 0.45) if out else Color.WHITE)
-			ci.draw_arc(c, rad, 0.0, TAU, 32, Color(Rules.seat_color(seat), 0.35 if out else 1.0), maxf(1.2, 1.6 * s * 4.0), true)
+			# (Daniele 11-18, via designer 11: no seat ring or square around an AI, anywhere)
 
 
 static func draw_ai_disc(ci: CanvasItem, f: String, c: Vector2, r: float, mod := Color.WHITE, blink := false) -> void:

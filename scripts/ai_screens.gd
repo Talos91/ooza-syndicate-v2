@@ -187,8 +187,7 @@ func _draw_screen(i: int, r: Rect2) -> void:
 		mod = mod.lerp(Color(1.0, 0.45, 0.45), flash[i] / 0.5)
 	if t:
 		draw_texture_rect(t, Rect2(-Vector2(side, side) * 0.5, Vector2(side, side)), false, mod)
-	# the seat neon: a fine ring of the seat colour round the screen's glass (neon = seat colour)
-	draw_rect(Rect2(-Vector2(side, side) * 0.36, Vector2(side, side) * 0.72), Color(Rules.seat_color(seat), 0.55), false, maxf(1.0, side * 0.018))
+	# (Daniele 11-18: "the cyan / red square around the AI shouldn't be there": no seat square on the glass)
 	# the mood plate
 	var col: Color = MOODS[m][0]
 	var word: String = MOODS[m][1]

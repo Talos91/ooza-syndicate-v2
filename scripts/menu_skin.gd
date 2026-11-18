@@ -256,50 +256,23 @@ class MarkAnim extends TextureRect:
 			texture = MenuSkin.mark_tex(_f, n)
 
 
-static func ai_hero(m, f: String, pos: Vector2, s: float, mood := "", parent: Control = null, rim := Color(0, 0, 0, 0)) -> void:
-	## The faction's AI mark (36A, its own colour) in a GEO-SOCKET (200 / 120) whose rim is the SEAT colour. mood "win": a soft
-	## seat-colour burst behind it; "loss": a dim ring, no burst.
-	var piece := "GEO-SOCKET-200" if s > 160.0 else "GEO-SOCKET-120"
-	var col := seat() if rim.a == 0.0 else rim
-	if mood == "win":
-		var grad := Gradient.new()
-		grad.offsets = PackedFloat32Array([0.0, 0.58, 0.8, 1.0])
-		grad.colors = PackedColorArray([Color(col, 0.9), Color(col, 0.85), Color(col, 0.3), Color(col, 0.0)])
-		var gt := GradientTexture2D.new()
-		gt.gradient = grad
-		gt.fill = GradientTexture2D.FILL_RADIAL
-		gt.fill_from = Vector2(0.5, 0.5)
-		gt.fill_to = Vector2(1.0, 0.5)
-		var g := TextureRect.new()
-		g.texture = gt
-		g.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		g.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		g.size = Vector2(s, s) * 1.7
-		_put(m, parent, g, pos - Vector2(s, s) * 0.35)
-	var rim_col := col.darkened(0.7) if mood == "loss" else col
-	var t := TextureRect.new()
-	t.texture = tinted(piece, "MASK-" + piece.substr(4) + "-SEAT-RIM", rim_col)
-	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	t.size = Vector2(s, s)
-	if mood == "loss":
-		t.modulate = Color(0.78, 0.86, 1.0)
-	_put(m, parent, t, pos)
+static func ai_hero(m, f: String, pos: Vector2, s: float, mood := "", parent: Control = null, _rim := Color(0, 0, 0, 0)) -> void:
+	## The faction AI on its small screen (UiKit.ai_screen_path: the copper bezel, the AI, the glitch), s x s, blinking now and then.
+	## Daniele 11-18: "the circle around the AI is not necessary i suggest to use the small screen instead" + "the cyan / red
+	## square around the AI shouldn't be there": no socket, no seat ring, no burst. "loss" dims it.
 	if f == "":
 		return
-	# note 11 (Daniele 11-16: "AIs should use the high-definition version, not the flat icon"): the AI's HD screen face
-	# (UiKit.ai_screen_path, the VERSUS art) as a disc in the socket, blinking now and then; the flat 36B2 mark is gone.
 	var mk := AiFace.new()
 	mk.f = f
 	mk.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	mk.size = Vector2(s, s) * 0.8
+	mk.size = Vector2(s, s)
 	if mood == "loss":
-		mk.modulate = Color(0.82, 0.84, 0.9)
-	_put(m, parent, mk, pos + Vector2(s, s) * 0.1)
+		mk.modulate = Color(0.8, 0.8, 0.86)
+	_put(m, parent, mk, pos)
 
 
 class AiFace extends Control:
-	## The faction AI's HD face in a disc (Hud43.draw_ai_disc), blinking every few seconds.
+	## The faction AI's small screen (UiKit.ai_screen_path), blinking every few seconds.
 	var f := "vex"
 	var _t := randf() * 3.0
 	var _blink := false
@@ -312,7 +285,10 @@ class AiFace extends Control:
 			queue_redraw()
 
 	func _draw() -> void:
-		Hud43.draw_ai_disc(self, f, size * 0.5, minf(size.x, size.y) * 0.5, Color.WHITE, _blink)
+		var t := UiKit.tex(UiKit.ai_screen_path(f, _blink))
+		if t != null:
+			var d := minf(size.x, size.y)
+			draw_texture_rect(t, Rect2((size - Vector2(d, d)) / 2.0, Vector2(d, d)), false)
 
 
 static func _lum(c: Color) -> float:
