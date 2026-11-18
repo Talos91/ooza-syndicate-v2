@@ -20,6 +20,8 @@ var currency := "soft"
 var duration := 0.9                                # seconds of counting; the pop after it is 0.25 s
 var pt: Callable
 var sign := true                                   # false: a balance ("1 260 SCRAP"), not a gain
+const CHIP_W := 88.0
+const CHIP_H := 30.0
 var chip := false                                  # 40B2 M-J chip: an ivory plate, the icon well and a fixed 5-digit number box (top bar balances)
 var named := true                                  # false: the number and its mark only ("1 260" + the nut)
 var _t := -1.0                                     # < 0: not playing
@@ -77,8 +79,8 @@ func fit() -> void:
 func _resize() -> void:
 	var fs := _font_size()
 	var w := _p(H) + _p(8) + HEAD_FONT.get_string_size(_fmt(amount), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-	if chip:                                          # 38A2 currency chip: 64 pt wide, 26 pt tall (20 pt icon well + 39 pt number box)
-		custom_minimum_size = Vector2(_p(64.0), _p(26.0))
+	if chip:                                          # 43B M-J currency chip (note 7, "currencies too small"): 88 x 30 pt, 17 pt numbers
+		custom_minimum_size = Vector2(_p(CHIP_W), _p(CHIP_H))
 		size = custom_minimum_size
 		return
 	custom_minimum_size = Vector2(minf(w + _p(6), _p(MAX_W)), _p(H))
@@ -103,10 +105,17 @@ func _process(delta: float) -> void:
 
 
 func _draw() -> void:
-	var h := _p(26.0) if chip else _p(H)
+	var h := _p(CHIP_H) if chip else _p(H)
 	var col: Color = COLOURS.get(currency, Color.WHITE)
-	if chip:
-		draw_style_box(MenuSkin.box(MenuSkin.tinted("GEO-P7-small", "", Color.WHITE), Vector4(20, 0, 20, 0), Color.WHITE, Vector2(0, 0)), Rect2(Vector2.ZERO, size))
+	if chip:                                          # the cream chip with its dark icon well (43B GEO-M-J), the 43B coin glyph
+		draw_style_box(MenuSkin.box(MenuSkin.tex("GEO-M-J"), Vector4(60, 0, 24, 0), Color.WHITE, Vector2(0, 0)), Rect2(Vector2.ZERO, size))
+		var g := MenuSkin.icon("CUR-2" if currency == "premium" else "CUR-1")
+		var gs := h * 0.62 * (1.0 + sin(_pop * PI) * 0.18)
+		if g != null:
+			draw_texture_rect(g, Rect2(Vector2(h * 0.53, h * 0.5) - Vector2(gs, gs) * 0.5, Vector2(gs, gs)), false, col)
+		var cfs := int(round(_p(17.0)))
+		draw_string(HEAD_FONT, Vector2(h * 1.12, h * 0.5 + cfs * 0.36), _text(), HORIZONTAL_ALIGNMENT_CENTER, size.x - h * 1.12 - _p(6), cfs, MenuSkin.INK_DARK)
+		return
 	var bump := sin(_pop * PI) * 0.18                 # the mark pops once when the count lands
 	var c := Vector2(h * 0.5, h * 0.5)
 	var r := h * 0.42 * (1.0 + bump)

@@ -52,10 +52,16 @@ func _build(f: String) -> void:
 	for i in range(TABS.size()):
 		var id: String = TABS[i][0]
 		# UI (0.22.1): through the Menu (it outlives a rebuild during the tap's flash frame), not this bar's signal
+		# 43B nav (proof HOME / ARMIES): every tab a cream key with its glyph; the open one lit (SELECTED paint + seat lamp)
 		var b := UiKit.make_btn(menu, TABS[i][1], Vector2(tw - 12.0, th), Callable(menu, "_on_tab").bind(id),
-				"primary" if id == active else "tertiary", f, 15)
-		if id != active:
-			b.add_theme_color_override("font_color", UiKit.MUTED)
+				"secondary", f, 15)
+		MenuSkin.style_ivory(b, "tab" if id == active else "secondary")
+		b.icon = MenuSkin.icon("NAV-" + id.to_upper())
+		b.expand_icon = true
+		b.add_theme_constant_override("icon_max_width", int(th * 0.5))
+		b.add_theme_constant_override("h_separation", int(th * 0.16))
+		for k in ["icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_hover_pressed_color", "icon_focus_color"]:
+			b.add_theme_color_override(k, MenuSkin.INK_DARK)
 		b.position = Vector2(x0 + i * tw + 6.0, (h - b.size.y) / 2.0)
 		add_child(b)
 		buttons[id] = b

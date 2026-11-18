@@ -1,12 +1,15 @@
 class_name MenuSkin
 extends RefCounted
-## Round 40B2 menu chrome (0.24.5 import, designer 9's list): the painted pieces of
-## `References/Art direction 2026-11 - syndicate uniforms/DIRECTOR-PACKAGE/deliveries/40-ui-hybrid-chamfer-B2/cut` at 2x
-## (1 px = 0.5 pt; the menu canvas is about 2 units per pt), in assets/ui/menu40. Ivory P7 keys, dark glass plates, tabs.
-## COLOUR RULE: neon = SEAT colour. The seat rims are inherited state masks (white, alpha = coverage; 40A) composited over
-## the painted piece in the seat's colour at run time and cached per (piece, colour); goo is never touched here.
-const DIR := "res://assets/ui/menu40/"
-const INK_DARK := Color("1a1710")                   # lettering on ivory
+## Round 43B copper punk menu chrome (ui-build-43b, Daniele's theme lock 2026-11-17): the painted pieces of
+## `References/Art direction 2026-11 - syndicate uniforms/DIRECTOR-PACKAGE/deliveries/43B-menu-paint/cut` at 2x
+## (1 px = 0.5 pt; the menu canvas is about 2 units per pt) in assets/ui/menu43 (tools: ooze-wt/ui-build-43b-tools/prep43b.py).
+## Same canvases / 9-slice margins as the 40B2 masters (board_geo_diff 0 failures). Cream keys, burgundy cabinet, smoked plum
+## glass, bronze trim. Every key family has its four painted states (NORMAL / PRESSED / DISABLED / SELECTED); SELECTED carries
+## a seat lamp (LAMP-WHITE mask) composited in the SEAT colour at run time. COLOUR RULE: neon = SEAT colour; goo never here.
+const DIR := "res://assets/ui/menu43/"
+const INK_DARK := Color("2a1620")                   # lettering on cream (burgundy-black)
+const BRONZE := Color("c08a55")                     # the trim metal (selected rings)
+const INK_OFF := Color("d9c6b4")                    # lettering on a DISABLED key
 static var _cache := {}
 
 
@@ -17,6 +20,10 @@ static func seat() -> Color:
 static func img(n: String) -> Image:
 	var t := load(DIR + n + ".png") as Texture2D
 	return t.get_image() if t != null else null
+
+
+static func tex(n: String) -> Texture2D:
+	return load(DIR + n + ".png") as Texture2D
 
 
 static func tinted(piece: String, mask: String, col: Color) -> Texture2D:
@@ -43,14 +50,20 @@ static func tinted(piece: String, mask: String, col: Color) -> Texture2D:
 					bd[i] = int(lerpf(bd[i], r8, k))
 					bd[i + 1] = int(lerpf(bd[i + 1], g8, k))
 					bd[i + 2] = int(lerpf(bd[i + 2], b8, k))
+					bd[i + 3] = maxi(bd[i + 3], a)
 			t = ImageTexture.create_from_image(Image.create_from_data(base.get_width(), base.get_height(), false, Image.FORMAT_RGBA8, bd))
 	_cache[key] = t
 	return t
 
 
-static func box(tex: Texture2D, ltrb: Vector4, mod := Color.WHITE, margin := Vector2(14, 6)) -> StyleBoxTexture:
+static func selected_tex(piece: String) -> Texture2D:
+	## A family's SELECTED paint with its lamp lit in the seat colour.
+	return tinted(piece + "-SELECTED", piece + "-SELECTED-LAMP-WHITE", seat())
+
+
+static func box(t: Texture2D, ltrb: Vector4, mod := Color.WHITE, margin := Vector2(14, 6)) -> StyleBoxTexture:
 	var s := StyleBoxTexture.new()
-	s.texture = tex
+	s.texture = t
 	s.texture_margin_left = ltrb.x
 	s.texture_margin_top = ltrb.y
 	s.texture_margin_right = ltrb.z
@@ -65,60 +78,118 @@ static func box(tex: Texture2D, ltrb: Vector4, mod := Color.WHITE, margin := Vec
 	return s
 
 
+class LampBox extends StyleBox:
+	## A plate with the SELECTED marks the keys carry (notes 1 / 10: one selected look everywhere): a bronze ring inside the
+	## chamfer and the seat lamp, a 3 pt bar along the bottom (70 % wide). Picked cards, rows, tiles and panels.
+	var inner: StyleBox
+	var lamp := Color.CYAN
+	var ring := Color("c08a55")
+	var unit := 2.0                                   # canvas units per pt
+
+	func _draw(ci: RID, r: Rect2) -> void:
+		inner.draw(ci, r)
+		var w := maxf(2.0, 1.2 * unit)
+		var c := 10.0 * unit
+		var pts := PackedVector2Array([r.position + Vector2(c, w), r.position + Vector2(r.size.x - w, w),
+			r.position + Vector2(r.size.x - w, r.size.y - c), r.position + Vector2(r.size.x - c, r.size.y - w),
+			r.position + Vector2(w, r.size.y - w), r.position + Vector2(w, c), r.position + Vector2(c, w)])
+		RenderingServer.canvas_item_add_polyline(ci, pts, PackedColorArray([ring]), w, true)
+		var lw := r.size.x * 0.7
+		var lh := 3.0 * unit
+		var lr := Rect2(r.position.x + (r.size.x - lw) * 0.5, r.end.y - lh - 2.5 * unit, lw, lh)
+		RenderingServer.canvas_item_add_rect(ci, lr.grow(unit * 1.5), Color(lamp, 0.25))
+		RenderingServer.canvas_item_add_rect(ci, lr, lamp)
+		RenderingServer.canvas_item_add_rect(ci, Rect2(lr.position.x, lr.position.y + lh * 0.35, lw, lh * 0.3), Color(1, 1, 1, 0.55))
+
+
+static func lamp_plate(margin := Vector2(14, 12)) -> StyleBox:
+	var s := LampBox.new()
+	s.inner = box(tex("SHELL-M-E"), Vector4(28, 28, 28, 30), Color(1.22, 1.14, 1.12), margin)
+	s.lamp = seat()
+	s.ring = BRONZE
+	s.content_margin_left = margin.x
+	s.content_margin_right = margin.x
+	s.content_margin_top = margin.y
+	s.content_margin_bottom = margin.y
+	return s
+
+
+const FONT_KEYS := ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]
+
+
 static func ivory(kind: String) -> Array:
-	## [piece, rim mask, ltrb margins] of the ivory keys: primary = P7 with the seat rim, small = nav / chip key.
+	## [piece family, ltrb margins, lit] of the cream keys. primary = P7 lit (the page's main action carries the seat lamp, as on
+	## the 43B proofs); secondary / small plain; tab = small lit; quit = the dark QUIT control.
 	match kind:
 		"primary":
-			return ["GEO-P7", "MASK-P7-ACCENT-RIM", Vector4(20, 0, 20, 0)]
+			return ["GEO-P7", Vector4(20, 0, 20, 0), true]
 		"small":
-			return ["GEO-P7-small", "", Vector4(20, 0, 20, 0)]
+			return ["GEO-P7-small", Vector4(20, 0, 20, 0), false]
+		"quit":
+			return ["GEO-P7-small-QUIT", Vector4(20, 0, 20, 0), false]
+		"tab":
+			return ["GEO-P7-small", Vector4(20, 0, 20, 0), true]
 		_:
-			return ["GEO-P7-secondary", "", Vector4(20, 0, 20, 0)]
+			return ["GEO-P7-secondary", Vector4(20, 0, 20, 0), false]
+
+
+static func _states(b: Button, fam: String, m: Vector4, lit: bool) -> void:
+	## The four painted states of one family (note 10: every key changes the same way; the shape never changes).
+	var n: Texture2D = selected_tex(fam) if lit else tex(fam)
+	var pr: Texture2D = tex(fam + "-PRESSED")
+	b.add_theme_stylebox_override("normal", box(n, m))
+	b.add_theme_stylebox_override("hover", box(n, m, Color(1.05, 1.04, 1.02)))
+	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	b.add_theme_stylebox_override("pressed", box(pr, m))
+	b.add_theme_stylebox_override("hover_pressed", box(pr, m))
+	b.add_theme_stylebox_override("disabled", box(tex(fam + "-DISABLED"), m))
 
 
 static func style_ivory(b: Button, kind: String) -> void:
-	b.set_meta("mskin", "tab" if kind == "tab" else "key")
+	b.set_meta("mskin", "tab" if kind == "tab" else ("quit" if kind == "quit" else "key"))
 	_settle.call_deferred(b)
-	## An ivory key (P7): normal, a touch lighter on hover, pressed darker; lettering dark; the seat rim on `primary`.
 	var spec := ivory(kind)
-	var col := seat()
-	var tex := tinted(spec[0], spec[1], col)
-	b.add_theme_stylebox_override("normal", box(tex, spec[2]))
-	b.add_theme_stylebox_override("hover", box(tex, spec[2], Color(1.06, 1.06, 1.04)))
-	b.add_theme_stylebox_override("pressed", box(tex, spec[2], Color(0.86, 0.85, 0.8)))
-	b.add_theme_stylebox_override("hover_pressed", box(tex, spec[2], Color(0.86, 0.85, 0.8)))
-	b.add_theme_stylebox_override("disabled", strip(0.75))
-	for k in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
-		b.add_theme_color_override(k, INK_DARK)
-	b.add_theme_color_override("font_disabled_color", UiKit.INK)
+	_states(b, spec[0], spec[1], spec[2])
+	var ink := UiKit.INK if kind == "quit" else INK_DARK
+	for k in FONT_KEYS:
+		b.add_theme_color_override(k, ink)
+	b.add_theme_color_override("font_disabled_color", INK_OFF)
 
 
 static func style_tab(b: Button, active: bool) -> void:
+	## A tab / chip key (M-D, cream): `active` = the SELECTED paint with the seat lamp (picked tiles, chips, the top-right keys).
 	b.set_meta("mskin", "tab")
 	b.set_meta("mrim", active)
 	_settle.call_deferred(b)
-	## A dark glass tab (M-D); `active` carries the seat-colour rim (picked tiles, chips, the top-right round keys).
-	var col := seat()
-	var tex := tinted("GEO-M-D", "MASK-M-D-ACTIVE" if active else "", col)
-	var m := Vector4(28, 0, 28, 0)
-	b.add_theme_stylebox_override("normal", box(tex, m))
-	b.add_theme_stylebox_override("hover", box(tex, m, Color(1.18, 1.18, 1.18)))
-	b.add_theme_stylebox_override("pressed", box(tex, m, Color(0.8, 0.8, 0.8)))
-	b.add_theme_stylebox_override("hover_pressed", box(tex, m, Color(0.8, 0.8, 0.8)))
-	b.add_theme_stylebox_override("disabled", strip(0.75))
-	for k in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
+	_states(b, "GEO-M-D", Vector4(28, 0, 28, 0), active)
+	for k in FONT_KEYS:
 		b.add_theme_color_override(k, INK_DARK)
-	b.add_theme_color_override("font_disabled_color", UiKit.INK)
+	b.add_theme_color_override("font_disabled_color", INK_OFF)
 
 
 static func plate(fill_alpha := 1.0, strong := false) -> StyleBoxTexture:
-	## The content panel (M-E dark glass, 9-slice 14 pt = 28 px); `fill_alpha` < 1 lets the painting through (HOME: 0.6).
-	return box(load(DIR + "GEO-M-E.png"), Vector4(28, 28, 28, 30), Color(1, 1, 1, fill_alpha), Vector2(14, 12))
+	## The content panel (M-E smoked plum glass in its burgundy cabinet, 9-slice 14 pt = 28 px); `fill_alpha` < 1 lets the
+	## painting through.
+	return box(tex("SHELL-M-E"), Vector4(28, 28, 28, 30), Color(1, 1, 1, fill_alpha), Vector2(14, 12))
 
 
 static func strip(fill_alpha := 1.0) -> StyleBoxTexture:
-	## A bar (M-C dark glass plate, stretched across): top bar, nav bar.
-	return box(load(DIR + "SHELL-M-C.png"), Vector4(28, 14, 28, 14), Color(1, 1, 1, fill_alpha), Vector2(14, 0))
+	## A bar (M-C burgundy cabinet strip, stretched across): top bar, nav bar, title bands.
+	return box(tex("SHELL-M-C"), Vector4(28, 14, 28, 14), Color(1, 1, 1, fill_alpha), Vector2(14, 0))
+
+
+static func icon(role: String) -> Texture2D:
+	## 43B glyph (flat white mask, 128 px): NAV-HOME / NAV-ARMIES / NAV-PROFILE / NAV-GUIDE, CUR-1 / CUR-2, SKILL-<NAME>.
+	return tex("ICON-" + role)
+
+
+static func skill_icon(id: String) -> Texture2D:
+	## The 43B skill glyph for a skill id (null when the pack has none: the caller keeps its own).
+	var n := id.to_upper().replace("_", "-")
+	var alias := {"OVERDRIVE": "SURGE", "SPORE": "SPORE-BURST", "GHOST": "GHOST-LINE", "FOG": "FOG-OF-WAR", "HACK": "RELAY-HACK",
+		"RELAY-HIJACK": "RELAY-HACK", "EMERGENCY-EVAC": "EVAC"}
+	n = alias.get(n, n)
+	return tex("ICON-SKILL-" + n) if ResourceLoader.exists(DIR + "ICON-SKILL-" + n + ".png") else null
 
 
 static func _put(m, parent: Control, c: Control, pos: Vector2) -> void:
@@ -204,27 +275,25 @@ static func _lum(c: Color) -> float:
 
 
 static func _settle(b: Button) -> void:
-	## Ivory is for compact keys that carry only their own lettering. A key that is big (rows, tiles, cards), or has children laid
-	## over it (emblems, captions, numbers in light ink), takes the dark glass card instead (the seat rim when picked); a compact
-	## key whose caller set a light font colour gets dark lettering.
+	## Cream is for compact keys that carry only their own lettering. A key that is big (rows, tiles, cards), or has children laid
+	## over it (emblems, captions, numbers in light ink), takes the plum glass card instead; picked = the same card with the
+	## SELECTED marks (bronze ring + seat lamp) the keys carry, never the old flat rim (note 1).
 	if not is_instance_valid(b) or not b.is_inside_tree():
 		return
-	var col := seat()
 	var big := b.size.y > 190.0 or b.get_child_count() > 0
 	var tab: bool = str(b.get_meta("mskin", "")) == "tab"
 	if big:
-		var card := plate()
-		var ring := (UiKit.sb(Color(col.darkened(0.8), 0.96), col, 2) if (tab and b.get_meta("mrim", false)) else null)
-		var norm: StyleBox = ring if ring != null else card
+		var picked: bool = tab and b.get_meta("mrim", false)
+		var norm: StyleBox = lamp_plate() if picked else plate()
 		b.add_theme_stylebox_override("normal", norm)
-		b.add_theme_stylebox_override("hover", ring if ring != null else box(load(DIR + "GEO-M-E.png"), Vector4(28, 28, 28, 30), Color(1.25, 1.25, 1.25), Vector2(14, 12)))
-		b.add_theme_stylebox_override("pressed", ring if ring != null else box(load(DIR + "GEO-M-E.png"), Vector4(28, 28, 28, 30), Color(0.75, 0.75, 0.75), Vector2(14, 12)))
+		b.add_theme_stylebox_override("hover", norm if picked else box(tex("SHELL-M-E"), Vector4(28, 28, 28, 30), Color(1.18, 1.12, 1.1), Vector2(14, 12)))
+		b.add_theme_stylebox_override("pressed", norm if picked else box(tex("SHELL-M-E"), Vector4(28, 28, 28, 30), Color(0.78, 0.74, 0.74), Vector2(14, 12)))
 		b.add_theme_stylebox_override("hover_pressed", b.get_theme_stylebox("pressed"))
 		b.add_theme_stylebox_override("disabled", plate(0.6))
-		for k in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
+		for k in FONT_KEYS:
 			if b.has_theme_color_override(k) and _lum(b.get_theme_color(k)) < 0.4:
 				b.add_theme_color_override(k, UiKit.INK)
 	else:
-		for k in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
+		for k in FONT_KEYS:
 			if b.has_theme_color_override(k) and _lum(b.get_theme_color(k)) > 0.6:
-				b.add_theme_color_override(k, INK_DARK)
+				b.add_theme_color_override(k, UiKit.INK if str(b.get_meta("mskin", "")) == "quit" else INK_DARK)

@@ -554,7 +554,7 @@ func page_title(area: Rect2, kicker: String, headline: String, size := 34.0) -> 
 		if kw + 18.0 + hw <= content.size.x * 0.62 - x:
 			var ty := area.position.y + 10.0
 			var hl := UiKit.label(self, headline.to_upper(), hs, UiKit.INK, true)
-			var kl := UiKit.label(self, kicker.to_upper(), 12, UiKit.accent(shell_f), true, 3)
+			var kl := UiKit.label(self, kicker.to_upper(), 12, UiKit.COPPER, true, 3)
 			var rowh := UiKit.line_h(self, hs, true)      # (font measures: a label off the tree reports its default size)
 			UiKit.band(self, Rect2(x - 14.0, ty - 6.0, kw + 18.0 + hw + 32.0, rowh + 12.0))
 			_shell_add(kl, Vector2(x, ty + (rowh - UiKit.line_h(self, 12, true)) / 2.0 + 2.0))
@@ -867,14 +867,15 @@ COMING SOON"   # (a name is never dropped: two lines when one will not fit)
 			var bw: float = maxf(UiKit.text_w(self, str(words[0]), 13, true) + str(words[0]).length() * 3.0, UiKit.text_w(self, long_line, st[0], true))
 			if need <= free:
 				UiKit.band(self, Rect2(hx - 16.0, hy - 8.0, minf(bw + 40.0, qr - hx + 40.0), need + 18.0))   # 40B2 title plate: dark glass under tagline + title
-			_shell_add(UiKit.label(self, str(words[0]), 13, acc, true, 3), Vector2(hx, hy))
+			_shell_add(UiKit.label(self, str(words[0]), 13, UiKit.COPPER, true, 3), Vector2(hx, hy))
 			hy += UiKit.line_h(self, 13, true) + 6.0
 			if need <= free:
 				_shell_add(UiKit.label(self, st[1], st[0], UiKit.INK, true), Vector2(hx - 3.0, hy))
 				hy += UiKit.line_h(self, st[0], true) * lines + 6.0
 			break
 	var fb := UiKit.flat_button(self, "FULLSCREEN" if OS.has_feature("web") else "QUIT", 13, UiKit.MUTED)
-	fb.size = Vector2(UiKit.text_w(self, fb.text, 13, true) + 20.0, fh)
+	MenuSkin.style_ivory(fb, "quit")                   # 43B: QUIT is a control (the dark QUIT key), not loose text
+	fb.size = Vector2(UiKit.text_w(self, fb.text, 13, true) + 48.0, fh)
 	fb.pressed.connect(func():
 		if OS.has_feature("web"):
 			FullscreenGate.request()
@@ -894,7 +895,14 @@ COMING SOON"   # (a name is never dropped: two lines when one will not fit)
 
 func _col_back(r: Rect2) -> void:
 	## HOME's column rows sit on an (almost) opaque dark plate: the painting never shows through a button (designer 8).
-	content.add_child(UiKit.rect(r.position, r.size, Color(UiKit.BASE, 0.9)))
+	## Note 3 (Daniele 11-16: CHALLENGES / TRAINING "not overlaid properly, background wrong"): the plate is the chamfered
+	## M-E cabinet, a margin wider than the keys, never a square dark box.
+	var p := Panel.new()
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.add_theme_stylebox_override("panel", MenuSkin.plate(0.92))
+	p.position = r.position - Vector2(10, 10)
+	p.size = r.size + Vector2(20, 20)
+	content.add_child(p)
 
 
 var _home_install_x := 0.0
@@ -927,7 +935,7 @@ func _home_tile(r: Rect2, pad: float, kicker: String, title: String, sub: String
 		pn.add_theme_stylebox_override("panel", MenuSkin.plate(0.6))            # HOME: container fill 60 % over the painting
 	var y := r.position.y + pad
 	var iw := r.size.x - pad * 2.0
-	_clip(kicker, Vector2(r.position.x + pad, y), 12, UiKit.accent(faction), iw, true)
+	_clip(kicker, Vector2(r.position.x + pad, y), 12, UiKit.COPPER, iw, true)
 	y += UiKit.line_h(self, 12, true) + 4.0
 	_clip(title, Vector2(r.position.x + pad, y), 16, UiKit.INK, iw, true)
 	y += UiKit.line_h(self, 16, true)
@@ -4949,13 +4957,13 @@ func show_seats() -> void:
 		UiKit.panel(self, p, Vector2(cw, card_h), faction, s == "A")
 		var ry := p.y + pad_y + kl + 6.0
 		if s == "level":
-			_shell_add(UiKit.label(self, "AI LEVEL", 12, UiKit.accent(faction), true, 3), Vector2(p.x + 14.0, p.y + pad_y))
+			_shell_add(UiKit.label(self, "AI LEVEL", 12, UiKit.COPPER, true, 3), Vector2(p.x + 14.0, p.y + pad_y))
 			_difficulty(Vector2(p.x + 14.0, ry), cw - 28.0)
 			continue
 		var ally: bool = s == "A" or (team.has(s) and team.get(s) == team.get("A", -1))
 		var role := "YOU" if s == "A" else ("AI ALLY" if ally else "AI RIVAL")
 		var kick := "SEAT %s  ·  %s%s" % [s, role, ("  ·  TEAM %d" % (int(team[s]) + 1)) if team.has(s) else ""]
-		_shell_add(UiKit.label(self, kick, 12, UiKit.accent(faction), true, 3), Vector2(p.x + 14.0, p.y + pad_y))
+		_shell_add(UiKit.label(self, kick, 12, UiKit.COPPER, true, 3), Vector2(p.x + 14.0, p.y + pad_y))
 		if s == "A":
 			_shell_add(_cutout(faction, Vector2.ZERO, Vector2(ph, ph)), Vector2(p.x + 14.0, ry))
 			var nl := UiKit.line_h(self, 15, true)

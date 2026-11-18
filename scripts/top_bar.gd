@@ -80,7 +80,7 @@ func _build(crumb: String, f: String) -> void:
 	add_child(glyph)
 	# MUSIC (Daniele 2026-09-29/30): the top-right instant mute - Music.toggle_on(), a drawn note glyph (slashed + dim OFF)
 	var music_btn := _square("", gear.position - Vector2(q + 8.0, 0), q, f)
-	music_btn.tooltip_text = "MUSIC"
+	music_btn.tooltip_text = "SOUND"
 	var music_glyph := Control.new()
 	music_glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	music_glyph.position = music_btn.position
@@ -172,17 +172,22 @@ func _draw_gear(c: Control, q: float) -> void:
 
 
 func _draw_note(c: Control, q: float) -> void:
-	## MUSIC (0.22.x): a drawn eighth-note - dim and slashed through when OFF (no icon for it in the kit yet).
+	## SOUND key (note 16, "broken icon"): a speaker with two sound waves (the 43B top-bar glyph); OFF = the waves give way
+	## to a cross, drawn in the same ink, so the key never reads as a broken note.
 	var on := Music.music_on()
-	var col := MenuSkin.INK_DARK if on else Color(MenuSkin.INK_DARK, 0.45)
-	var o := Vector2(q * 0.36, q * 0.66)
-	var r := q * 0.1
-	c.draw_circle(o, r, col)
-	var stem_top := o + Vector2(r * 0.92, -q * 0.36)
-	c.draw_line(o + Vector2(r * 0.92, 0), stem_top, col, q * 0.06)
-	c.draw_line(stem_top, stem_top + Vector2(q * 0.18, q * 0.1), col, q * 0.06)
-	if not on:
-		c.draw_line(Vector2(q * 0.16, q * 0.86), Vector2(q * 0.84, q * 0.14), col, q * 0.08)
+	var col := MenuSkin.INK_DARK
+	var w := q * 0.07
+	var body := PackedVector2Array([Vector2(0.22, 0.42), Vector2(0.34, 0.42), Vector2(0.5, 0.28), Vector2(0.5, 0.72),
+		Vector2(0.34, 0.58), Vector2(0.22, 0.58)])
+	for i in body.size():
+		body[i] *= q
+	c.draw_colored_polygon(body, col)
+	if on:
+		c.draw_arc(Vector2(q * 0.5, q * 0.5), q * 0.12, -0.9, 0.9, 12, col, w, true)
+		c.draw_arc(Vector2(q * 0.5, q * 0.5), q * 0.23, -0.9, 0.9, 16, col, w, true)
+	else:
+		c.draw_line(Vector2(q * 0.6, q * 0.38), Vector2(q * 0.8, q * 0.62), col, w * 1.1)
+		c.draw_line(Vector2(q * 0.8, q * 0.38), Vector2(q * 0.6, q * 0.62), col, w * 1.1)
 
 
 var glass := false                                 # HOME (35C2): the bar is a glass strip over the painting
