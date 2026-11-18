@@ -251,15 +251,32 @@ func _text_for(e: Dictionary) -> Array:
 		"e054": return [str(UiKit.SUBS.get(army, "")) if str(UiKit.SUBS.get(army, "")) != "" else "OOZE"]
 		"e055": return [UiKit.NAMES[army]]
 		"e059": return [str(ftrait[0]).to_upper()]
+		"e060" when _compact(): return [_stats1()]          # a small screen: the trait name + the stats only (floor 12.5 pt)
+		"e061" when _compact(): return [""]
+		"e062" when _compact(): return [_stats2()]
+		"e063" when _compact(): return [""]
 		"e060", "e061":
 			var lines := _wrap(str(ftrait[1]), e, 580.0)
 			var i := 0 if e["id"] == "e060" else 1
 			return [lines[i] if i < lines.size() else ""]
-		"e062": return ["SPD %d   HP %d   ATK %d" % [_st("speed"), _st("health"), _st("attack")]]
-		"e063": return ["PROD %d    GARRISON %d" % [_st("production"), _st("garrison")]]
+		"e062": return [_stats1()]
+		"e063": return [_stats2()]
 		"e070": return [ArmyPresets.skill_name(ult).to_upper()]
 		"e071": return ["~%d s charge" % int(Rules.ult_charge_time(ult))]
 	return [str(e.get("text", ""))]
+
+
+func _compact() -> bool:
+	## The phone's 12.5 pt floor is well over the delivered 9 pt body text (a 16:9 phone: the body scales down to fit).
+	return m != null and float(UiKit.px(m, 0.0)) > 37.0 * s * 1.25
+
+
+func _stats1() -> String:
+	return "SPD %d   HP %d   ATK %d" % [_st("speed"), _st("health"), _st("attack")]
+
+
+func _stats2() -> String:
+	return "PROD %d    GARRISON %d" % [_st("production"), _st("garrison")]
 
 
 func _st(k: String) -> int:
