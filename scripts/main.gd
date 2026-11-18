@@ -7,7 +7,7 @@ extends Node3D
 ## relay's button platform off the rim is a second tap target for its node (double-tap it, or the node, to fire).
 ## Command-line user args (after `--`):
 ##   --map=res://maps4/T-01-first-steps.json  map to load (skips the title screen)
-##   --mode=1v1|2v2|3v3|2v2v2|FFA3|FFA4|FFA5  match mode (the map's first mode if it lacks this one)
+##   --mode=1v1|2v2|FFA3|FFA4  match mode (the map's first mode if it lacks this one; 5-6 seat modes archived 2026-11-18)
 ##   --demo                                 every seat played by the AI
 ##   --ai=Training|Casual|Standard|Veteran|Expert  AI level (Rules.AI_LEVELS; the menu picks it otherwise)
 ##   --brawl (alias --classic)              no-op: BRAWL is the only mode since 0.18.7 (SIEGE deactivated)
@@ -155,7 +155,7 @@ var perf_on := "--perf" in OS.get_cmdline_user_args()   # debug flag, read once
 var _pending_inspect := -1                    # single tap: inspector opens after the double-tap window
 var _pending_at := 0.0
 var _swallow_release := false
-var mode := "1v1"                             # 1v1 / 2v2 / 3v3 / 2v2v2 / FFA3-5 (the map's seats key)
+var mode := "1v1"                             # 1v1 / 2v2 / FFA3-4 (the map's seats key; max 4 seats since 2026-11-18)
 var color_choice := "A"                       # your ownership colour: palette key or "faction"
 var menu_layer: CanvasLayer
 static var relaunch := {}                     # survives a scene reload: Play again / Main menu
@@ -1066,6 +1066,22 @@ func _apply_safe_area() -> void:
 	margins = Vector4(left, top, right, bottom)
 
 
+func pit_rect() -> Rect2:
+	## THE PIT (map-pass 2026-11-18, SCREEN-LAYOUT-SPEC section 1, Daniele's frame 11-18): the stadium the map is framed in, between the
+	## SEND and SKILL columns, under the score / AI screens, above the bottom strip. Side margin = max(11.25 % of the safe width,
+	## 88 pt x k), top 66 pt x k, bottom 16 pt x k (k = hud_k / hud_k on the 360 pt Fold front). Safe width = screen minus the
+	## device's side insets (a camera cut-out). On the Fold front it is exactly his frame: x 11.3..88.7 %, y 18.3..95.6 %.
+	var vp := get_viewport().get_visible_rect().size
+	var ppt := UiKit.pt_per_px(vp)
+	var k := UiKit.hud_k(vp) / UiKit.hud_k_for(360.0)
+	var ins := UiKit.safe_insets(vp)
+	var sx0 := ins.x
+	var sw := vp.x - ins.x - ins.z
+	var mx := maxf(0.1125 * sw, 88.0 * k / ppt)
+	var top := 66.0 * k / ppt
+	return Rect2(sx0 + mx, top, maxf(sw - 2.0 * mx, 100.0), maxf(vp.y - top - 16.0 * k / ppt, 100.0))
+
+
 func _build_world() -> void:
 	sun = Scenery.build_environment(self, mobile)      # sky light, lights, glow and fog (scenery.gd)
 	cam = Camera3D.new()
@@ -1161,6 +1177,8 @@ func _fit_nodes(nodes: Array) -> Array:
 	var bottom: float = vp.y - (hud.bottom_used() if use_hud else 8.0)
 	var right: float = vp.x - (hud.right_used() if use_hud else 8.0)   # PAUSE's column and the skill column (Alpha 24)
 	var free := Rect2(left, top, maxf(right - left, 100.0), maxf(bottom - top, 100.0))
+	if use_hud and not mission_overlay and MapCamera.FIT_PIT:   # map-pass: frame THE PIT (Daniele's frame 11-18), centred on it
+		free = pit_rect()
 	var pts := []
 	for n in nodes:
 		var p: Vector3 = n["pos"]

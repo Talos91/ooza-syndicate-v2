@@ -143,6 +143,7 @@ func _run() -> void:
 	var wh: Vector2i = PROFILES[prof]
 	get_window().size = wh
 	UiKit.test_pt_h = float(wh.y)
+	UiKit.test_insets = Vector4(wh.x * BEZEL, 0, 0, 0)   # map-pass: the Fold's camera strip is a real safe inset, so the game's pit_rect() = this probe's pit
 	for f in range(6):
 		await get_tree().process_frame
 	var only := _arg("maps", "")
@@ -160,15 +161,22 @@ func _run() -> void:
 		get_tree().root.add_child(inst)
 		for f in range(10):
 			await get_tree().process_frame
-		var r := _measure(inst, float(wh.x))
-		var line := "FILL(%s) %s %s mode=%s pitch=%.0f zoom=%.2f dist=%.1f nodes=%d bridges=%d tilted=%d bbox_fill=%.1f hull_fill=%.1f bbox_w=%.1f bbox_h=%.1f m_left=%.1f m_right=%.1f m_top=%.1f m_bottom=%.1f out_of_pit=%d spacing=%.1f gap=%.1f tap=%.1f plat=%.1f min_len=%.1f mean_len=%.1f density=%.2f" % [
-				prof, code, str(m.get("name", "")).replace(" ", "_"), m["modes"][0], inst.cam_pitch, MapCamera.zoom_for(code), inst.cam_dist,
-				r["nodes"], r["bridges"], r["tilted"], r["bbox_fill"], r["hull_fill"], r["bbox_w"], r["bbox_h"], r["m_left"], r["m_right"], r["m_top"], r["m_bottom"],
-				r["out_of_pit"], r["spacing"], r["gap"], r["tap"], r["plat"], r["min_len"], r["mean_len"], r["density"]]
-		print(line)
-		out_lines.append(line + " pit_pt=%.0fx%.0f" % [r["pit_w"], r["pit_h"]])
-		if r["tilt"].size() > 0:
-			out_lines.append("TILT %s %s" % [code, ";".join(r["tilt"])])
+		var sweep: Array = [inst.cam_pitch] if _arg("pitches", "") == "" else Array(_arg("pitches", "").split(",")).map(func(v): return float(v))
+		for pv in sweep:
+			if _arg("pitches", "") != "":
+				inst.cam_pitch = pv
+				inst._fit_camera()
+				for f in range(2):
+					await get_tree().process_frame
+			var r := _measure(inst, float(wh.x))
+			var line := "FILL(%s) %s %s mode=%s pitch=%.0f zoom=%.2f dist=%.1f nodes=%d bridges=%d tilted=%d bbox_fill=%.1f hull_fill=%.1f bbox_w=%.1f bbox_h=%.1f m_left=%.1f m_right=%.1f m_top=%.1f m_bottom=%.1f out_of_pit=%d spacing=%.1f gap=%.1f tap=%.1f plat=%.1f min_len=%.1f mean_len=%.1f density=%.2f" % [
+					prof, code, str(m.get("name", "")).replace(" ", "_"), m["modes"][0], inst.cam_pitch, MapCamera.zoom_for(code), inst.cam_dist,
+					r["nodes"], r["bridges"], r["tilted"], r["bbox_fill"], r["hull_fill"], r["bbox_w"], r["bbox_h"], r["m_left"], r["m_right"], r["m_top"], r["m_bottom"],
+					r["out_of_pit"], r["spacing"], r["gap"], r["tap"], r["plat"], r["min_len"], r["mean_len"], r["density"]]
+			print(line)
+			out_lines.append(line + " pit_pt=%.0fx%.0f" % [r["pit_w"], r["pit_h"]])
+			if r["tilt"].size() > 0:
+				out_lines.append("TILT %s %s" % [code, ";".join(r["tilt"])])
 		inst.queue_free()
 		for f in range(2):
 			await get_tree().process_frame

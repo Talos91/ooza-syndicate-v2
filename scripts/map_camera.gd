@@ -16,51 +16,56 @@ class_name MapCamera
 ## tap clears 44 pt with no badge off screen / on another badge / on a platform (probe 1266x585, 844 x 390 pt, pieces skipped -
 ## they are never tapped): E-01 46.0 pt @50, E-02 51.4 @41, E-03 51.7 @54, E-04 46.8 @45, E-05 45.0 @54, E-06 45.0 @50, E-07 45.7 @50,
 ## E-08 54.8 @54, E-09 49.5 @58 (one badge on a platform at every pitch; 46.3 @54), E-10 44.5 @45; nothing off screen or under the HUD.
+# FIT_PIT (map-pass 2026-11-18, SCREEN-LAYOUT-SPEC): the start view frames THE PIT box of Daniele's frame (main.pit_rect(), between the
+# 84 pt SEND / SKILL columns), centred on it, instead of the area today's HUD leaves free (its skill column + PAUSE take 137 pt on the
+# Fold front, the frame gives them 84). The per-map PITCH / ZOOM below are picked for the pit (tests/screen_fill.tscn). false = the old fit.
+const FIT_PIT := true
+
 const PITCH := {
 	"T-11": 41.0,
 	"T-12": 41.0,
-	"G-07": 50.0,
+	"G-07": 52.0,  # map-pass 11-18: pit fit, tests/screen_fill (was 50.0)
 	"P-02": 58.0,
 	"G-08": 50.0,
 	"P-04": 54.0,
-	"G-09": 45.0,
+	"G-09": 48.0,  # map-pass 11-18: pit fit, tests/screen_fill (was 45.0)
 	# round R (2026-11-05, maps-r worker): the lowest pitch of the sweep 41-58 whose smallest tap clears 44 pt, nothing off
 	# screen or under the HUD (probe 1266x585, desktop emulation): R-01 44.4 pt, R-02 44.1, R-03 44.4, R-04 45.8, R-05 45.6
 	"R-01": 52.0,                 # next-pass (Daniele 2026-11-13 "bend a little"): 54 -> 52 with ZOOM 0.92, phone_fit 8 profiles 0/0, min tap 47.3 pt
-	"G-01": 50.0,
+	"G-01": 56.0,  # map-pass 11-18: pit fit, tests/screen_fill (was 50.0)
 	"R-03": 50.0,
 	"R-04": 41.0,
 	"R-05": 58.0,                 # 2026-11-05 rework (mirrored, 78 m tall): 41.7 pt, 5 badges over platforms
 	"R-11": 58.0,                 # version B of R-05 (same footprint)
 	"R-15": 58.0,                 # R-05 shrunk to 66 m (2026-11-07): 50.3 pt, 2 badge overlaps, 4 badges over platforms
 	"R-16": 58.0,                 # R-11 shrunk to 66 m (same footprint as R-15)
-	"G-06": 52.0,                 # next-pass: 54 -> 52 with ZOOM 0.90 (8 profiles 0/0, min tap 59.6 pt). R-01 minus its middle crossing (Daniele 2026-11-12), 91 x 50 m: 65.6 pt at 54 (R-01's pitch; 49.7 pt at 41), 1266x585 emulation
+	"G-06": 48.0,                 # next-pass: 54 -> 52 with ZOOM 0.90 (8 profiles 0/0, min tap 59.6 pt). R-01 minus its middle crossing (Daniele 2026-11-12), 91 x 50 m: 65.6 pt at 54 (R-01's pitch; 49.7 pt at 41), 1266x585 emulation  # map-pass 11-18: pit fit, tests/screen_fill (was 52.0)
 	# wave 2 (2026-11-05, maps-r-4; probe 1266x585, desktop emulation): R-06 48.6 pt, R-09 45.1, R-10 45.0, R-12 47.9, R-13 46.3 (6 badges over platforms)
-	"G-02": 50.0,
+	"G-02": 56.0,  # map-pass 11-18: pit fit, tests/screen_fill (was 50.0)
 	"R-09": 50.0,
-	"G-03": 50.0,
-	"G-04": 50.0,
+	"G-03": 56.0,  # map-pass 11-18: pit fit, tests/screen_fill (was 50.0)
+	"G-04": 50.0,  # map-pass 11-18: pit fit, tests/screen_fill (was 50.0)
 	"R-13": 54.0,
 	# experimental maps (main, maps-exp)
 	"G-10": 50.0,
-	"G-11": 41.0,
+	"G-11": 56.0,  # map-pass 11-18: pit fit, tests/screen_fill (was 41.0)
 	"E-03": 54.0,
-	"G-12": 45.0,
+	"G-12": 56.0,  # map-pass 11-18: pit fit, tests/screen_fill (was 45.0)
 	"E-05": 54.0,
-	"G-13": 50.0,
-	"G-14": 50.0,
-	"G-15": 54.0,
+	"G-13": 48.0,  # map-pass 11-18: pit fit, tests/screen_fill (was 50.0)
+	"G-14": 56.0,  # map-pass 11-18: pit fit, tests/screen_fill (was 50.0)
+	"G-15": 56.0,  # map-pass 11-18: pit fit, tests/screen_fill (was 54.0)
 	"E-09": 58.0,
-	"G-16": 45.0,
+	"G-16": 48.0,  # map-pass 11-18: pit fit, tests/screen_fill (was 45.0)
 	"G-05": 54.0,                 # Catapult Bay (2026-11-06): 47.1 pt (50: 43.7)
 	# MAP-SHRINK (2026-11-15, decks 2 / 4 / 6 m): every pool map re-picked with tests/phone_fit.tscn (zfold7-cover 840x360 + phone 812x375,
 	# sweep 41-58, desktop emulation): the map's pitch before is kept when its smallest tap is >= 44 pt with nothing off screen / under the HUD,
 	# else the next sweep pitch that passes (M-15 / N-16 / P-04; R-01 / R-17 keep 52, measured), else the best tap (N-06 / N-17 / N-22 at 58).
 	# Table: References/Map size 2026-11/SHRINK-36.md
 	"M-15": 50.0,
-	"G-17": 41.0,
-	"G-18": 50.0,
-	"G-19": 50.0,
+	"G-17": 48.0,  # map-pass 11-18: pit fit, tests/screen_fill (was 41.0)
+	"G-18": 56.0,  # map-pass 11-18: pit fit, tests/screen_fill (was 50.0)
+	"G-19": 56.0,  # map-pass 11-18: pit fit, tests/screen_fill (was 50.0)
 	"N-06": 58.0,
 	"N-16": 54.0,
 	"N-17": 58.0,
