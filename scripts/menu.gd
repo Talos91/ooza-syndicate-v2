@@ -2570,7 +2570,9 @@ func show_armies(f: String = "", back: Callable = Callable()) -> void:
 	content.add_child(st)
 	_stage = st
 	var a43 := Armies43.new()
-	a43.setup(self, Rect2(st.P(16, 40), Vector2(780, 290) * st.u), _army, _army_tab, _armies43_tap)
+	# (down to the nav bar: on a 16:9 phone the free band over it lets the paged SKILLS cards grow - Armies43.paged)
+	var a_h := maxf(290.0 * st.u, area.end.y - 4.0 * st.u - st.P(16, 40).y)
+	a43.setup(self, Rect2(st.P(16, 40), Vector2(780.0 * st.u, a_h)), _army, _army_tab, _armies43_tap)
 	content.add_child(a43)
 	_a43 = a43
 	if _army_tab == "customize":
@@ -2598,6 +2600,10 @@ func _armies43_tap(cid: String) -> void:
 		show_armies("solar" if n == "aegis" else n)
 	elif cid == "SKILLS" or cid == "CUSTOMIZE":
 		_army_tab = cid.to_lower()
+		show_armies()
+	elif cid.begins_with("PAGE-"):                     # 16:9: the ACTIVE SKILL / MAP SKILL section tabs (Armies43.paged)
+		_skill_tip = ""
+		_skills_slot = "map" if cid == "PAGE-MAP" else "active"
 		show_armies()
 	elif cid == "RESET":
 		ArmyPresets.reset(_army)
@@ -3286,12 +3292,27 @@ func _customize_body(st: Kit45.Stage) -> void:
 	var seat := Kit45.seat()
 	# the categories
 	var cats := _ward_cats()
+	# 16:9 phones (Daniele 11-18 "Keep 12.5 pt minimum"): where a tile's word (MONSTER) does not fit its 64 pt tile at the
+	# floor, the tiles grow evenly to 74 x 53 pt (the free band under them takes the height) and the preview cabinet gives
+	# them the width (195 -> 177 pt, evenly). Other sizes keep the 45A2 layout.
+	var tg := 1.0
+	var fl := Kit45.floor_px(self)
+	if fl > 0.0:
+		for cc in cats:
+			if UiKit.BODY.get_string_size(str(WARD_TILE.get(cc, "")), HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(fl))).x > 56.0 * st.u:
+				tg = 74.0 / 64.0
+	var cx := 153.0 if tg == 1.0 else 171.0              # the cabinet's left edge and its scale
+	var cf := 1.0 if tg == 1.0 else 177.0 / 195.0
+	var C := func(x: float, y: float, w: float, h: float) -> Rect2: return Rect2(cx + x * cf, 83.0 + y * cf, w * cf, h * cf)
 	for i in range(mini(cats.size(), WARD_TILE_AT.size())):
 		var cc: String = cats[i]
 		var at: Array = WARD_TILE_AT[i]
-		var tb := st.key("CUST-CATEGORY-TILE", at[0], at[1], 64, 46, str(WARD_TILE.get(cc, cc.to_upper())), func():
+		var tx: float = at[0] if tg == 1.0 else (15.0 if at[0] < 50 else 93.0)
+		var ty: float = at[1] if tg == 1.0 else 83.0 + (float(at[1]) - 83.0) / 50.0 * 57.0
+		var tb := st.key("CUST-CATEGORY-TILE", tx, ty, 64 * tg, 46 * tg, str(WARD_TILE.get(cc, cc.to_upper())), func():
 			_ward_cat = cc
 			show_cosmetics(), cc == cat, false, "64x46pt")
+		tb.u = st.u * tg                                 # (its slots scale with it)
 		tb.tooltip_text = COSMETIC_FAMILY_LABEL[cc]
 		tb.size_pt = 12.5
 		tb.label_slot = true
@@ -3303,25 +3324,33 @@ func _customize_body(st: Kit45.Stage) -> void:
 			wl.size_cu = 9.0 * st.u
 			wl.col = seat
 			wl.align = 1
-			wl.position = tb.art.position + Vector2(4, 4) * st.u
-			wl.size = Vector2(56, 20) * st.u
+			wl.position = tb.art.position + Vector2(4, 4) * tb.u
+			wl.size = Vector2(56, 20) * tb.u
 			tb.add_child(wl)
 		else:
-			var pic := LookThumbs.rect(cc, now, _army, Vector2(28, 20) * st.u)
-			pic.position = tb.art.position + Vector2(18, 4) * st.u
+			var pic := LookThumbs.rect(cc, now, _army, Vector2(28, 20) * tb.u)
+			pic.position = tb.art.position + Vector2(18, 4) * tb.u
 			tb.add_child(pic)
 	# the preview cabinet: title, live 3D model on the pedestal, tier tabs
-	st.piece("CUST-PREVIEW-CABINET", 153, 83, 195, 195, "STATIC", "195x195pt")
+	var cr: Rect2 = C.call(0, 0, 195, 195)
+	st.piece("CUST-PREVIEW-CABINET", cr.position.x, cr.position.y, cr.size.x, cr.size.y, "STATIC", "195x195pt")
 	var kt: String = ("ALL FACTIONS" if cat == "territory" else UiKit.NAMES[_army]) + "  /  " + COSMETIC_FAMILY_LABEL[cat]
-	st.txt(kt, 171, 92, 157, 14, 9.0, Kit45.KICK)
-	st.txt(_ward_look_name(cat, sel).to_upper(), 171, 106, 157, 18, 14.0, UiKit.INK, true)
-	var ped := st.piece("PEDESTAL-RING", 182.5, 231, 136, 31, "STATIC", "136x31pt")
+	var kr: Rect2 = C.call(18, 9, 157, 14)
+	if fl > 0.0 and UiKit.BODY.get_string_size(kt, HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(fl))).x > kr.size.x * st.u:
+		kt = COSMETIC_FAMILY_LABEL[cat]                  # 12.5 pt floor: the family alone where the faction does not fit too
+	st.txt(kt, kr.position.x, kr.position.y, kr.size.x, kr.size.y, 9.0, Kit45.KICK)
+	var nr: Rect2 = C.call(18, 23, 157, 18)
+	st.txt(_ward_look_name(cat, sel).to_upper(), nr.position.x, nr.position.y, nr.size.x, nr.size.y, 14.0 * cf, UiKit.INK, true)
+	var pr: Rect2 = C.call(29.5, 148, 136, 31)
+	var ped := st.piece("PEDESTAL-RING", pr.position.x, pr.position.y, pr.size.x, pr.size.y, "STATIC", "136x31pt")
 	ped.tints = {"seat": seat}
-	var vr := st.R(163, 132, 175, 160)                  # the model's feet on the pedestal ring (its centre y 246.5)
+	var vp: Rect2 = C.call(10, 49, 175, 160)
+	var vr := st.R(vp.position.x, vp.position.y, vp.size.x, vp.size.y)   # the model's feet on the pedestal ring
 	var tiers := {"vat": 4, "machinegoon": 3}.get(cat, 0) as int
 	var pv: WardrobePreview = null
 	if cat == "territory":
-		st.txt(str(TERRITORY_LOOKS[sel][0]), 163, 150, 175, 60, 34.0, seat, true, 1)
+		var trr: Rect2 = C.call(10, 67, 175, 60)
+		st.txt(str(TERRITORY_LOOKS[sel][0]), trr.position.x, trr.position.y, trr.size.x, trr.size.y, 34.0 * cf, seat, true, 1)
 	else:
 		var tier := clampi(_ward_tier, 1, tiers) if tiers > 0 else 0
 		pv = WardrobePreview.make(cat, sel, _army, tier, vr.size)
@@ -3334,7 +3363,8 @@ func _customize_body(st: Kit45.Stage) -> void:
 		var tabs := []
 		for t in range(1, tiers + 1):
 			var tt: int = t
-			var tbx := st.key("TIER-TAB", 155.0 + (t - 1) * 48.0, 297.5, 45, 22, "T%d" % t, Callable(), t == clampi(_ward_tier, 1, tiers), false, "45x22pt")
+			var tbx := st.key("TIER-TAB", cx + (2.0 + (t - 1) * 48.0) * cf, 297.5, 45 * cf, 22 * cf, "T%d" % t, Callable(), t == clampi(_ward_tier, 1, tiers), false, "45x22pt")
+			tbx.u = st.u * cf
 			tbx.tooltip_text = "TIER %d" % t
 			tabs.append(tbx)
 			tbx.pressed.connect(func():
@@ -3407,19 +3437,21 @@ func _customize_body(st: Kit45.Stage) -> void:
 			card.add_child(et)
 	# the info strip and the action
 	var ls2 := _ward_state(cat, sel, equipped)
-	st.piece("INFO-STRIP", 354, 296, 291, 33, "STATIC", "291x33pt")
-	st.txt(_ward_detail(cat, sel, ls2), 367, 299, 270, 27, 9.0, LOCK_COL if ls2["locked"] else UiKit.MUTED, false, 0, 2)
+	var ih := 33.0 if tg == 1.0 else 40.0                # 16:9: the 9-slice strip holds two floor-size lines (the band under it is free)
+	st.piece("INFO-STRIP", 354, 296, 291, ih, "STATIC", "291x33pt")
+	st.txt(_ward_detail(cat, sel, ls2), 367, 299, 270, ih - 6.0, 9.0, LOCK_COL if ls2["locked"] else UiKit.MUTED, false, 0, 2)
+	var ky := 296.0 + (ih - 33.0) / 2.0
 	var item := "" if cat == "territory" else Progression.cosmetic_item(cat, sel, _army)
 	if ls2["equipped"]:
-		st.key("PRIMARY-WIDE", 664, 296, 133, 33, "EQUIPPED", Callable(), false, true, "133x33pt")
+		st.key("PRIMARY-WIDE", 664, ky, 133, 33, "EQUIPPED", Callable(), false, true, "133x33pt")
 	elif ls2["locked"] and not Progression.price(item).is_empty():   # PROGRESSION: UNLOCK where it can be bought
-		st.key("PRIMARY-WIDE", 664, 296, 133, 33, "UNLOCK", func():
+		st.key("PRIMARY-WIDE", 664, ky, 133, 33, "UNLOCK", func():
 			_buy_prompt(item, _ward_look_name(cat, sel).to_upper(), "A look only: play is unchanged.",
 					func(): show_cosmetics()), true, false, "133x33pt")
 	elif ls2["locked"]:
-		st.key("PRIMARY-WIDE", 664, 296, 133, 33, "LOCKED", Callable(), false, true, "133x33pt")
+		st.key("PRIMARY-WIDE", 664, ky, 133, 33, "LOCKED", Callable(), false, true, "133x33pt")
 	else:
-		st.key("PRIMARY-WIDE", 664, 296, 133, 33, "EQUIP", func():
+		st.key("PRIMARY-WIDE", 664, ky, 133, 33, "EQUIP", func():
 			if cat == "territory":
 				ArmyPresets.set_core_territory(sel)
 			else:

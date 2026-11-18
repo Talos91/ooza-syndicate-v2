@@ -17,6 +17,14 @@ const CYAN_KICK := Color("29d3e0")                   # HOME's tagline
 const MIN_HIT := 33.0                                # pt: the smallest tap box (45A2: every target >= 33 pt)
 
 static var _parts: Dictionary = {}
+static var audit_on := false                         # dev --font-audit: every label drawn through the kit, in pt
+static var audit: Array = []                         # [text, size_pt, cut]
+
+
+static func audit_note(m, t: String, size_cu: float, cut := false) -> void:
+	## Dev (--font-audit): one label as drawn - its size in pt and whether it lost letters to an ellipsis.
+	if audit_on and t != "":
+		audit.append([t, size_cu * UiKit.pt(m), cut])
 
 
 static func parts() -> Dictionary:
@@ -463,6 +471,8 @@ static func draw_text(ci: CanvasItem, m, t: String, r: Rect2, size_cu: float, co
 		var line: String = s
 		while line.length() > 1 and w.call(line, ifs) > r.size.x + 0.5:
 			line = line.substr(0, line.length() - 2) + "…"
+		if audit_on:
+			audit_note(m, line, ifs, line != s)
 		var lw: float = w.call(line, ifs)
 		var x := r.position.x
 		if align == 1:

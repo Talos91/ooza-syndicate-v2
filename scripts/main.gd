@@ -365,6 +365,10 @@ func _ready() -> void:
 			if arg.begins_with("--menu-page="):            # screenshot helper: open a menu page
 				(menu_layer as Menu).call("show_" + arg.substr(12))
 		for arg in OS.get_cmdline_user_args():
+			if arg.begins_with("--font-audit="):          # UI dev: SKILLS / CUSTOMIZE labels vs the 12.5 pt floor (+ shots)
+				preload("res://scripts/font_audit.gd").run(self, menu_layer, arg.substr(13))
+				return
+		for arg in OS.get_cmdline_user_args():
 			if arg.begins_with("--versus-shot="):         # UI: screenshot helper - DEPLOY, the VERSUS card shoots itself
 				(menu_layer as Menu).deploy()
 				return
