@@ -4,7 +4,7 @@ extends Node
 ##   Godot_console --path . --audio-driver Dummy --resolution 1266x585 res://tests/screen_fill.tscn -- out=<file> [maps=G-05,G-08] [profile=zfold7-cover]
 ## Lines: "FILL <code> k=v ..." and "TILT <code> x0,y0,x1,y1;..." (normalised 0..1 screen coords of the sloped / conveyor decks).
 ## Zones: SAFE = the screen minus the left bezel strip (4 % of the width); PIT = x 11.3..88.7 %, y 18.3..95.6 % of the safe area
-## (his frame measured at 1500x643, bezel 60 px). Desktop emulation only (no real phone).
+## (his frame measured at 1500x643, bezel 60 px; bezel=0 for a screen without a cut-out). Desktop emulation only (no real phone).
 
 const MAIN := "res://main.tscn"
 const PROFILES := {"phone": Vector2i(812, 375), "phone-wide": Vector2i(844, 390), "zfold7-cover": Vector2i(840, 360), "p16x9": Vector2i(640, 360), "tablet": Vector2i(1024, 768)}
@@ -59,7 +59,7 @@ func _measure(main: Node, pt_w: float) -> Dictionary:
 	var sim = main.sim
 	var vp: Vector2 = main.get_viewport().get_visible_rect().size
 	var ppt := pt_w / vp.x
-	var sx0 := vp.x * BEZEL
+	var sx0 := vp.x * float(_arg("bezel", str(BEZEL)))
 	var sw := vp.x - sx0
 	var pit := Rect2(sx0 + sw * PIT_X.x, vp.y * PIT_Y.x, sw * (PIT_X.y - PIT_X.x), vp.y * (PIT_Y.y - PIT_Y.x))
 	if _arg("adapt", "0") == "1":
@@ -143,7 +143,7 @@ func _run() -> void:
 	var wh: Vector2i = PROFILES[prof]
 	get_window().size = wh
 	UiKit.test_pt_h = float(wh.y)
-	UiKit.test_insets = Vector4(wh.x * BEZEL, 0, 0, 0)   # map-pass: the Fold's camera strip is a real safe inset, so the game's pit_rect() = this probe's pit
+	UiKit.test_insets = Vector4(wh.x * float(_arg("bezel", str(BEZEL))), 0, 0, 0)   # map-pass: the Fold's camera strip is a real safe inset, so the game's pit_rect() = this probe's pit
 	for f in range(6):
 		await get_tree().process_frame
 	var only := _arg("maps", "")
