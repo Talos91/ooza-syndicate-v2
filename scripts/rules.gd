@@ -196,6 +196,11 @@ static var demo: bool = VERSION.contains("-demo")
 # bit and legs sit under the 0:00 goo in the demo, so they are not ported). Lasers, machinegoon, bridges, pillars stay the current kit.
 # Dev: --no-kit2 = the 0.25.0 lab platform + vats.
 static var kit2: bool = true
+# COPPER PUNK (cp-r7, Daniele 2026-11-19 "Yes, bake it"; designer 12, tools/bake_cp_r7.py -> assets/kit/cp/): drill node v3 (the
+# platform + the T3 vat) and the 34 bridge pieces (decks, ramps, spans, piers, connector, stub, fall fragments) replace the kit
+# pieces 1:1 (Look.kit_key); bridge goo + neon per half = the nearer node's owner (MapBuilder.paint_cp, Fx._cp_bridges).
+# Dev: --no-cp = the 0.25.1 pieces.
+static var kit_cp: bool = true
 const DEBUG_SPEEDS := [1, 2, 4, 8]           # x whole sim time (production, movement, cooldowns, relays, the clock)
 const DEBUG_PRODS := [1.0, 2.0, 5.0, 10.0]   # x the human seat's production only
 const DEBUG_ADD_UNITS := 100                 # shown units (x SCALE in the sim) added to the selected own node

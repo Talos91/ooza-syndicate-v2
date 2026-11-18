@@ -21,6 +21,13 @@ const RIM_OUT := 6.14
 const RIM_ENERGY := 1.5             # v2 owned rim emission (Mats.light: 3.0)
 const KIT_RIM_ENERGY := 1.5         # vat-neon round 2: 4.5 / 2.2 tonemapped every channel > 1 to WHITE (the owner colour only in the halo); <= ~1.5 keeps the hue. Was 2.2 (owner neon far too faint on a phone, Daniele 2026-11-13); owner reads at a glance
 const KIT2 := ["Platform_Standard", "Vat_T1", "Vat_T2", "Vat_T3", "Vat_T4"]   # KIT2 look keys (Rules.kit2: assets/kit/kit2/)
+const KIT_CP := ["Platform_Standard", "Vat_T3", "Anchor_Stub", "Deck_S", "Deck_Remote", "Deck_Retract",   # COPPER PUNK keys
+		"Deck_Overpass_Ramp", "Deck_Overpass_Span", "Deck_Overpass_High_Ramp", "Deck_Overpass_High_Span",   # (Rules.kit_cp:
+		"Deck_Underpass_Ramp", "Deck_Underpass_Span", "Pier_Connector",                                        #  assets/kit/cp/)
+		"Deck_S_Frag_plate_a", "Deck_S_Frag_plate_b", "Deck_S_Frag_plate_c", "Deck_S_Frag_girder_l", "Deck_S_Frag_girder_r",
+		"Deck_S_Frag_truss", "Pier_Angled_00", "Pier_Angled_05", "Pier_Angled_10", "Pier_Angled_15", "Pier_Angled_20",
+		"Pier_Angled_25", "Pier_Angled_30", "Pier_Angled_35", "Pier_Angled_40", "Pier_Angled_45", "Pier_Angled_50",
+		"Pier_Angled_55", "Pier_Angled_60", "Pier_Angled_65", "Pier_Angled_70", "Pier_Angled_75", "Pier_Angled_80"]
 static var _rim_mesh: ArrayMesh
 static var _missing := {}
 
@@ -52,6 +59,8 @@ static func _arg() -> String:
 
 static func kit_key(key: String) -> String:
 	## The lab twin of a kit key when --look=lab and the file exists; logs each key without a twin once.
+	if Rules.kit_cp and key in KIT_CP:                # COPPER PUNK cp-r7 (0.25.2): node v3 + the 34 bridge pieces
+		return "cp/" + key
 	if Rules.kit2 and key in KIT2:                   # KIT2 size D (staging 0.25.1): the baked copper punk platform + vats
 		return "kit2/" + key
 	if not lab or key.begins_with("skins/") or key in ["Relay_Mount", "Relay_Retract"]:   # fx / goo_territory match those paths

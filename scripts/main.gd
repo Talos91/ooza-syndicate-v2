@@ -232,6 +232,8 @@ func _ready() -> void:
 			map_explicit = true
 		elif arg == "--demo":
 			demo = true
+		elif arg == "--cp" or arg == "--no-cp":        # COPPER PUNK node v3 + bridges (Rules.kit_cp, on by default)
+			Rules.kit_cp = arg == "--cp"
 		elif arg == "--kit2" or arg == "--no-kit2":    # KIT2 size-D look (Rules.kit2, on by default; --no-kit2 = the 0.25.0 lab kit)
 			Rules.kit2 = arg == "--kit2"
 		elif arg.begins_with("--ai="):

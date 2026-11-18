@@ -139,6 +139,7 @@ func sync(dt: float) -> void:
 		_last_stand_warning(n)
 		# the cannon laser is CombatFx._cannons_step (combat_fx.gd), which replaced the old cylinder beam
 	_decks()
+	_cp_bridges()
 	_half_trims()
 	_neon()
 	_neon_merge.sync()
@@ -1144,6 +1145,7 @@ func _deck_frags(deck: Node3D, per: int, falling: Array, frags: Array) -> void:
 	for k in range(per):
 		var frag: String = _frag_names[floori(float(k * _frag_names.size()) / per)]
 		var piece := MapBuilder.put(world, "Deck_S_Frag_" + frag, deck.position, deck.rotation.y, deck.scale.x)
+		MapBuilder.copy_cp_paint(deck, piece)         # COPPER PUNK: the fragments keep their deck's half colours
 		falling.append(piece)
 		frags.append(piece)
 
@@ -1461,12 +1463,66 @@ func _deck_color(owner: String) -> Color:
 	return NEUTRAL_TRIM if Calm.colour() else _brawl_color(owner)
 
 
+# COPPER PUNK BRIDGES (cp-r7, Daniele 2026-11-19): the kit's bridge pieces carry their own goo + neon slots (MapBuilder.paint_cp);
+# each slot takes the goo (faction) + neon (seat) of its NEARER node's owner, so a bridge reads half and half and only the module
+# straddling the middle splits. The overlay trims / pier stripes step aside where the pieces glow themselves. The Last Stand
+# flash (_last_stand_warning's "warn1") turns both halves' neon to the warning colour, as it did the kit's deck lights.
+var _cp_edges := {}          # edge -> [piece Node3D] (decks, piers, connectors that are copper punk pieces)
+var _cp_full := {}           # edge -> true: every deck of the edge is a copper punk piece (its overlay trims hide)
+var _cp_pier := {}           # edge * 2 + end -> true: a copper punk pier stands at that end (its overlay stripe hides)
+var _cp_key := {}            # edge -> last applied "owner_a|owner_b|warn"
+var _cp_built := false
+
+
+func _cp_bridges() -> void:
+	if not _cp_built:
+		_cp_built = true
+		for i in vis["edge_decks"]:
+			var e: Dictionary = sim.edges[i]
+			var pa: Vector3 = sim.nodes[e["a"]]["pos"]
+			var pb: Vector3 = sim.nodes[e["b"]]["pos"]
+			var decks: Array = vis["edge_decks"][i]
+			var pieces := []
+			var all := not decks.is_empty()
+			for d in decks:
+				if d is Node3D and is_instance_valid(d) and MapBuilder.is_cp(d):
+					pieces.append(d)
+				else:
+					all = false
+			for p in vis["edge_piers"].get(i, []) + vis.get("edge_conn", {}).get(i, []):
+				if p is Node3D and is_instance_valid(p) and not p in pieces and MapBuilder.is_cp(p):
+					pieces.append(p)
+					var side: int = MapBuilder.cp_sides(p, e["a"], pa, e["b"], pb)["A"]
+					_cp_pier[i * 2 + (0 if side == int(e["a"]) else 1)] = true
+			if all:
+				_cp_full[i] = true
+			if not pieces.is_empty():
+				_cp_edges[i] = pieces
+	for i in _cp_edges:
+		if _collapsed.has(i):
+			continue
+		var e: Dictionary = sim.edges[i]
+		var warn: bool = _edge_light.get(i, "") == "warn1"
+		var key := "%s|%s|%d" % [sim.nodes[e["a"]]["owner"], sim.nodes[e["b"]]["owner"], int(warn)]
+		if _cp_key.get(i, "") == key:
+			continue
+		_cp_key[i] = key
+		var pa: Vector3 = sim.nodes[e["a"]]["pos"]
+		var pb: Vector3 = sim.nodes[e["b"]]["pos"]
+		var flash: Material = Mats.light_color(Rules.state_color("warn")) if warn else null
+		for p in _cp_edges[i]:
+			if not is_instance_valid(p):
+				continue
+			var sides: Dictionary = MapBuilder.cp_sides(p, e["a"], pa, e["b"], pb)
+			MapBuilder.paint_cp(p, sim.nodes[sides["A"]]["owner"], sim.nodes[sides["B"]]["owner"], flash)
+
+
 func _half_trims() -> void:
 	## BRAWL deck halves: shown while the deck is open, each half in its end's owner colour.
 	var on := not Rules.bridge_combat and not Rules.goo_look()   # GOO: GooTerritory covers the halves
 	for i in _trims:
 		var e: Dictionary = sim.edges[i]
-		var show: bool = on and not _collapsed.has(i) and sim.is_edge_open(i)
+		var show: bool = on and not _collapsed.has(i) and sim.is_edge_open(i) and not _cp_full.get(i, false)   # CP decks carry their own neon
 		var oa: String = sim.nodes[e["a"]]["owner"]
 		var ob: String = sim.nodes[e["b"]]["owner"]
 		var last: Array = _trim_state.get(i, [])
@@ -1501,7 +1557,7 @@ func _neon() -> void:
 				continue
 			_pier_key[i * 2 + end] = key + ("|goo" if goo else "")
 			_neon_merge.dirty = true
-			(mi as MeshInstance3D).visible = (brawl or SIEGE_PIER_STRIPES) and not goo
+			(mi as MeshInstance3D).visible = (brawl or SIEGE_PIER_STRIPES) and not goo and not _cp_pier.has(i * 2 + end)
 			(mi as MeshInstance3D).material_override = Mats.light_color(_deck_color(key)) if brawl else _siege_light(i, key)
 	for id in _rims:
 		if sim.collapsed.get(id, false):

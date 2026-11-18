@@ -343,6 +343,99 @@ static func set_lights(node: Node3D, mat: Material) -> void:
 	MapBatch.refresh_meshes(meshes)                 # Alpha 21: a batched piece's light slots follow
 
 
+# COPPER PUNK BRIDGES (cp-r7, Daniele 2026-11-19 "Yes, bake it"; tools/bake_cp_r7.py -> assets/kit/cp/): every bridge piece
+# carries its own goo (CP_Goo_A / _B) and neon (CP_Neon_A / _B); deck modules have slot A on local x 0-2 and B on x 2-4,
+# piers / connectors / stubs only A. Daniele's rule: each half of a bridge takes the goo (faction) + neon (seat) of the NEARER
+# node's owner, so per piece colour = nearer node and only the piece straddling the middle splits. paint_cp finds each slot's
+# nearer node from where the slot sits in the world (A at local x 1, B at x 3; a pier's A at its origin), once per piece.
+# Unowned = the game's neutral look (apply_owner's: Mats.light("") / Mats.ooze_neutral()). Fx._cp_bridges calls it.
+static var _cp_slots := {}           # piece instance id -> {"A": [[mi, surface, kind]], "B": [...]} (kind "goo" / "neon")
+static var _cp_side := {}            # piece instance id -> {"A": node id, "B": node id}
+
+
+static func cp_slots(node: Node3D) -> Dictionary:
+	var id := node.get_instance_id()
+	if _cp_slots.has(id):
+		return _cp_slots[id]
+	var out := {"A": [], "B": []}
+	for mi in node.find_children("*", "MeshInstance3D", true, false):
+		var mesh := (mi as MeshInstance3D).mesh
+		if mesh == null:
+			continue
+		for s in range(mesh.get_surface_count()):
+			var m := mesh.surface_get_material(s)
+			var nm := m.resource_name if m else ""
+			if nm.begins_with("CP_Goo_") or nm.begins_with("CP_Neon_"):
+				(out[nm.right(1)] as Array).append([mi, s, "goo" if nm.begins_with("CP_Goo_") else "neon"])
+	_cp_slots[id] = out
+	return out
+
+
+static func is_cp(node: Node3D) -> bool:
+	var s := cp_slots(node)
+	return not ((s["A"] as Array).is_empty() and (s["B"] as Array).is_empty())
+
+
+static func cp_sides(node: Node3D, a_id: int, a_pos: Vector3, b_id: int, b_pos: Vector3) -> Dictionary:
+	## Which end each slot of a bridge piece belongs to (the nearer node, on the ground plan), from its placed transform.
+	var id := node.get_instance_id()
+	if _cp_side.has(id):
+		return _cp_side[id]
+	var xf := node.global_transform if node.is_inside_tree() else node.transform
+	var out := {}
+	for slot in ["A", "B"]:
+		var local := Vector3.ZERO
+		if node.scene_file_path.get_file().begins_with("Deck_"):
+			local = Vector3(1.0 if slot == "A" else 3.0, 0.0, 0.0)
+		var p := xf * local
+		var da := Vector2(p.x - a_pos.x, p.z - a_pos.z).length()
+		var db := Vector2(p.x - b_pos.x, p.z - b_pos.z).length()
+		out[slot] = a_id if da <= db else b_id
+	_cp_side[id] = out
+	return out
+
+
+static func cp_goo(seat: String) -> Material:
+	return Mats.ooze(seat) if seat != "" else Mats.ooze_neutral()
+
+
+static func cp_neon(seat: String) -> Material:
+	return Mats.light(seat)                         # (seat "": the game's neutral light, as apply_owner's unowned pieces)
+
+
+static func paint_cp(node: Node3D, seat_a: String, seat_b: String, neon: Material = null) -> void:
+	## Slot A in seat_a's goo + neon, slot B in seat_b's; `neon` (the Last Stand flash) overrides both halves' neon.
+	var slots := cp_slots(node)
+	var meshes := []
+	for slot in ["A", "B"]:
+		var seat := seat_a if slot == "A" else seat_b
+		for sl in slots[slot]:
+			var mi: MeshInstance3D = sl[0]
+			if not is_instance_valid(mi):
+				continue
+			mi.set_surface_override_material(int(sl[1]), cp_goo(seat) if sl[2] == "goo" else (neon if neon != null else cp_neon(seat)))
+			if not mi in meshes:
+				meshes.append(mi)
+	MapBatch.refresh_meshes(meshes)
+
+
+static func copy_cp_paint(from: Node3D, to: Node3D) -> void:
+	## A deck's fall fragments keep the deck's colours (same slot names).
+	var src := cp_slots(from)
+	var mat := {}
+	for slot in ["A", "B"]:
+		for sl in src[slot]:
+			var mi: MeshInstance3D = sl[0]
+			if is_instance_valid(mi) and mi.get_surface_override_material(int(sl[1])) != null:
+				mat[slot + str(sl[2])] = mi.get_surface_override_material(int(sl[1]))
+	var dst := cp_slots(to)
+	for slot in ["A", "B"]:
+		for sl in dst[slot]:
+			var m = mat.get(slot + str(sl[2]))
+			if m != null:
+				(sl[0] as MeshInstance3D).set_surface_override_material(int(sl[1]), m)
+
+
 static func set_state_color(entry: Dictionary, c: Color) -> void:
 	for pair in entry["state_parts"]:
 		(pair[0] as MeshInstance3D).set_surface_override_material(pair[1], Mats.light_color(c))
