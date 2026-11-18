@@ -146,6 +146,9 @@ static func _states(b: Button, fam: String, m: Vector4, lit: bool) -> void:
 
 
 static func style_ivory(b: Button, kind: String) -> void:
+	if kind == "primary" or kind == "secondary":   # 45B (part 3): the remake's keys; primary = SELECTED copper + seat rim
+		key45(b, kind == "primary")
+		return
 	b.set_meta("mskin", "tab" if kind == "tab" else ("quit" if kind == "quit" else "key"))
 	_settle.call_deferred(b)
 	var spec := ivory(kind)
@@ -154,6 +157,33 @@ static func style_ivory(b: Button, kind: String) -> void:
 	for k in FONT_KEYS:
 		b.add_theme_color_override(k, ink)
 	b.add_theme_color_override("font_disabled_color", INK_OFF)
+
+
+static func key45(b: Button, lit: bool) -> void:
+	## The 45B key (Kit45.KeyBox) on a Button: four states, lettering measured on each face (cream on copper, dark on cream).
+	b.set_meta("mskin", "key45")
+	_settle.call_deferred(b)
+	var n := "SELECTED" if lit else "NORMAL"
+	var mk := func(st: String, mod := Color.WHITE) -> StyleBox:
+		var s := Kit45.KeyBox.new()
+		s.st = st
+		s.mod = mod
+		s.content_margin_left = 14.0
+		s.content_margin_right = 14.0
+		s.content_margin_top = 4.0
+		s.content_margin_bottom = 4.0
+		return s
+	b.add_theme_stylebox_override("normal", mk.call(n))
+	b.add_theme_stylebox_override("hover", mk.call(n, Color(1.06, 1.05, 1.03)))
+	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	b.add_theme_stylebox_override("pressed", mk.call("PRESSED"))
+	b.add_theme_stylebox_override("hover_pressed", mk.call("PRESSED"))
+	b.add_theme_stylebox_override("disabled", mk.call("DISABLED"))
+	for k in ["font_color", "font_hover_color", "font_focus_color"]:
+		b.add_theme_color_override(k, Kit45.key_ink(n))
+	for k in ["font_pressed_color", "font_hover_pressed_color"]:
+		b.add_theme_color_override(k, Kit45.key_ink("PRESSED"))
+	b.add_theme_color_override("font_disabled_color", Kit45.key_ink("DISABLED"))
 
 
 static func style_tab(b: Button, active: bool) -> void:
@@ -308,7 +338,7 @@ static func _settle(b: Button) -> void:
 		for k in FONT_KEYS:
 			if b.has_theme_color_override(k) and _lum(b.get_theme_color(k)) < 0.4:
 				b.add_theme_color_override(k, UiKit.INK)
-	else:
+	elif str(b.get_meta("mskin", "")) != "key45":      # a 45B key measured its own lettering per face
 		for k in FONT_KEYS:
 			if b.has_theme_color_override(k) and _lum(b.get_theme_color(k)) > 0.6:
 				b.add_theme_color_override(k, UiKit.INK if str(b.get_meta("mskin", "")) == "quit" else INK_DARK)

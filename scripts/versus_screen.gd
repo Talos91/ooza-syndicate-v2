@@ -20,7 +20,6 @@ extends CanvasLayer
 signal finished
 
 const AUTO_SECONDS := 3.0
-const STAGE_FLOOR := 0.8                           # the stages' platform ring centre (fraction of the art's height)
 const SKIP_ARGS := ["--map=", "--demo", "--shots=", "--ff=", "--menu-", "--mission", "--tutorial=", "--scenario=",
 		"--thumb=", "--focus="]
 static var last_mission := ""                      # the mission the card was last offered for (its RETRY skips it)
@@ -138,8 +137,8 @@ static func warm_art(factions: Array) -> void:
 	## 0.23.3 (Daniele: "still freezes on deploy for like 3 sec, then the versus shows nicely"): the card's stage and creature
 	## images decode the first time they're drawn - seconds on a phone, with the lobby frozen meanwhile. The lobby calls this
 	## once it's on screen, so DEPLOY finds them in UiKit's texture cache.
+	UiKit.tex(Armies43.DIR + "ARMIES-PLATE.jpg")      # 45B: the room plate behind both sides
 	for f in factions:
-		UiKit.stage(str(f))
 		UiKit.tex(UiKit.hero_path(str(f)))
 		UiKit.tex("res://assets/art/ui/hero_neon_%s.png" % str(f))
 		UiKit.tex(UiKit.ai_screen_path(str(f)))
@@ -317,11 +316,16 @@ func _build() -> void:
 	var acc := UiKit.accent(yf)
 	var full := Rect2(-Vector2(ins.x, ins.y) / s, vp / s)   # the art still fills the whole screen (bands too)
 	var sides := _sides()
-	# Daniele's FINAL VERSUS art (2026-09-28): each side on its own faction's empty stage, split down the middle -
-	# placed once the sides are laid out, so each creature stands on its platform
+	# 45B (GAP-LIST §6): the room plate behind both sides (one room for every menu), not the faction stages
 	var hw := full.size.x / 2.0
-	var stages := [_stage_half(Rect2(full.position, Vector2(hw, full.size.y))),
-			_stage_half(Rect2(full.position + Vector2(hw, 0), Vector2(hw, full.size.y)))]
+	var room := TextureRect.new()
+	room.texture = UiKit.tex(Armies43.DIR + "ARMIES-PLATE.jpg")
+	room.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	room.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	room.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	room.position = full.position
+	room.size = full.size
+	content.add_child(room)
 	var shade := UiKit.rect(full.position, full.size, Color(UiKit.BASE, 0.0))
 	shade.mouse_filter = Control.MOUSE_FILTER_STOP     # a tap in a band goes on too (never to the board)
 	shade.gui_input.connect(_on_input)
@@ -336,10 +340,8 @@ func _build() -> void:
 	var foot := bh + info_h + hint_h + 30.0
 	var col_h := H - top - foot - 20.0
 	var half := (W - x * 2.0) * 0.4
-	var floor0 := _side(sides[0], Vector2(x, top), Vector2(half, col_h), true)
-	var floor1 := _side(sides[1], Vector2(W - x - half, top), Vector2(half, col_h), false)
-	_place_stage(stages[0], _side_faction(sides[0], yf), floor0 if floor0 > 0.0 else floor1)
-	_place_stage(stages[1], _side_faction(sides[1], yf), floor1 if floor1 > 0.0 else floor0)
+	_side(sides[0], Vector2(x, top), Vector2(half, col_h), true)
+	_side(sides[1], Vector2(W - x - half, top), Vector2(half, col_h), false)
 	# VS, its glow, between the two
 	var vs_c := Vector2(W / 2.0, top + col_h * 0.45)
 	var glow := TextureRect.new()
@@ -398,40 +400,6 @@ func _build() -> void:
 		var tw := create_tween().set_parallel(true)
 		tw.tween_property(vs, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		tw.tween_property(vs, "modulate:a", 1.0, 0.25)
-
-
-func _side_faction(seats: Array, fallback: String) -> String:
-	return str(main.SEAT_FACTIONS[seats[0]]) if not seats.is_empty() else fallback
-
-
-func _stage_half(r: Rect2) -> TextureRect:
-	## One half of the screen, clipped, for a side's stage (its art placed by _place_stage).
-	var clip := Control.new()
-	clip.clip_contents = true
-	clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	clip.position = r.position
-	clip.size = r.size
-	content.add_child(clip)
-	var t := TextureRect.new()
-	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	t.stretch_mode = TextureRect.STRETCH_SCALE
-	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	t.modulate = Color(0.42, 0.33, 0.38)                 # designer 10 (11-18): a dark plum room behind the heroes, not the bright sky city
-	clip.add_child(t)
-	return t
-
-
-func _place_stage(t: TextureRect, f: String, floor_y: float) -> void:
-	## The faction's stage covering its half, scaled / shifted so the platform's centre (STAGE_FLOOR) sits at
-	## `floor_y` (page units) - where the side's creatures stand.
-	t.texture = UiKit.stage(f)
-	var clip := t.get_parent() as Control
-	var r := Rect2(clip.position, clip.size)
-	var fy := clampf(floor_y - r.position.y, r.size.y * 0.3, r.size.y * 0.95)   # in the half's own units
-	var cover := maxf(r.size.x, r.size.y)
-	var side := clampf(maxf(fy / STAGE_FLOOR, (r.size.y - fy) / (1.0 - STAGE_FLOOR)), cover, cover * 1.35)   # zoom capped:
-	t.size = Vector2(side, side)                                    # a high floor line (FFA rows) lets the platform sit lower
-	t.position = Vector2((r.size.x - side) / 2.0, clampf(fy - side * STAGE_FLOOR, r.size.y - side, 0.0))
 
 
 func _wash(r: Rect2, across: bool) -> void:

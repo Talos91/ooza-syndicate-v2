@@ -458,3 +458,52 @@ static func draw_text(ci: CanvasItem, m, t: String, r: Rect2, size_cu: float, co
 			x += r.size.x - lw
 		ci.draw_string(f, Vector2(x, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, ifs, col)
 		y += lh
+
+
+# ------------------------------------------------------------------ keys for the Button-built screens
+const KEY_CAP_L := 10.0                              # pt kept at the key's left (the chamfer)
+const KEY_CAP_R := 20.0                              # pt kept at the right (the chamfer + the seat lamp)
+
+
+static func caps(ci: RID, t: Texture2D, r: Rect2, u: float, col: Color) -> void:
+	## A 33 pt key drawn into r: height mapped evenly (u = canvas units per pt), the two caps at their size, the face stretched.
+	var ts := Vector2(t.get_size())
+	var px := ts.y / 33.0
+	var dl := minf(KEY_CAP_L * u, r.size.x * 0.3)
+	var dr := minf(KEY_CAP_R * u, r.size.x * 0.4)
+	var sl := dl / u * px
+	var sr := dr / u * px
+	var rid := t.get_rid()
+	RenderingServer.canvas_item_add_texture_rect_region(ci, Rect2(r.position, Vector2(dl, r.size.y)), rid, Rect2(0, 0, sl, ts.y), col)
+	RenderingServer.canvas_item_add_texture_rect_region(ci, Rect2(r.position.x + dl, r.position.y, r.size.x - dl - dr, r.size.y), rid,
+			Rect2(sl, 0, ts.x - sl - sr, ts.y), col)
+	RenderingServer.canvas_item_add_texture_rect_region(ci, Rect2(r.end.x - dr, r.position.y, dr, r.size.y), rid, Rect2(ts.x - sr, 0, sr, ts.y), col)
+
+
+class KeyBox extends StyleBox:
+	## A 45B key (PRIMARY-WIDE) as a StyleBox, for the screens still built from Buttons (VERSUS, PAUSE, WIN / LOSS, sheets):
+	## the 33 pt variant nearest the key's width, the caps kept, the face stretched. SELECTED = the copper face with the seat
+	## rim + lamp in the seat colour (45B2; GAP-LIST §0: rim, never the old cyan underline).
+	var fam := "PRIMARY-WIDE"
+	var st := "NORMAL"
+	var mod := Color.WHITE
+
+	func _draw(ci: RID, r: Rect2) -> void:
+		var u := r.size.y / 33.0
+		var v := Kit45.variant(fam, Kit45.nearest(fam, r.size.x / u, 33.0))
+		if v.is_empty():
+			return
+		var s := Kit45.state_of(v, st)
+		var t := Kit45.tex(str(s.get("file", "")))
+		if t == null:
+			return
+		Kit45.caps(ci, t, r, u, mod)
+		var masks: Dictionary = s.get("masks", {})
+		for ch in masks:
+			var mt := Kit45.tex(str(masks[ch]))
+			if mt != null:
+				Kit45.caps(ci, mt, r, u, Kit45.seat())
+
+
+static func key_ink(st: String) -> Color:
+	return ink_on("PRIMARY-WIDE", "229x33pt", st, [])

@@ -76,7 +76,7 @@ func backdrop(dim: float, art := false) -> void:
 	var v := full()                                    # the dim / art covers the whole screen, bands included
 	var at := -layer.position
 	if art:
-		var tex := UiKit.background(f)
+		var tex := UiKit.tex(Armies43.DIR + "ARMIES-PLATE.jpg")   # 45B (GAP-LIST §0): the room plate, not the sky city
 		if tex != null:
 			var r := TextureRect.new()
 			r.texture = tex
@@ -84,7 +84,7 @@ func backdrop(dim: float, art := false) -> void:
 			r.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 			r.size = v
 			r.position = at
-			r.modulate = Color(0.52, 0.55, 0.6)
+			r.modulate = Color(0.85, 0.85, 0.85)
 			r.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			layer.add_child(r)
 	var shade := UiKit.rect(at, v, Color(UiKit.BASE, dim))
