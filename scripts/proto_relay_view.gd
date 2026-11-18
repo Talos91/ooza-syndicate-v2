@@ -1465,8 +1465,23 @@ func _p2_skin(l: Label3D) -> void:
 		l.add_child(s)
 
 
+const P2_TEXT_SHARE := 0.74           # bg-44b4 (designer 11, 11-18): the text may fill this share of the capsule, the rest is padding
+
+
+func _p2_fit(l: Label3D) -> void:
+	## The capsule widens to its text plus padding ("FERRY · 17" clipped at both ends of the fixed 64 x 20 pt capsule); never narrower.
+	var f: Font = l.font if l.font != null else ThemeDB.fallback_font
+	var w_m := f.get_string_size(l.text, HORIZONTAL_ALIGNMENT_LEFT, -1, l.font_size).x * l.pixel_size
+	var sx := maxf(1.0, w_m / P2_TEXT_SHARE / P2_W_M)
+	for n in ["shell", "edge"]:
+		var s := l.get_node_or_null(n) as Sprite3D
+		if s != null:
+			s.scale.x = sx
+
+
 func _p2_tint(l: Label3D, col: Color) -> void:
 	if l.has_meta("p2"):
+		_p2_fit(l)
 		var e := l.get_node_or_null("edge") as Sprite3D
 		if e != null:
 			e.modulate = col

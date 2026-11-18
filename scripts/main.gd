@@ -576,6 +576,8 @@ func _start_map(path: String) -> void:
 	hud = Hud.new()
 	add_child(hud)
 	hud.setup(self)
+	if scenery and scenery.pit:
+		scenery.pit.build_mounts(hud)                 # ROUND 44 B4: the HUD sits on the painted mounts
 	if director:
 		_tutorial_setup()
 	_apply_quality()
@@ -1978,6 +1980,8 @@ func _process(delta: float) -> void:
 	fx.sync(dt)
 	if world_layer:
 		world_layer.sync(dt)
+	if scenery and scenery.pit:
+		scenery.pit.sync()                            # ROUND 44 B4: the mounts follow the HUD, the pit is placed once the view is fitted
 	if _world_probe >= 0.0:
 		_world_probe_step()
 	if proto_view:
@@ -2026,6 +2030,9 @@ func _zone_check() -> void:
 
 
 func _take_shot(t: float, last: bool) -> void:
+	if scenery and scenery.pit:                        # ROUND 44 B4: the shot's node bases against the painted lake (dev check)
+		var pc: Array = scenery.pit.count_inside()
+		print("PIT CHECK t=%.1f: %d of %d bases inside (drop %.0f pt)" % [t, pc[0], pc[1], scenery.pit.drop_pt])
 	if "--zone-check" in OS.get_cmdline_user_args() and hud != null:
 		_zone_check()
 	if clean_shots and hud != null:

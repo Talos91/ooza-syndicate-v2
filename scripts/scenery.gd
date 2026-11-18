@@ -34,6 +34,7 @@ var main: Node3D
 var sim: Sim
 var vis: Dictionary
 var backdrop: CanvasLayer
+var pit: PitBackdrop                 # ROUND 44 B4 (0.25.1 flat): the painted pit + crust instead of the sky (pit_backdrop.gd)
 var _vats := {}                      # node id -> record (see _bind)
 static var _tanks := {}              # "model key#mesh id" -> {"tanks": [{c, r, y0, y1}], "y0", "y1", "surface"}
 var _mesh := {}                      # faction -> creature Mesh
@@ -189,6 +190,11 @@ func setup_steps(m: Node3D, s: Sim, v: Dictionary) -> Array[Callable]:
 	var steps: Array[Callable] = []
 	steps.append(func():
 		var md = m.get("mission")                     # CAMPAIGN: the mission's / the map's own backdrop
+		PitBackdrop.on = PitBackdrop.wanted()
+		if PitBackdrop.on:                            # ROUND 44 B4 FLAT (0.25.1, every match): pit + crust, no sky, no void mist
+			pit = PitBackdrop.new()
+			backdrop = pit.build_back(m)
+			return
 		backdrop = make_backdrop(m, backdrop_for(str(m.get("map").get("code", "")) if m.get("map") is Dictionary else "",
 				str(md.key) if md != null else "")))
 	steps.append(func():
@@ -197,7 +203,7 @@ func setup_steps(m: Node3D, s: Sim, v: Dictionary) -> Array[Callable]:
 		for n in s.nodes:
 			lo = lo.min(n["pos"])
 			hi = hi.max(n["pos"])
-		if not Look.v2:                               # LAB LOOK TEST v2: no void mist (the surround is the air; the mist washed the 1920 frame)
+		if not Look.v2 and not PitBackdrop.on:        # LAB LOOK TEST v2: no void mist (the surround is the air; the mist washed the 1920 frame)
 			make_void(self, (lo + hi) / 2.0, Vector2(hi.x - lo.x, hi.z - lo.z), not (Rules.low_detail or main.mobile)))
 	for f in Rules.FACTIONS.keys():
 		steps.append(func(): _load_resident(str(f)))

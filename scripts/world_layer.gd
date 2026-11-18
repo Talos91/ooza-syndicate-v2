@@ -126,6 +126,8 @@ var locals: WorldLocals          # LOCALS MARCH: containment ring craters + the 
 var _zaps: Array = []            # pooled beams: {mi, t0}
 var zaps_done := 0
 var _floor: MeshInstance3D
+var flat := false                 # ROUND 44 B4 FLAT: the painted pit + one goo plane, no old floor world (setup)
+var goo_plane: MeshInstance3D     # (flat) the goo surface at floor_y
 var _tubes: Array = []           # [{id, mi, mat, r, top_off, owner, base, base_old, inv, inv_col, inv_seat, pushing, riders, alive, x, z, dirty}]
 var _t := 0.0
 var _pending: Array = []         # [land time, event]
@@ -197,20 +199,33 @@ func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
 	if Look.lab:
 		floor_haze = 0.0                              # LAB LOOK TEST: the tile at its own value
 	active = self
-	_build_floor(centre, radius)
-	Look.add_surround(self, minf(lo.y, 0.0))         # LAB LOOK TEST: the screen-pinned surround (null without --look=lab)
-	if floor_lab5:
-		_lab_backdrop(_main)
-	if not "--floor-clear" in OS.get_cmdline_user_args() and not Look.lab:   # dev: --floor-clear = no floor fog sheet, no floor haze
-		_build_mist(centre, radius)
+	# ROUND 44 B4 FLAT (b4-staging 0.25.1, Daniele 2026-11-18: "use only the original flat version ... remove the old background
+	# parts: pits, walkways, walking locals"): the painted pit is the background and ONE goo plane at the goo level hides the
+	# bottom of the node columns (PitBackdrop.build_goo_plane). Not built then: the floor, the lab surround / side backdrop / fog
+	# tweak, the floor mist, the pit -> column pipes (WorldTubes), the pits / walkways / Locals (WorldLocals), the lab dressing
+	# (props + decals). Kept: the node columns, falls -> splats / blobs on the goo surface, the VAT COLUMN blueprint.
+	flat = PitBackdrop.on
+	var sc = _main.get("scenery")
+	if flat and sc != null and sc.get("pit") != null:
+		floor_y = minf(lo.y, 0.0) - PitBackdrop.GOO_DROP
+		floor_haze = 0.0
+		goo_plane = (sc.pit as PitBackdrop).build_goo_plane(self, centre, radius, floor_y)
+	else:
+		flat = false
+		_build_floor(centre, radius)
+		Look.add_surround(self, minf(lo.y, 0.0))     # LAB LOOK TEST: the screen-pinned surround (null without --look=lab)
+		if floor_lab5:
+			_lab_backdrop(_main)
+		if not "--floor-clear" in OS.get_cmdline_user_args() and not Look.lab:   # dev: --floor-clear = no floor fog sheet, no floor haze
+			_build_mist(centre, radius)
 	for n in sim.nodes:
 		_build_tube(n)
 	_build_pools()
-	if (FLOOR_TUBES or "--floor-tubes" in OS.get_cmdline_user_args()) and not "--no-floor-tubes" in OS.get_cmdline_user_args():
+	if not flat and (FLOOR_TUBES or "--floor-tubes" in OS.get_cmdline_user_args()) and not "--no-floor-tubes" in OS.get_cmdline_user_args():
 		pipes = WorldTubes.new()                      # PITS / TUBES (built once the pits are placed: WorldLocals.place)
 		add_child(pipes)
 		pipes.setup(self)
-	if not "--no-locals" in OS.get_cmdline_user_args():
+	if not flat and not "--no-locals" in OS.get_cmdline_user_args():
 		locals = WorldLocals.new()
 		add_child(locals)
 		locals.setup(self)
@@ -218,8 +233,12 @@ func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
 	column = VatColumn.new()
 	add_child(column)
 	column.setup(self)
-	if floor_lab5 and not "--no-dressing" in OS.get_cmdline_user_args() and not Look.lab: add_child(WorldDressing.new())   # WORLD COMPLETE LAB (LAB LOOK TEST: the surround replaces it)
-	Look.lab_world(_main)                            # LAB LOOK TEST (no-op without --look=lab)
+	if not flat and floor_lab5 and not "--no-dressing" in OS.get_cmdline_user_args() and not Look.lab: add_child(WorldDressing.new())   # WORLD COMPLETE LAB (LAB LOOK TEST: the surround replaces it)
+	if flat and floor_lab5:                           # (flat) the lab air _lab_backdrop gave 0.25.0, without its side backdrop (designer 11:
+		_lab_air(_main)                               # decks / bridges / seat colours must read as in 0.25.0)
+	Look.lab_world(_main)                            # LAB LOOK TEST: the lab's lights / ambient / fog / glow (kept flat: it is the air, not the floor)
+	if flat:
+		(sc.pit as PitBackdrop).sync_post()           # the goo plane follows the air's exposure / adjustments
 
 
 func _lab_backdrop(main: Node) -> void:
@@ -241,6 +260,15 @@ func _lab_backdrop(main: Node) -> void:
 		for c in (sc as Node).get_children():
 			if c is MeshInstance3D and (c as MeshInstance3D).material_override is ShaderMaterial 					and ((c as MeshInstance3D).material_override as ShaderMaterial).shader == Scenery.VOID_SHADER:
 				((c as MeshInstance3D).material_override as ShaderMaterial).set_shader_parameter("mist_color", LAB_FAR.lightened(0.12))
+	for c in main.get_children():
+		if c is WorldEnvironment and (c as WorldEnvironment).environment != null:
+			var env := (c as WorldEnvironment).environment
+			env.fog_height_density = LAB5_FOG_HEIGHT_DENSITY
+			env.fog_light_color = LAB_FAR
+
+
+func _lab_air(main: Node) -> void:
+	## the environment half of _lab_backdrop: the height fog thinned and lit in the lab's far colour (not the violet void)
 	for c in main.get_children():
 		if c is WorldEnvironment and (c as WorldEnvironment).environment != null:
 			var env := (c as WorldEnvironment).environment
@@ -456,16 +484,16 @@ func _build_pools() -> void:
 		var half: float = float(tb["r"]) + SOCKET_PAD
 		tb["sock"] = i
 		tb["ent"] = ent_mesh != null and is_equal_approx(float(tb["r"]), TUBE_R)
-		tb["ent_xf"] = Transform3D(Basis.IDENTITY, Vector3(tb["x"], floor_y, tb["z"]))
+		tb["ent_xf"] = Transform3D(Basis.IDENTITY, Vector3(tb["x"], floor_y - (FLAT_PARK if flat else 0.0), tb["z"]))
 		var sx := Transform3D(Basis.from_scale(Vector3(half * 2.0, 1.0, half * 2.0)), Vector3(tb["x"], floor_y + 0.02, tb["z"]))
-		_socket_mm.set_instance_transform(i, HIDDEN if tb["ent"] else sx)
+		_socket_mm.set_instance_transform(i, HIDDEN if tb["ent"] or flat else sx)   # (flat: no floor sockets)
 		_socket_mm.set_instance_custom_data(i, Color(float(tb["r"]) / half, 0, 0, 0))
 		_ent_mm.set_instance_transform(i, HIDDEN)
 		_ent_mm.set_instance_custom_data(i, Color(0, 0, 0, 0))
 		_ent_mm.set_instance_color(i, Color.WHITE)
 		_sock_lit(tb, tb["base"])
-	_socket_mm.visible_instance_count = _tubes.size()
-	_ent_mm.visible_instance_count = _tubes.size()
+	_socket_mm.visible_instance_count = 0 if flat else _tubes.size()   # (flat: none drawn - a zero-scale instance still costs its tris)
+	_ent_mm.visible_instance_count = 0 if flat else _tubes.size()
 
 
 func _orient_entrances() -> void:
@@ -482,10 +510,11 @@ func _orient_entrances() -> void:
 		if WorldTubes.base45():                       # the base is 4-fold symmetric: the quarter turn that puts its flat (floor-level)
 			var yw := float(tb["ent_yaw"])            # sockets on world x (mesh faces 1 / 5) and the tilted ones on world z
 			tb["ent_yaw"] = PI / 4.0 if absf(angle_difference(yw, PI / 4.0)) <= PI / 2.0 else PI / 4.0 + PI
-		tb["ent_xf"] = Transform3D(Basis(Vector3.UP, float(tb["ent_yaw"])), Vector3(tb["x"], floor_y, tb["z"]))
+		tb["ent_xf"] = Transform3D(Basis(Vector3.UP, float(tb["ent_yaw"])), Vector3(tb["x"], floor_y - (FLAT_PARK if flat else 0.0), tb["z"]))
 		_sock_lit(tb, tb["base"] if (tb["mi"] as MeshInstance3D).visible else Color(0, 0, 0, 0))
 
 
+const FLAT_PARK := 3.0           # m: (flat) the column base sits this far under the goo surface (the VAT COLUMN copies start hidden)
 const HIDDEN := Transform3D(Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO), Vector3(0, -9999, 0))
 
 
@@ -514,7 +543,7 @@ func _sock_lit(tb: Dictionary, c: Color) -> void:
 	if decals != null:
 		decals.tint_pool(i, c)
 	if tb.get("ent", false):                         # (hidden while the VAT COLUMN blueprint shows)
-		var show: bool = c.a > 0.0 and not tb.get("holo", false)
+		var show: bool = c.a > 0.0 and not tb.get("holo", false) and not flat   # (flat: no column bases on the goo)
 		_ent_mm.set_instance_transform(i, tb["ent_xf"] if show else HIDDEN)
 		_ent_mm.set_instance_custom_data(i, c)
 	else:
@@ -698,7 +727,7 @@ func sync(dt: float) -> void:
 	_zaps_step()
 	if _warm > 0:                                     # shader warm-up: one instance each, under the floor (the first
 		_warm -= 1                                    # real fall must not hitch on a compile - 63 ms seen without it)
-		var under := Transform3D(Basis.from_scale(Vector3.ONE * 0.01), Vector3(_floor.position.x, floor_y - 2.0, _floor.position.z))
+		var under := Transform3D(Basis.from_scale(Vector3.ONE * 0.01), (Vector3(_floor.position.x, floor_y - 2.0, _floor.position.z) if _floor != null else Vector3(0.0, floor_y - 2.0, 0.0)))
 		for mm in [_blob_mm, _drop_mm, _splat_mm]:
 			if (mm as MultiMesh).visible_instance_count == 0:
 				(mm as MultiMesh).set_instance_transform(0, under)

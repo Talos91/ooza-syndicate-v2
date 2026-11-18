@@ -1167,7 +1167,7 @@ func sync(dt: float, cam: Camera3D) -> void:
 	stats_label.text = "%02d:%02d" % [int(sim.time) / 60, int(sim.time) % 60]
 	var show_chips := shows("strength")
 	if lab_tube:                                     # hud-lab: the tube's goo = each seat's share, no numbers; the clock
-		lab_tube.visible = top_panel.visible
+		lab_tube.visible = top_panel.visible and score43 == null   # bg-44b4 (designer 11): hud-43 hides the lab tube for good (its end pipes poked over the score housing)
 		lab_tube.show_shares = show_chips
 		lab_tube.sync()
 		if is_instance_valid(lab_feed) and dock.slots.size() > 0:
