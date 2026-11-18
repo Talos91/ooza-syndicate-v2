@@ -1,5 +1,13 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.25.1 "45B menus, AI reactions, B4 background, drill node" - 2026-11-18 (STAGING only; live is 0.23.21)
+
+- Release release-0.25.1 = main a809439f + ui-remake-45b 3a6c8607 + ai-reactions 9f1f8bb9 + b4-staging 0a9a9abf + kit2-staging 5584a520 (merge.renormalize, 0 conflicts). net.gd unchanged; protocol tag stays ooze20-net-8; staging room pack moves with the build.
+  - 45B menus remade from the director's five-screen package; 16:9 SKILLS on one page at 12.5 pt.
+  - AI reactions: 17 reactions x 5 AIs.
+  - B4 flat background (real 3D pit), old floor world stripped.
+  - Static size-D drill node (kit2), prequel to the missile update.
+
 ## 0.25.0 "copper punk UI, HUD zones, map pass, max 4 seats" - 2026-11-18 (STAGING only; live is 0.23.21)
 
 - Release release-0.25.0 = main 2340236 + ui-build-43b ac44b3c (fast-forward-able; merge commit, 0 conflicts). net.gd changed (max 4 seats), protocol tag stays ooze20-net-8, so the staging room pack moves with the build.
