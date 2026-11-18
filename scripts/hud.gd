@@ -414,7 +414,16 @@ func setup(m: Node3D) -> void:
 	# seconds ("9 s") sit in an amber capsule (_draw_status_secs, like the board's NEXT DROP 6s)
 	status_label.add_theme_stylebox_override("normal", HudNoir.box("status_pill", Color(0, 0, 0, 0), Vector4(16.0, 1.0, 16.0, 1.0) * ui_scale))
 	if Hud43.on():                                    # hud-43 (Daniele 11-18: no text strips): the words alone, outlined, on the board
-		status_label.add_theme_stylebox_override("normal", StyleBoxEmpty.new())
+		var pill := StyleBoxFlat.new()                  # designer 10: the same dark pill as the on-board callouts
+		pill.bg_color = Color(0.12, 0.05, 0.09, 0.88)
+		pill.border_color = Color("ff6b6b", 0.9)
+		pill.set_border_width_all(maxi(1, int(round(1.5 * ui_scale))))
+		pill.set_corner_radius_all(int(round(10.0 * ui_scale)))
+		pill.content_margin_left = 10.0 * ui_scale
+		pill.content_margin_right = 10.0 * ui_scale
+		pill.content_margin_top = 2.0 * ui_scale
+		pill.content_margin_bottom = 2.0 * ui_scale
+		status_label.add_theme_stylebox_override("normal", pill)
 		status_label.add_theme_constant_override("outline_size", maxi(3, int(round(4.0 * ui_scale))))
 		status_label.add_theme_color_override("font_outline_color", Color(0.08, 0.03, 0.06, 0.9))
 	_status_secs = Control.new()
@@ -3142,7 +3151,7 @@ func skill_refusal(slot: int, msg: String) -> void:
 	var col := kind_color("warn")
 	callouts.add("slot:%d" % slot, [[msg, callout_px(Rules.HUD_REFUSAL_FONT, Rules.HUD_REFUSAL_MIN_PT), col.lerp(Color.WHITE, 0.25)]], col,
 			{"anchor": func(): return Vector2(b.get_global_rect().position.x - 6.0 * ui_scale, b.get_global_rect().get_center().y),
-			"glyph": "warn", "life": Rules.HUD_REFUSAL_LIFE, "arrow": false, "rise": 6.0})
+			"glyph": "warn", "life": Rules.HUD_REFUSAL_LIFE, "arrow": false, "rise": 6.0, "pill": Hud43.on()})
 
 
 func note_line(text: String, kind := "info", seat := "") -> void:
@@ -3173,10 +3182,8 @@ func start_banner(title: String, lines: Array) -> void:
 	## play (its clock stands still while the match is held - under the VERSUS card).
 	if not shows("notices") or callouts == null or (title == "" and lines.is_empty()):
 		return
-	if Hud43.on():                                    # designer 10: no map-name watermark over the pit (the name is bottom left)
-		title = ""
-		if lines.is_empty():
-			return
+	if Hud43.on():                                    # designer 10 (11-18): no map-name watermark and no start box over the pit (it stayed
+		return                                        # near-invisible: its clock holds at the start). Follow-up: the relay note elsewhere
 	var rows := []
 	if title != "":
 		rows.append([title, callout_px(Rules.HUD_BANNER_FONT, Rules.HUD_CALLOUT_MIN_PT + 6.0), Color("f2fbff"), true])
@@ -3357,7 +3364,7 @@ func skill_event(ev: Dictionary) -> void:
 const ON_BOARD_LIFE := 1.8
 
 
-func _on_board(text: String, kind := "info", seat := "", place := "line") -> void:
+func _on_board(text: String, kind := "info", seat := "", place := "line", life := ON_BOARD_LIFE) -> void:
 	## hud-43 (Daniele 11-18: "notifications on the board, no top banners"): a line with no node of its own goes ON the board -
 	## at the seat's strongest node when it names a seat, else in the pit's upper middle - text only (no plate), fading fast.
 	var col := kind_color(kind)
@@ -3370,7 +3377,7 @@ func _on_board(text: String, kind := "info", seat := "", place := "line") -> voi
 		callout_at(sim.nodes[best]["pos"], place, text, kind, seat)
 		return
 	var opts := {"glyph": "good" if kind == "good" else ("warn" if kind == "warn" else "info"), "side": "center", "arrow": false,
-			"life": ON_BOARD_LIFE, "rise": 8.0, "pill": true}
+			"life": life, "rise": 8.0, "pill": true}
 	opts["anchor"] = func():
 		var pr: Rect2 = main.pit_rect()
 		return Vector2(pr.get_center().x, pr.position.y + pr.size.y * 0.3)
