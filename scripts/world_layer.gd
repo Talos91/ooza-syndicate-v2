@@ -149,7 +149,7 @@ var pipes: WorldTubes            # PITS / TUBES: the transport tubes socket -> p
 # --no-floor-tubes hides the transport tubes (before / after shots).
 static var FLOOR_TUBES := true
 static var FLOOR_PIPE_PROPS := false
-var kit_drill: KitDrill         # KIT2 SIZE D: the bands down every node column (kit_drill.gd)
+var drills: WorldDrill         # KIT2 SIZE D: collar / bit / legs / bands under every column (world_drill.gd; the demo keeps it on WorldRiver)
 var column: VatColumn            # VAT COLUMN: upgrade blueprint + the entrance module from the pit (vat_column.gd)
 var _blobs: Array = []           # {p, tube, col, t0, mode (0 hop, 1 crawl, 2 enter), v, dur, from}
 var _drops: Array = []           # {p, v, t0, col}
@@ -696,12 +696,12 @@ func sync(dt: float) -> void:
 		pipes.step(dt)
 	if column != null:
 		column.step(dt)
-	if Rules.kit2:                                    # KIT2 SIZE D: the column's wine bands (kit_drill.gd), built on the first step
-		if kit_drill == null:
-			kit_drill = KitDrill.new()
-			add_child(kit_drill)
-			kit_drill.build(self)
-		kit_drill.step()
+	if Rules.kit2:                                    # KIT2 SIZE D: the drill under every column (world_drill.gd, bg-44b4's), built on the first step
+		if drills == null:
+			drills = WorldDrill.new()
+			add_child(drills)
+			drills.build(WorldDrill.FlatGround.new(self))
+		drills.step(dt)
 	_blobs_step(dt)
 	_drops_step()
 	_splats_step()
