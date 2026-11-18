@@ -233,9 +233,12 @@ func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
 	column = VatColumn.new()
 	add_child(column)
 	column.setup(self)
-	if not flat:
-		if floor_lab5 and not "--no-dressing" in OS.get_cmdline_user_args() and not Look.lab: add_child(WorldDressing.new())   # WORLD COMPLETE LAB (LAB LOOK TEST: the surround replaces it)
-		Look.lab_world(_main)                        # LAB LOOK TEST (no-op without --look=lab)
+	if not flat and floor_lab5 and not "--no-dressing" in OS.get_cmdline_user_args() and not Look.lab: add_child(WorldDressing.new())   # WORLD COMPLETE LAB (LAB LOOK TEST: the surround replaces it)
+	if flat and floor_lab5:                           # (flat) the lab air _lab_backdrop gave 0.25.0, without its side backdrop (designer 11:
+		_lab_air(_main)                               # decks / bridges / seat colours must read as in 0.25.0)
+	Look.lab_world(_main)                            # LAB LOOK TEST: the lab's lights / ambient / fog / glow (kept flat: it is the air, not the floor)
+	if flat:
+		(sc.pit as PitBackdrop).sync_post()           # the goo plane follows the air's exposure / adjustments
 
 
 func _lab_backdrop(main: Node) -> void:
@@ -257,6 +260,15 @@ func _lab_backdrop(main: Node) -> void:
 		for c in (sc as Node).get_children():
 			if c is MeshInstance3D and (c as MeshInstance3D).material_override is ShaderMaterial 					and ((c as MeshInstance3D).material_override as ShaderMaterial).shader == Scenery.VOID_SHADER:
 				((c as MeshInstance3D).material_override as ShaderMaterial).set_shader_parameter("mist_color", LAB_FAR.lightened(0.12))
+	for c in main.get_children():
+		if c is WorldEnvironment and (c as WorldEnvironment).environment != null:
+			var env := (c as WorldEnvironment).environment
+			env.fog_height_density = LAB5_FOG_HEIGHT_DENSITY
+			env.fog_light_color = LAB_FAR
+
+
+func _lab_air(main: Node) -> void:
+	## the environment half of _lab_backdrop: the height fog thinned and lit in the lab's far colour (not the violet void)
 	for c in main.get_children():
 		if c is WorldEnvironment and (c as WorldEnvironment).environment != null:
 			var env := (c as WorldEnvironment).environment

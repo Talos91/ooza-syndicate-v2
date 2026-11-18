@@ -260,19 +260,27 @@ func mirror_material() -> ShaderMaterial:
 		var r: Array = _el("rim").get("pt", [0, 0, REF.x, REF.y])
 		mirror.set_shader_parameter("rim_pt", Vector4(r[0], r[1], r[2], r[3]))
 		mirror.set_shader_parameter("ref", REF)
-		var env: Environment = main.get_viewport().world_3d.environment if main.get_viewport().world_3d else null
-		for e in main.find_children("*", "WorldEnvironment", true, false):
-			env = (e as WorldEnvironment).environment
-		if env != null:                               # undo the 3D post chain (pit_mirror.gdshader inv_post)
-			mirror.set_shader_parameter("tonemap_on", false)   # measured (Compatibility, unshaded): no filmic curve on it
-			mirror.set_shader_parameter("srgb_bias", MIRROR_BIAS)
-			mirror.set_shader_parameter("exposure", env.tonemap_exposure)
-			mirror.set_shader_parameter("white", env.tonemap_white)
-			mirror.set_shader_parameter("contrast", env.adjustment_contrast if env.adjustment_enabled else 1.0)
-			mirror.set_shader_parameter("saturation", env.adjustment_saturation if env.adjustment_enabled else 1.0)
+		sync_post()
 		if _vp != Vector2.ZERO:
 			_mirror_uniforms(_vp)
 	return mirror
+
+
+func sync_post() -> void:
+	## the goo plane undoes the 3D post chain (pit_mirror.gdshader inv_post): read the Environment now (call again after
+	## anything changes it, e.g. Look.lab_world's exposure)
+	if mirror == null:
+		return
+	var env: Environment = main.get_viewport().world_3d.environment if main.get_viewport().world_3d else null
+	for e in main.find_children("*", "WorldEnvironment", true, false):
+		env = (e as WorldEnvironment).environment
+	if env != null:
+		mirror.set_shader_parameter("tonemap_on", false)   # measured (Compatibility, unshaded): no filmic curve on it
+		mirror.set_shader_parameter("srgb_bias", MIRROR_BIAS)
+		mirror.set_shader_parameter("exposure", env.tonemap_exposure)
+		mirror.set_shader_parameter("white", env.tonemap_white)
+		mirror.set_shader_parameter("contrast", env.adjustment_contrast if env.adjustment_enabled else 1.0)
+		mirror.set_shader_parameter("saturation", env.adjustment_saturation if env.adjustment_enabled else 1.0)
 
 
 func _mirror_uniforms(vp: Vector2) -> void:
