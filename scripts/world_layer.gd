@@ -79,6 +79,8 @@ const TUBE_R := 0.95             # a common platform's tube, under its machinery
 const TUBE_R_PILLAR := 2.6       # a pillar node: a glass sleeve around the column
 const TUBE_TOP := -3.5           # under the platform centre (legs and core end at -3.6)
 const TUBE_TOP_PILLAR := -2.3    # under the pillar's collar
+const TUBE_TOP_KIT2 := -0.9      # KIT2 at SIZE D: the full-size column meets the x0.68 hub cone 0.85 m over its bottom (NODE-SIZE-D-SPEC)
+const DRILL_R_KIT2 := 1.088      # KIT2 SIZE D: the full-size mobile goo column (M_GooColumn, 2.18 m across); drawn only (tb "r" stays)
 const PUSH_T := 1.6              # s: a capture pushes the old colour out of the tube
 const INV_MAX := 0.6             # a siege fills at most this share of the tube from the top
 const INV_RATE := 0.8            # tube share per second the invader band moves
@@ -147,6 +149,7 @@ var pipes: WorldTubes            # PITS / TUBES: the transport tubes socket -> p
 # --no-floor-tubes hides the transport tubes (before / after shots).
 static var FLOOR_TUBES := true
 static var FLOOR_PIPE_PROPS := false
+var kit_drill: KitDrill         # KIT2 SIZE D: the bands down every node column (kit_drill.gd)
 var column: VatColumn            # VAT COLUMN: upgrade blueprint + the entrance module from the pit (vat_column.gd)
 var _blobs: Array = []           # {p, tube, col, t0, mode (0 hop, 1 crawl, 2 enter), v, dur, from}
 var _drops: Array = []           # {p, v, t0, col}
@@ -365,8 +368,9 @@ func _build_tube(n: Dictionary) -> void:
 	var r := TUBE_R_PILLAR if (pillar and not ("vat" in b or "machinegoon" in b)) else TUBE_R
 	var mi := MeshInstance3D.new()
 	var cm := CylinderMesh.new()
-	cm.top_radius = r
-	cm.bottom_radius = r
+	var kit2 := Rules.kit2 and not pillar             # KIT2 SIZE D: the wide column under the kit2 hub cone (sockets / doors keep r)
+	cm.top_radius = DRILL_R_KIT2 if kit2 else r
+	cm.bottom_radius = DRILL_R_KIT2 if kit2 else r
 	cm.height = 1.0
 	cm.radial_segments = 20 if not _low else 14
 	cm.rings = 1
@@ -384,7 +388,7 @@ func _build_tube(n: Dictionary) -> void:
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 	var owner: String = n["owner"]
-	var tb := {"id": id, "mi": mi, "mat": m, "r": r, "top_off": TUBE_TOP_PILLAR if pillar else TUBE_TOP,
+	var tb := {"id": id, "mi": mi, "mat": m, "r": r, "top_off": TUBE_TOP_PILLAR if pillar else (TUBE_TOP_KIT2 if kit2 else TUBE_TOP),
 			"owner": owner, "base": _col(owner), "base_old": _col(owner), "inv": 0.0, "inv_col": _col(owner),
 			"inv_seat": "", "pushing": false, "riders": [], "alive": true, "drain": 0.0,
 			"x": (n["pos"] as Vector3).x, "z": (n["pos"] as Vector3).z, "top_y": 999.0}
@@ -692,6 +696,12 @@ func sync(dt: float) -> void:
 		pipes.step(dt)
 	if column != null:
 		column.step(dt)
+	if Rules.kit2:                                    # KIT2 SIZE D: the column's wine bands (kit_drill.gd), built on the first step
+		if kit_drill == null:
+			kit_drill = KitDrill.new()
+			add_child(kit_drill)
+			kit_drill.build(self)
+		kit_drill.step()
 	_blobs_step(dt)
 	_drops_step()
 	_splats_step()
