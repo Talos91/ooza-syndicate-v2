@@ -32,7 +32,7 @@ var map_path := ""                                # setup() takes main's, or the
 var ai_level := "Standard"
 var mode := "1v1"
 var colour := "A"
-const MODE_NAMES := {"1v1": "1 V 1", "2v2": "2 V 2", "3v3": "3 V 3", "2v2v2": "2V2V2", "FFA3": "FFA 3", "FFA4": "FFA 4", "FFA5": "FFA 5"}
+const MODE_NAMES := {"1v1": "1 V 1", "2v2": "2 V 2", "FFA3": "FFA 3", "FFA4": "FFA 4"}   # max 4 seats: FFA5 / 3v3 / 2v2v2 archived (Daniele 2026-11-18)
 const COLOUR_NAMES := {"A": "CYAN", "B": "GREEN", "C": "PURPLE", "D": "RED", "E": "GOLD", "F": "ROSE", "faction": "FACTION"}
 var maps: Array = []
 var _is_main := false
@@ -4237,7 +4237,7 @@ func _pool_modes() -> Array:
 	for e in maps:
 		for md in _modes_of(e["data"]):
 			have[md] = true
-	return ["1v1", "2v2", "3v3", "2v2v2", "FFA3", "FFA4", "FFA5"].filter(func(md): return have.has(md))
+	return ["1v1", "2v2", "FFA3", "FFA4"].filter(func(md): return have.has(md))
 
 
 func _refilter() -> void:
@@ -4256,7 +4256,7 @@ func _relay_kinds(m: Dictionary) -> String:
 
 func _modes_of(m: Dictionary) -> Array:
 	var out := []
-	for k in ["1v1", "2v2", "3v3", "2v2v2", "FFA3", "FFA4", "FFA5"]:
+	for k in ["1v1", "2v2", "FFA3", "FFA4"]:
 		if m.get("seats", {}).has(k) and MapPool.mode_offered(str(m.get("code", "")), k):   # 0.23.0: a kept older map fills gaps only
 			out.append(k)
 	return out if not out.is_empty() else ["1v1"]
