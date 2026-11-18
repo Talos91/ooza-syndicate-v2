@@ -5230,192 +5230,90 @@ func show_lobby() -> void:
 		for id in Net.roster:
 			fs.append(str(Net.roster[id]["faction"]))
 		(func(): VersusScreen.warm_art(fs)).call_deferred()
-	## LOBBY (screen system 14; a PLAY subflow): the room code (SHARE CODE), CHAT with its unread count, MY ARMY; the seats
-	## in words - HOST / JOINED / YOU / RECONNECTING, OPEN SEAT, the AI - team by team with JOIN / MOVE in team modes (the
-	## host picks a player's row, then MOVE on a team); your faction and colour; the host's MATCH (map, PLAYERS, LAST
-	## STAND, ABILITIES, EMPTY SEATS); DEPLOY for the host once every seat is filled, LEAVE ROOM. The foot carries who is
-	## in and Net's status (a browser-hosted room's UNRANKED line). Both columns scroll on phones.
+	## ONLINE ROOM = the remake (45B, sizes.json ONLINE-ROOM-4P): LEAVE ROOM at the top right; the MAP-CARD (name, nodes,
+	## the map; host: tap = MAP PICKER); up to four SEAT-CARDs (letter + edge in the seat's room colour, the army in the
+	## avatar well, name, HOST / READY / AWAY / OPEN / SIT HERE, the three chosen skills; tap = the seat's sheet, an open
+	## seat on another team = SIT HERE); the ROOM-CODE-PANEL (code, SHARE, the latest chat lines, the message field);
+	## six SELECTOR-CARDs (MODE, MAP, SETTING, ARMY, COLOUR, RULES: each opens its sheet over the room); the STATUS-STRIP
+	## (seats, Net's status, the host's notice) and DEPLOY (host, once every seat is ready) / READY (guest).
 	if not Net.in_room():
 		show_online()
 		return
 	if Net.roster.has(Net.local_id()):
 		faction = str(Net.roster[Net.local_id()]["faction"])
-	var area := shell_open("OOZE / ROOM", "home", _lobby_back, faction)
+	var st := _stage_page("OOZE / ROOM", "home", "ONLINE ROOM", "", _lobby_back, faction)
 	_page = "lobby"
-	map_path = Net.map_path                           # the rows' loadout icons read the room's map (relays)
+	map_path = Net.map_path                           # the seats' loadout icons read the room's map (relays)
 	var host := Net.can_control()                     # the browser host, or a server room's owner (Alpha 20)
-	var x := shell_x()
-	# ROUND 4 (Daniele 2026-11-05): the room is PLAY VS AI's lobby (_lobby_grid) - LEFT the map over MODE | MAP |
-	# BACKGROUND, RIGHT the seats (half) beside the ROOM CHAT (half; the code + SHARE on it) over ARMY | COLOUR | RULES.
-	# Every detail opens as a sheet over the room (_lobby_sheet), kept across room updates; ARMY = the faction page.
-	var g := _lobby_grid(area)
-	var foot: Rect2 = g["foot"]
-	var bh := foot.size.y
-	var fy := foot.position.y
-	var rx := foot.end.x
-	if host:
-		var dw := maxf(UiKit.text_w(self, "DEPLOY  →", 20, true) + 70.0, foot.size.x * 0.24)
-		var go := UiKit.btn(self, "DEPLOY  →", Vector2(rx - dw, fy), Vector2(dw, bh), func(): Net.start_match(), "primary", shell_f, 20)
-		go.disabled = not Net.can_start()
-		rx = go.position.x - 16.0
-		# READY: the owner's DEPLOY waits for every player's READY
-		var waiting := Net.present_ids().filter(func(id): return not Net.is_ready(int(id))).size()
-		if waiting > 0:
-			var ww := "WAITING FOR %d PLAYER%s" % [waiting, "" if waiting == 1 else "S"]
-			var wwid := UiKit.text_w(self, ww, 14, true)
-			_say(ww, Vector2(rx - wwid, fy + (bh - UiKit.line_h(self, 14, true)) / 2.0), 14, UiKit.STAR, 0.0, true)
-			rx -= wwid + 16.0
-		# --- end READY ---
-	else:
-		# READY (Alpha 21, ooze20-net-6): a guest's READY / UN-READY; ready locks your army, colour and team until you un-ready.
-		var me_ready := Net.is_ready(Net.local_id())
-		var rt := "UN-READY" if me_ready else "READY  ✓"
-		var rw := maxf(UiKit.text_w(self, rt, 20, true) + 70.0, foot.size.x * 0.24)
-		var rb := UiKit.btn(self, rt, Vector2(rx - rw, fy), Vector2(rw, bh), func():
-			_lobby_note = ""
-			Net.set_ready(not Net.is_ready(Net.local_id())), "secondary" if me_ready else "primary", shell_f, 20)
-		rb.disabled = Net.active or not Net.connected
-		rx = rb.position.x - 16.0
-		var hw := "THE HOST DEPLOYS WHEN EVERYONE IS READY" if me_ready else "PRESS READY WHEN YOUR PICKS ARE SET"
-		var hwid := minf(UiKit.text_w(self, hw, 13, true), rx - x - 120.0)
-		_clip(hw, Vector2(rx - hwid, fy + (bh - UiKit.line_h(self, 13, true)) / 2.0), 13, UiKit.MUTED, hwid, true)
-		rx -= hwid + 16.0
-		# --- end READY ---
-	var line := "%d / %d PLAYERS" % [Net.roster.size(), Net.slots()] + (("  ·  " + Net.status) if Net.status != "" else "")
-	if _lobby_note != "":                              # READY: the host's last notice (e.g. "Settings changed - press READY again")
-		line = _lobby_note.to_upper() + "  ·  " + line
-	_say(line, Vector2(x, fy + maxf(0.0, (bh - UiKit.text_h(self, line, 13, rx - x)) / 2.0)), 13, UiKit.STAR if _lobby_note != "" else UiKit.INK, rx - x)
 	var locked := Net.ready_locked() or Net.active
-	# LEFT: the map, then MODE | MAP | SETTING (the host's; a guest sees them)
-	_lobby_map(g["map"], host)
-	var l3 := _thirds(g["lrow"])
-	_big_btn(l3[0], "MODE", str(Net.MODE_LABELS[Net.mode]), func(): _open_lobby_sheet("mode"))
-	var mb := _big_btn(l3[1], "MAP", "CHANGE" if host else "HOST PICKS", _open_maps)
-	mb.disabled = not host
+	st.key("KEY-SMALL", 681.5, 45, 115, 33, "LEAVE ROOM", _leave_room)
+	# the map
+	var sel := _selected_map()
+	st.piece("MAP-CARD", 15, 81, 220, 169)
+	st.txt(str(sel.get("name", "")).replace("*", "").to_upper(), 27.8, 97.5, 113, 15, 12.5, UiKit.INK, true)
+	st.txt("%d NODES" % sel.get("nodes", []).size(), 148.5, 97.5, 73, 15, 12.5, Kit45.KICK, true, 2)
+	st.pic(UiKit.map_thumb(MapPool.thumb(str(sel.get("code", "")))), 23.5, 126, 203, 114)
+	if host and not locked:
+		st.tap(15, 81, 220, 169, _open_maps)
+	# the seats
+	var by_slot := {}
+	for id in Net.roster:
+		by_slot[int(Net.roster[id]["slot"])] = int(id)
+	var colours := Net.room_colours()
+	var n: int = mini(Net.slots(), 4)
+	var at := [[242, 82], [418, 82], [242, 171], [418, 171]]
+	if n == 2:
+		at = [[242, 126], [418, 126]]
+	for k in range(n):
+		_seat45(st, k, by_slot.get(k, -1), colours, float(at[k][0]), float(at[k][1]))
+	# the room code + chat
+	_room_chat45(st)
+	# MODE | MAP | SETTING | ARMY | COLOUR | RULES
+	var xs := [15.0, 145.5, 275.75, 406.25, 536.5, 667.0]
+	_sel45(st, xs[0], 261, 126, 34, "MODE", str(Net.MODE_LABELS[Net.mode]), func(): _open_lobby_sheet("mode"))
+	_sel45(st, xs[1], 261, 126, 34, "MAP", "CHANGE" if host else "HOST PICKS", _open_maps, not host or locked)
 	_setting_owner_remembered(host)
 	var room_set := LookTheme.of_room_value(Net.room_backdrop)
-	_big_btn(l3[2], "SETTING", str(LookTheme.SHORT_NAMES[room_set]), func(): _open_lobby_sheet("setting"), "", LookTheme.preview(room_set))
-	# RIGHT: the seats (half) and the room chat (half)
-	var sr: Rect2 = g["seats"]
-	var half := floorf((sr.size.x - 10.0) / 2.0)
-	_room_seats(Rect2(sr.position, Vector2(half, sr.size.y)))
-	_room_chat(Rect2(sr.position + Vector2(half + 10.0, 0), Vector2(sr.size.x - half - 10.0, sr.size.y)))
-	# RIGHT: ARMY | COLOUR | RULES
-	var r3 := _thirds(g["rrow"])
-	var pk0 := content.get_child_count()
-	var ab := _big_btn(r3[0], "ARMY", str(UiKit.NAMES[faction]), func():
+	var sb := _sel45(st, xs[2], 261, 126, 34, "SETTING", str(LookTheme.SHORT_NAMES[room_set]), func(): _open_lobby_sheet("setting"))
+	sb.acc_tex = LookTheme.preview(room_set)
+	_sel45(st, xs[3], 261, 126, 34, "ARMY", str(UiKit.NAMES[faction]), func():
 		_lobby_sheet = ""
-		_pick(show_factions), faction)
-	var lo = Net.roster.get(Net.local_id(), {}).get("loadout", {})
-	var aic := minf(ab.size.y * 0.36, 26.0)
-	if ab.size.x - 40.0 - (3.0 * aic + 12.0) >= maxf(UiKit.text_w(self, "ARMY", 12, true) + 8.0, UiKit.text_w(self, str(UiKit.NAMES[faction]), 16, true)):
-		_loadout_chips(ab, faction, lo if lo is Dictionary else {}, ab.size.x - 28.0, ab.size.y / 2.0, aic)   # (a narrow phone: the words win)
+		_pick(show_factions), locked)
 	var mine_c := Net.colour_of(Net.local_id())
-	var cb := _big_btn(r3[1], "COLOUR", mine_c.to_upper() if mine_c != "" else "AUTO", func(): _open_lobby_sheet("colour"))
+	var cb := _sel45(st, xs[4], 261, 126, 34, "COLOUR", mine_c.to_upper() if mine_c != "" else "AUTO", func(): _open_lobby_sheet("colour"), locked)
 	if mine_c != "":
-		var sw := minf(22.0, cb.size.y * 0.25)
-		cb.add_child(UiKit.rect(Vector2(cb.size.x - sw - 30.0, (cb.size.y - sw) / 2.0), Vector2(sw, sw), Rules.HUES.get(mine_c, Color.WHITE)))
-	if locked:
-		_ready_lock(pk0)
-	var rules := ["LS " + ("ON" if Net.last_stand else "OFF"), "SKILLS " + ("ON" if Net.abilities else "OFF")]
+		cb.acc_col = Rules.HUES.get(mine_c, Color.WHITE)
 	var rdef := Net.last_stand and Net.abilities
-	_big_btn(r3[2], "RULES", "DEFAULT" if rdef else " · ".join(rules), func(): _open_lobby_sheet("rules"))
+	_sel45(st, xs[5], 261, 126, 34, "RULES", "DEFAULT" if rdef else "CUSTOM", func(): _open_lobby_sheet("rules"))
+	# the status strip + DEPLOY / READY
+	st.piece("STATUS-STRIP", 15, 299, 544, 33)
+	st.txt("%d / %d SEATS" % [Net.roster.size(), Net.slots()], 28, 307, 92, 16, 12.5, Kit45.KICK, true)
+	var hint := ""
+	var waiting := Net.present_ids().filter(func(id): return not Net.is_ready(int(id))).size()
+	if _lobby_note != "":                              # READY: the host's last notice (e.g. "Settings changed - press READY again")
+		hint = _lobby_note
+	elif Net.status != "":
+		hint = Net.status
+	elif host:
+		hint = ("Waiting for %d player%s to press READY." % [waiting, "" if waiting == 1 else "s"]) if waiting > 0 else "Share the room code and keep this tab open."
+	else:
+		hint = "The host deploys when everyone is ready." if Net.is_ready(Net.local_id()) else "Press READY when your picks are set."
+	st.txt(hint, 124, 307, 425, 16, 12.5, UiKit.STAR if _lobby_note != "" else UiKit.INK, false)
+	if host:
+		var go := st.key("PRIMARY-WIDE", 568, 299, 229, 33, "DEPLOY  →", func(): Net.start_match(), true, not Net.can_start())
+		go.size_pt = 14.0
+	else:
+		var me_ready := Net.is_ready(Net.local_id())
+		var rb := st.key("PRIMARY-WIDE", 568, 299, 229, 33, "UN-READY" if me_ready else "READY  ✓", func():
+			_lobby_note = ""
+			Net.set_ready(not Net.is_ready(Net.local_id())), not me_ready, Net.active or not Net.connected)
+		rb.size_pt = 14.0
 	if _lobby_sheet != "":
 		_lobby_sheet_draw(host)
 	shell_raise()
 
 
-func _room_seats(r: Rect2) -> void:
-	## The room's seats in half the right column: team modes = a column per team (TEAM n over it), FFA = one or two
-	## columns. A chip opens the seat's sheet; an open seat on another team is SIT HERE (1 tap).
-	UiKit.panel(self, r.position, r.size, shell_f, false, Color(UiKit.BASE, 0.82))
-	var by_slot := {}
-	for id in Net.roster:
-		by_slot[int(Net.roster[id]["slot"])] = int(id)
-	var colours := Net.room_colours()
-	var pad := 8.0
-	var inner := Rect2(r.position + Vector2(pad, pad), r.size - Vector2(pad * 2.0, pad * 2.0))
-	var gap := 6.0
-	if Net.mode in Net.TEAM_MODES:
-		var tids: Array = Net.team_ids()
-		var nc := tids.size()
-		var cw := floorf((inner.size.x - gap * (nc - 1)) / nc)
-		var lh := UiKit.line_h(self, 12, true)
-		for gi in range(nc):
-			var t: int = tids[gi]
-			var slots: Array = range(Net.slots()).filter(func(sl): return Net.team_of_slot(sl) == t)
-			var cx := inner.position.x + gi * (cw + gap)
-			var hue: Color = Rules.HUES.get(str(colours.get(Net.SEATS[slots[0]], "")), Color.WHITE) if not slots.is_empty() else Color.WHITE
-			var mine := Net.team_of(Net.local_id()) == t
-			_say("TEAM %d" % (gi + 1), Vector2(cx, inner.position.y), 12, UiKit.INK if mine else UiKit.MUTED, 0.0, true, 2)
-			content.add_child(UiKit.rect(Vector2(cx, inner.position.y + lh + 2.0), Vector2(cw, 3), hue))
-			var cy := inner.position.y + lh + 9.0
-			var ns := maxf(1.0, slots.size())
-			var chh := floorf((inner.end.y - cy - gap * (ns - 1.0)) / ns)
-			for sl in slots:
-				_seat_chip(int(sl), by_slot.get(int(sl), -1), colours, Vector2(cx, cy), Vector2(cw, chh), t)
-				cy += chh + gap
-	else:
-		var n: int = Net.slots()
-		var nc := 1 if n <= 3 else 2
-		var nr := ceili(n / float(nc))
-		var cw := floorf((inner.size.x - gap * (nc - 1)) / nc)
-		var chh := floorf((inner.size.y - gap * (nr - 1)) / nr)
-		for k in range(n):
-			var p := inner.position + Vector2((k % nc) * (cw + gap), (k / nc) * (chh + gap))
-			_seat_chip(k, by_slot.get(k, -1), colours, p, Vector2(cw, chh), -1)
-
-
 var _chat_seen := -1                               # ROUND 4: the last chat line the room's chat panel shows
-
-
-func _room_chat(r: Rect2) -> void:
-	## ROUND 4 (Daniele: "the other half should be room chat"): the room code + SHARE on top, the latest lines, and
-	## TYPE A MESSAGE (web: the native chat field, phone keyboards). Rebuilt when a line arrives (_process).
-	UiKit.panel(self, r.position, r.size, shell_f, false, Color(UiKit.BASE, 0.82))
-	var pad := 8.0
-	var x := r.position.x + pad
-	var w := r.size.x - pad * 2.0
-	var hh := UiKit.tap_h(self, 44.0)
-	var code := Net.room_code if Net.room_code != "" else "····"
-	var shw := UiKit.text_w(self, "SHARE", 14, true) + 30.0
-	var share := UiKit.btn(self, "SHARE", Vector2(x + w - shw, r.position.y + pad), Vector2(shw, 44), _share_code, "secondary", shell_f, 14)
-	share.disabled = Net.room_code == ""
-	var kw := UiKit.text_w(self, "CODE", 12, true) + 18.0
-	var cfs := _fit_fs(code + "    ", 26.0, 16.0, w - shw - 8.0 - kw)
-	if UiKit.text_w(self, code + "    ", cfs, true) > w - shw - 8.0 - kw:
-		kw = 0.0                                       # a narrow phone: the code alone
-		cfs = _fit_fs(code + "    ", 26.0, 14.0, w - shw - 8.0)
-	else:
-		_say("CODE", Vector2(x, r.position.y + pad + (hh - UiKit.line_h(self, 12, true)) / 2.0), 12, UiKit.MUTED, 0.0, true, 3)
-	_say(code, Vector2(x + kw, r.position.y + pad + (hh - UiKit.line_h(self, cfs, true)) / 2.0), cfs, _viewer_col(), 0.0, true, 4)
-	var ty := r.position.y + pad + hh + 6.0
-	var ib := r.end.y - pad - hh
-	var tb := UiKit.btn(self, "TYPE A MESSAGE…", Vector2(x, ib), Vector2(w, 44), Net.open_chat, "tertiary", shell_f, 14)
-	tb.disabled = not Net.connected or not OS.has_feature("web")
-	_chat_btn = null
-	var lines: Array = Net.chat_history
-	_chat_seen = int(lines[-1].get("id", lines.size())) if not lines.is_empty() else -1
-	var lh := UiKit.line_h(self, 13)
-	var avail := ib - 6.0 - ty
-	if lines.is_empty():
-		_say("No messages yet. Say hi.", Vector2(x, ty), 13, UiKit.DIM, w)
-		return
-	var shown := []                                    # newest at the bottom; as many as fit
-	var used := 0.0
-	for i in range(lines.size() - 1, -1, -1):
-		var m: Dictionary = lines[i]
-		var who := "YOU" if int(m.get("pid", -1)) == Net.local_id() else str(m.get("who", "?")).to_upper()
-		var t := "%s: %s" % [who, str(m.get("text", ""))]
-		var th := UiKit.text_h(self, t, 13, w)
-		if used + th > avail:
-			break
-		used += th
-		shown.push_front([t, th, m.get("seat", "")])
-	var y := ty + avail - used
-	for s in shown:
-		_say(str(s[0]), Vector2(x, y), 13, UiKit.INK, w)
-		y += float(s[1])
 
 
 func _leave_room() -> void:
@@ -5512,142 +5410,6 @@ func _sum_btn(pos: Vector2, dims: Vector2, kicker: String, value: String, call: 
 	c.position = Vector2(b.size.x - 20.0, (b.size.y - UiKit.line_h(self, 20)) / 2.0)
 	b.add_child(c)
 	return b
-
-
-func _seat_chip(i: int, id: int, colours: Dictionary, pos: Vector2, dims: Vector2, team: int) -> void:
-	## One seat on one line: its letter and edge in the seat's room colour, the character, the name, its state at the
-	## right (HOST / READY / AWAY / AI / OPEN). A player's chip opens the seat sheet; an open seat on another team with
-	## room is SIT HERE (switch team) in one tap.
-	var seat: String = Net.SEATS[i]
-	var col: Color = Rules.HUES.get(str(colours.get(seat, "")), Rules.SEATS.get(seat, Color.WHITE))
-	var me := id >= 0 and id == Net.local_id()
-	var sit := id < 0 and team >= 0 and Net.team_of(Net.local_id()) != team and Net.free_slot_in(team) >= 0 \
-			and not Net.ready_locked() and not Net.active
-	var call := func(): _open_lobby_sheet("seat:%d" % i)
-	if sit:
-		call = func(): Net.switch_team(team)
-	var b := UiKit.btn(self, "", pos, dims, call, "selected" if me else "secondary", shell_f)
-	var h := b.size.y
-	if dims.x < 300.0:                                 # ROUND 4: the half-width seats beside the chat - compact chips
-		_seat_chip_compact(b, i, id, col, me, sit)
-		return
-	var k := clampf(h / UiKit.tap_h(self, 54.0), 1.0, 1.5)   # a taller chip (fewer seats) gets bigger words
-	var fl := 18.0 * k
-	var fn := 17.0 * k
-	var fs := 13.0 * k
-	b.add_child(UiKit.rect(Vector2(9, 12), Vector2(3, h - 24.0), col))   # note 8: inside the plate face
-	var sl := UiKit.label(self, seat, fl, col, true)
-	sl.position = Vector2(18, (h - UiKit.line_h(self, fl, true)) / 2.0)
-	b.add_child(sl)
-	var tx := 18.0 + UiKit.text_w(self, "W", fl, true) + 6.0
-	var ts := minf(h - 8.0, floorf(dims.x * 0.22))      # the character never crowds the name out
-	var ty0 := (h - ts) / 2.0
-	var name_t := ""
-	var state := ""
-	var state_col := UiKit.MUTED
-	if id >= 0:
-		var f: String = str(Net.roster[id]["faction"])
-		b.add_child(_cutout_mark(f, Vector2(tx, ty0), Vector2(ts, ts), col))
-		name_t = "YOU" if me else Net.name_of(id).to_upper()
-		if id == Net.room_owner or (id == 1 and not Net.server_hosted()):
-			state = "HOST"
-			state_col = col
-		elif Net.is_away(id):
-			state = "AWAY"
-			state_col = UiKit.STAR
-		elif Net.is_ready(id):
-			state = "✓"                                 # (not ready = no tick; the foot counts who the room waits for)
-			state_col = col
-	else:
-		var box := Panel.new()
-		box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		box.add_theme_stylebox_override("panel", UiKit.sb(Color(UiKit.BASE, 0.9), UiKit.FRAME, 1, 6))
-		box.position = Vector2(tx, ty0)
-		box.size = Vector2(ts, ts)
-		b.add_child(box)
-		var mark := UiKit.label(self, "AI" if Net.ai_fill != "" else "+", 15, UiKit.MUTED, true)
-		mark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		mark.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		mark.size = Vector2(ts, ts)
-		box.add_child(mark)
-		name_t = ("AI " + Net.ai_fill.to_upper()) if Net.ai_fill != "" else "OPEN"
-		if sit:
-			state = "SIT HERE"
-			state_col = _viewer_col()
-	var right := b.size.x - 10.0
-	var ic0 := clampf(h * 0.28, 20.0, 46.0)
-	var tall := id >= 0 and h >= UiKit.line_h(self, fn, true) + ic0 + 18.0
-	if state != "":
-		var sfs := fl * 1.2 if state == "✓" else fs       # the READY tick reads at a glance
-		var sw := UiKit.text_w(self, state, sfs, true)
-		var st := UiKit.label(self, state, sfs, state_col, true)
-		st.position = Vector2(right - sw, (h - UiKit.line_h(self, fn, true) - ic0 - 6.0) / 2.0 if tall else (h - UiKit.line_h(self, sfs, true)) / 2.0)
-		b.add_child(st)
-		right -= sw + 8.0
-	var nx := tx + ts + 8.0
-	var ic := clampf(h * 0.28, 20.0, 46.0)               # ROUND 2c (Daniele): the player's skills as small icons by the name
-	var two := id >= 0 and h >= UiKit.line_h(self, fn, true) + ic + 18.0   # a tall chip: name over the icons
-	var lo_w := 3.0 * ic + 2.0 * 6.0 + 10.0 if (id >= 0 and not two) else 0.0
-	if lo_w > 0.0 and right - nx - lo_w < UiKit.text_w(self, name_t, fn, true) * 0.6:
-		lo_w = 0.0                                     # a short one-line chip: the name wins, the icons wait for the seat sheet
-	var nw := minf(UiKit.text_w(self, name_t, fn, true) + 4.0, maxf(10.0, right - nx - lo_w))
-	var ny := (h - UiKit.line_h(self, fn, true)) / 2.0
-	if two:
-		ny = (h - UiKit.line_h(self, fn, true) - ic - 6.0) / 2.0
-	var nl := UiKit.label(self, name_t, fn, UiKit.INK if id >= 0 else UiKit.MUTED, true)
-	nl.clip_text = true
-	nl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	nl.position = Vector2(nx, ny)
-	nl.size = Vector2(maxf(10.0, nw), UiKit.line_h(self, fn, true))
-	b.add_child(nl)
-	if id >= 0 and (two or lo_w > 0.0):
-		var lo = Net.roster[id].get("loadout", {})
-		if two:
-			_loadout_chips(b, str(Net.roster[id]["faction"]), lo if lo is Dictionary else {}, nx + 3.0 * ic + 12.0, ny + UiKit.line_h(self, fn, true) + 6.0 + ic / 2.0, ic)
-		else:
-			_loadout_chips(b, str(Net.roster[id]["faction"]), lo if lo is Dictionary else {}, nx + nw + lo_w, h / 2.0, ic)
-
-
-func _seat_chip_compact(b: Button, i: int, id: int, col: Color, me: bool, sit: bool) -> void:
-	## ROUND 4: a narrow seat chip - the letter and the name on top, the state under it (HOST / READY / AWAY / OPEN /
-	## SIT HERE / AI), the character at the right; the skills wait for the seat's sheet.
-	var h := b.size.y
-	var w := b.size.x
-	b.add_child(UiKit.rect(Vector2(9, 12), Vector2(3, h - 24.0), col))   # note 8: inside the plate face
-	var ts := minf(h * 0.6, w * 0.3)
-	var want := UiKit.text_w(self, Net.SEATS[i] + " " + ("YOU" if me else (Net.name_of(id).to_upper() if id >= 0 else "OPEN")), 16, true) + 18.0
-	if w - ts - 10.0 < want:                           # a narrow phone: the name wins, the character goes
-		ts = 0.0
-	if id >= 0 and ts > 0.0:
-		var art := _cutout_mark(str(Net.roster[id]["faction"]), Vector2(w - ts - 6.0, (h - ts) / 2.0), Vector2(ts, ts))
-		b.add_child(art)
-	var name_t := ""
-	var state := ""
-	var state_col := UiKit.MUTED
-	if id >= 0:
-		name_t = "YOU" if me else Net.name_of(id).to_upper()
-		if id == Net.room_owner or (id == 1 and not Net.server_hosted()):
-			state = "HOST"
-			state_col = col
-		elif Net.is_away(id):
-			state = "AWAY"
-			state_col = UiKit.STAR
-		elif Net.is_ready(id):
-			state = "✓ READY"
-			state_col = col
-	else:
-		name_t = "OPEN" if Net.ai_fill == "" else "AI"
-		state = ("SIT HERE" if UiKit.text_w(self, "SIT HERE", 12, true) <= w - 20.0 else "SIT") if sit else (Net.ai_fill.to_upper() if Net.ai_fill != "" else "")
-		state_col = _viewer_col() if sit else UiKit.MUTED
-	var fl := 16.0
-	var lh1 := UiKit.line_h(self, fl, true)
-	var lh2 := UiKit.line_h(self, 12, true)
-	var ty := (h - lh1 - 2.0 - lh2) / 2.0
-	var tw := w - 12.0 - (ts + 10.0 if (id >= 0 and ts > 0.0) else 8.0)
-	var lw := UiKit.text_w(self, Net.SEATS[i], fl, true) + 6.0
-	_chip_text(b, Net.SEATS[i], Vector2(10, ty), lw, fl, col)
-	_chip_text(b, name_t, Vector2(10.0 + lw, ty), maxf(10.0, tw - lw), fl, UiKit.INK if id >= 0 else UiKit.MUTED)
-	_chip_text(b, state, Vector2(10, ty + lh1 + 2.0), maxf(10.0, tw), 12, state_col)
 
 
 func _open_lobby_sheet(which: String) -> void:
@@ -6044,3 +5806,144 @@ func _fit() -> void:
 		if f > 0.0 and absf(f / _built_pt - 1.0) > 0.1:
 			_built_pt = 0.0
 			_last_show.call_deferred()
+
+
+
+func _stage_page(crumb: String, tab: String, title: String, sub := "", back := Callable(), f := "") -> Kit45.Stage:
+	## A remake page (45B): the full header (37 pt) and nav (42 pt) on every screen (IMPORT-45B-SPEC fix 2), the remake's
+	## 812 x 375 pt canvas over the content (Kit45.Stage), the title at the top left and the kicker at the right.
+	## `back` = the page's own way back (Android back / Esc via bar_back); the remake has no BACK in the header.
+	shell_open(crumb, tab, Callable(), f)
+	shell_back = back
+	var st := Kit45.Stage.new()
+	st.setup(self, content.size)
+	content.add_child(st)
+	_stage = st
+	if title != "":
+		st.txt(title, 15, 45, 420, 26, 18.0, UiKit.INK, true)
+	if sub != "":
+		st.txt(sub, 380, 45, 417, 26, 12.5, Kit45.KICK, true, 2)
+	return st
+
+
+
+func _sel45(st: Kit45.Stage, x: float, y: float, w: float, h: float, kicker: String, value: String, call: Callable, off := false) -> Kit45.Btn:
+	## A SELECTOR-CARD: kicker over value (runtime text), chevron painted, an optional thumbnail / swatch (acc_tex / acc_col).
+	var b := st.key("SELECTOR-CARD", x, y, w, h, kicker, call, false, off)
+	b.value = value if value != "" else "-"
+	return b
+
+
+
+func _seat45(st: Kit45.Stage, i: int, id: int, colours: Dictionary, x: float, y: float) -> void:
+	## One SEAT-CARD (45B 170 x 72 pt): FILLED / READY (seat rim lit) / LEAVING (away) / OPEN; the letter square and the edge
+	## bar in the seat's room colour; the army in the avatar well; name + state; the three chosen skills in the chips.
+	var seat: String = Net.SEATS[i]
+	var col: Color = Rules.HUES.get(str(colours.get(seat, "")), Rules.SEATS.get(seat, Color.WHITE))
+	var me := id >= 0 and id == Net.local_id()
+	var team := Net.team_of_slot(i) if Net.mode in Net.TEAM_MODES else -1
+	var sit := id < 0 and team >= 0 and Net.team_of(Net.local_id()) != team and Net.free_slot_in(team) >= 0 \
+			and not Net.ready_locked() and not Net.active
+	var stt := "OPEN"
+	var state := ("AI " + Net.ai_fill.to_upper()) if Net.ai_fill != "" else "Waiting…"
+	var state_col := UiKit.MUTED
+	var name_t := "OPEN"
+	if id >= 0:
+		name_t = "YOU" if me else Net.name_of(id).to_upper()
+		stt = "FILLED"
+		if id == Net.room_owner or (id == 1 and not Net.server_hosted()):
+			state = "HOST"
+			state_col = col
+		elif Net.is_away(id):
+			state = "AWAY"
+			stt = "LEAVING"
+			state_col = UiKit.STAR
+		elif Net.is_ready(id):
+			state = "READY"
+			stt = "READY"
+			state_col = col
+		else:
+			state = "NOT READY"
+	elif sit:
+		state = "SIT HERE"
+		state_col = _viewer_col()
+	var p := st.piece("SEAT-CARD", x, y, 170, 72, stt)
+	p.tints = {"edge": col, "letter": col, "seat": col}
+	var ink := Kit45.ink_on("SEAT-CARD", p.key, stt, [53, 7, 108, 16])
+	st.txt(seat, x + 8, y + 4, 16, 16, 12.5, Kit45.INK_DARK, true, 1)
+	if id >= 0:
+		var f: String = str(Net.roster[id]["faction"])
+		st.add_child(_cutout_mark(f, st.P(x + 11, y + 26), Vector2(32, 32) * st.u))
+		var lo = Net.roster[id].get("loadout", {})
+		var eff := ArmyPresets.effective(f, lo if lo is Dictionary else {}, ArmyPresets.map_has_relays(_selected_map()))
+		var ids := [eff["active"], eff["map"], eff["ultimate"]]
+		for k in range(3):
+			st.piece("SKILL-CHIP", x + 54 + 21 * k, y + 47, 16, 16)
+			skill_icon(str(ids[k]), st.P(x + 57 + 21 * k, y + 50), Vector2(10, 10) * st.u, Color(UiKit.accent(f), 1.0 if Net.abilities else 0.35), st)
+	else:
+		st.txt("+", x + 17, y + 34, 20, 16, 16.0, UiKit.MUTED, true, 1)
+	st.txt(name_t, x + 53, y + 7, 108, 16, 13.0, ink if id >= 0 else Color(ink, 0.6), true)
+	st.txt(state, x + 53, y + 25, 108, 16, 12.5, state_col if state_col != UiKit.MUTED else Color(ink, 0.7), true)
+	var call := func(): _open_lobby_sheet("seat:%d" % i)
+	if sit:
+		call = func(): Net.switch_team(team)
+	var tb := st.tap(x, y, 170, 72, call)
+	tb.text = seat + " " + name_t                     # (tests find the seats by their text)
+	for k in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+		tb.add_theme_color_override(k, Color(0, 0, 0, 0))
+
+
+
+func _room_chat45(st: Kit45.Stage) -> void:
+	## The ROOM-CODE-PANEL (197 x 177 pt at 600, 81): ROOM CODE + the code (cream, never red), SHARE, the newest chat lines
+	## that fit the log, and the message field (web: the native chat field, phone keyboards). Rebuilt when a line arrives.
+	var x := 600.0
+	var y := 81.0
+	st.piece("ROOM-CODE-PANEL", x, y, 197, 177)
+	st.txt("ROOM CODE", x + 10, y + 10, 111, 16, 12.5, Kit45.KICK, true)
+	st.txt(Net.room_code if Net.room_code != "" else "····", x + 10, y + 33, 111, 26, 22.0, UiKit.INK, true)
+	st.key("KEY-SMALL", x + 123, y + 13, 62, 33, "SHARE", _share_code, false, Net.room_code == "")
+	var lines: Array = Net.chat_history
+	_chat_seen = int(lines[-1].get("id", lines.size())) if not lines.is_empty() else -1
+	_chat_btn = null
+	if lines.is_empty():
+		st.txt("No messages yet. Say hi.", x + 16, y + 69, 165, 16, 12.5, UiKit.DIM)
+	else:
+		var shown := lines.slice(maxi(0, lines.size() - 4))
+		var ly := y + 131.0 - 16.0 * shown.size()
+		for m in shown:
+			var who := "YOU" if int(m.get("pid", -1)) == Net.local_id() else str(m.get("who", "?")).to_upper()
+			st.txt("%s: %s" % [who, str(m.get("text", ""))], x + 12, ly, 173, 16, 12.5, UiKit.INK)
+			ly += 16.0
+	var off := not Net.connected or not OS.has_feature("web")
+	var cf := st.piece("CHAT-FIELD", x + 10, y + 135, 177, 33, "DISABLED" if off else "NORMAL")
+	cf.tints = {"seat": Kit45.seat()}
+	st.txt("Type a message…", x + 18, y + 143, 161, 16, 12.5, Color(UiKit.MUTED, 0.5 if off else 1.0))
+	if not off:
+		var tb := st.tap(x + 10, y + 135, 177, 33, Net.open_chat)
+		tb.text = "TYPE A MESSAGE…"
+		tb.add_theme_color_override("font_color", Color(0, 0, 0, 0))
+
+
+
+func show_room_demo() -> void:
+	## SCREENSHOT HELPER only (--menu-page=room_demo [--room-mode=2v2]): a made-up four-seat room (host YOU, a ready player,
+	## an open seat, an away player) and two chat lines, so the ONLINE ROOM can be shot offline. Never reached in play.
+	Net.bridge = RefCounted.new()
+	Net.hosting = true
+	Net.connected = true
+	Net.room_owner = 1
+	Net.room_code = "TSBP"
+	Net.mode = "FFA4"
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--room-mode="):
+			Net.mode = arg.substr(12)
+	var fs := [faction, "null", "", "bloom"]
+	Net.roster = {}
+	for k in range(Net.slots()):
+		if fs[k % 4] == "":
+			continue
+		Net.roster[k + 1] = {"faction": fs[k % 4], "slot": k, "name": "Player %d" % (k + 1), "ready": k == 1, "away": k == 3}
+	Net.chat_history = [{"id": 1, "pid": 2, "who": "Player 2", "text": "gl hf"}, {"id": 2, "pid": 1, "who": "you", "text": "ready when you are"}]
+	Net.map_path = map_path
+	show_lobby()

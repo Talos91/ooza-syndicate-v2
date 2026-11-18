@@ -321,6 +321,9 @@ class Btn extends Button:
 	var size_pt := 0.0                                # label size (0 = from the slot / art height)
 	var lock_state := ""                              # a fixed state (LOCKED, EQUIPPED...) over the four
 	var label_slot := false                           # the label sits in the part's own label slot (cards, tiles), not mid-face
+	var value := ""                                   # SELECTOR-CARD: a second line (the value) under the label (the kicker)
+	var acc_tex: Texture2D                            # SELECTOR-CARD: a thumbnail in the accessory slot
+	var acc_col := Color(0, 0, 0, 0)                  # SELECTOR-CARD: a colour swatch in the accessory slot
 
 	func _ready() -> void:
 		flat = true
@@ -348,6 +351,31 @@ class Btn extends Button:
 		Kit45.draw_part(self, fam, key, st, art, u)
 		var v := Kit45.variant(fam, key)
 		var sl: Array = v.get("slots", {}).get("label", [])
+		if value != "":                                # a selector: kicker over value, the accessory at the right
+			var slots: Dictionary = v.get("slots", {})
+			var vs: Array = slots.get("value", sl)
+			var ic := Kit45.ink_on(fam, key, st, vs)
+			var sr := func(a: Array) -> Rect2: return Rect2(art.position + Vector2(float(a[0]), float(a[1])) * u, Vector2(float(a[2]), float(a[3])) * u)
+			var ac: Array = slots.get("accessory", [])
+			var right := 0.0
+			if not ac.is_empty() and (acc_tex != null or acc_col.a > 0.0):
+				var ar: Rect2 = sr.call(ac)
+				if acc_tex != null:
+					var ts := Vector2(acc_tex.get_size())
+					var k := minf(ar.size.x / ts.x, ar.size.y / ts.y)
+					var d := ts * k
+					draw_texture_rect(acc_tex, Rect2(ar.position + (ar.size - d) / 2.0, d), false)
+				else:
+					var sq := minf(ar.size.x, ar.size.y)
+					draw_rect(Rect2(ar.position + (ar.size - Vector2(sq, sq)) / 2.0, Vector2(sq, sq)), acc_col)
+				right = maxf(0.0, (float(sl[0]) + float(sl[2])) * u + art.position.x - ar.position.x + 3.0 * u) if not sl.is_empty() else 0.0
+			var lr: Rect2 = sr.call(sl if not sl.is_empty() else [8, 0, art.size.x / u - 30.0, art.size.y / u / 2.0])
+			var vr: Rect2 = sr.call(vs)
+			lr.size.x -= right
+			vr.size.x -= right
+			Kit45.draw_text(self, m, label, lr, 12.5 * u, Color(ic, 0.72), false, 0, 1)
+			Kit45.draw_text(self, m, value, vr, 13.0 * u, ic, true, 0, 1)
+			return
 		var lr := Rect2(art.position + Vector2(4, 0) * u, art.size - Vector2(8, 0) * u)
 		if not sl.is_empty():
 			lr = Rect2(art.position + Vector2(float(sl[0]), float(sl[1])) * u, Vector2(float(sl[2]), float(sl[3])) * u)
