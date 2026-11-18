@@ -11,6 +11,7 @@ const DIR := "res://assets/ui/armies43/"
 const BODY := Rect2(64, 196, 3120, 1100)
 const TOP_ROW_H := 160.0                            # the faction / section row only (CUSTOMIZE keeps its own body)
 const FACTIONS := ["vex", "null", "bloom", "ember", "solar"]
+const SHORT := {"EMERGENCY EVAC": "EVAC"}
 
 static var _layout: Dictionary = {}
 
@@ -233,6 +234,7 @@ func _text_for(e: Dictionary) -> Array:
 		return [UiKit.NAMES[_faction_of(cid)]]
 	if _skill_of.has(cid):
 		var nm := ArmyPresets.skill_name(_skill_of[cid]).to_upper()
+		nm = SHORT.get(nm, nm)                         # designer 10: the mock's short name (EVAC), one line
 		var parts: Array = []
 		for ch in _ctrl[cid]["children"]:
 			for x in _els:
@@ -332,6 +334,8 @@ func _draw_text(e: Dictionary, st: String, bd: Dictionary, font_floor: float) ->
 	while fs > font_floor * 0.8 and f.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(fs))).x > room:
 		fs -= 0.5
 	var two: Array = []
+	while fs > font_floor * 0.8 and f.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(fs))).x > room:
+		fs -= 0.5                                    # one line first (SPORE BURST): down to 80 % of the floor
 	if f.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(fs))).x > room and t.contains(" "):
 		var w := t.split(" ")                        # still too wide (EMERGENCY EVAC): two lines in the face
 		var half := ceili(w.size() / 2.0)

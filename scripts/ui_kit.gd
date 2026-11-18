@@ -54,9 +54,9 @@ const ACCENTS := {"vex": Color("14d3e4"), "null": Color("f327c3"), "bloom": Colo
 const ORDER := ["vex", "null", "bloom", "ember", "solar"]
 ## Daniele 2026-11-02: the faction is BLOOM - no VIRIDIAN anywhere; it has no second word (SUBS "")
 const NAMES := {"vex": "VEX", "null": "NULL", "bloom": "BLOOM", "ember": "EMBER", "solar": "AEGIS"}
-const SUBS := {"vex": "BIOENGINEERS", "null": "CARTEL", "bloom": "", "ember": "MAW", "solar": "SHELLS"}
-const TAGS := {"vex": "VEX / BIOENGINEERS", "null": "NULL / CARTEL", "bloom": "BLOOM",
-		"ember": "EMBER / MAW", "solar": "AEGIS / SHELLS"}
+const SUBS := {"vex": "R&D", "null": "FINANCE", "bloom": "PEOPLE & CULTURE", "ember": "OPERATIONS", "solar": "COMPLIANCE"}   # departments, WORLD-LORE-2026-11 §5 (designer 10, 11-18)
+const TAGS := {"vex": "VEX / R&D", "null": "NULL / FINANCE", "bloom": "BLOOM / PEOPLE & CULTURE",
+		"ember": "EMBER / OPERATIONS", "solar": "AEGIS / COMPLIANCE"}
 const CUT := 10                                    # the standard corner cut
 const CFG := "user://ui.cfg"
 const K := 1280.0 / 1672.0                       # = Menu.K, Menu.MIN_TAP_PT, Menu.MIN_FONT_PT - copied so the pieces
@@ -246,12 +246,40 @@ static func make_btn(m, text: String, dims: Vector2, call: Callable, kind := "se
 	dims.y = tap_h(m, dims.y)
 	b.custom_minimum_size = dims
 	b.size = dims
+	_shrink_btn(b, dims.x - 24.0)                     # designer 10 (11-18): "PLA" / "COMING SOO" - the words shrink to fit their key
 	if call.is_valid():
 		var ui := "confirm" if kind == "primary" else "tap"   # SOUND: the primary action confirms, the rest tap (sfx.gd)
 		b.pressed.connect(func():
 			Sfx.play_ui(ui)
 			acknowledge(b, call))
 	return b
+
+
+static func _shrink_btn(b: Button, room: float) -> void:
+	## The longest line of a key's text fits `room`: its font shrinks, down to 80 % of what it was given.
+	if b.text == "" or room <= 0.0:
+		return
+	var f: Font = b.get_theme_font("font")
+	var fs := b.get_theme_font_size("font_size")
+	var lo := int(floor(fs * 0.8))
+	var widest := func(n: int) -> float:
+		var w := 0.0
+		for line in b.text.split("\n"):
+			w = maxf(w, f.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, n).x)
+		return w
+	while fs > lo and widest.call(fs) > room:
+		fs -= 1
+	b.add_theme_font_size_override("font_size", fs)
+
+
+static func shrink_label(l: Label, room: float) -> void:
+	## A one-line label's font shrinks to fit `room`, down to 80 % of its size.
+	var f: Font = l.get_theme_font("font")
+	var fs := l.get_theme_font_size("font_size")
+	var lo := int(floor(fs * 0.8))
+	while fs > lo and f.get_string_size(l.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > room:
+		fs -= 1
+	l.add_theme_font_size_override("font_size", fs)
 
 
 static func acknowledge(b: Control, call: Callable) -> void:

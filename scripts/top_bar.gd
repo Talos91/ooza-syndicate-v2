@@ -160,7 +160,23 @@ func _square(text: String, pos: Vector2, q: float, f: String) -> Button:
 	b.position = pos
 	b.clip_text = false
 	add_child(b)
+	_keys.append([b, pos, q])
+	if _keys.size() == 1:
+		_fit_keys.call_deferred()                      # after MenuSkin._settle (deferred too), which grows a key to its art / 44 pt
 	return b
+
+
+var _keys: Array = []
+
+
+func _fit_keys() -> void:
+	## designer 10 (11-18): the top-right keys stay inside the header cabinet and the safe area (33 pt, the bar's own size).
+	for k in _keys:
+		var b: Button = k[0]
+		if is_instance_valid(b):
+			b.custom_minimum_size = Vector2(k[2], k[2])
+			b.size = Vector2(k[2], k[2])
+			b.position = k[1]
 
 
 func _draw_gear(c: Control, q: float) -> void:

@@ -20,6 +20,7 @@ const AI_Y := 3.0
 const UTIL_PT := Vector2(82, 27)
 const UTIL_Y := 11.0
 const FOOT_H := 13.5
+const FOOT_IN := 8.0                             # map name / version: 8 pt in from the safe edge (designer 10, 11-18)
 const FOOT_Y := 9.5                              # map name / version: their bottom 9.5 pt over the screen bottom
 # the vat (43 vat_sender_housing, 187 x 572 ref) fitted to the column height
 const VAT_PT := Vector2(78, 239)
@@ -75,6 +76,12 @@ static func zones(vp: Vector2) -> Dictionary:
 	d["name"] = Rect2(l + 1.0 * z, vp.y - (FOOT_Y + FOOT_H) * z, 111.0 * z, FOOT_H * z)
 	d["ver"] = Rect2(r - 112.0 * z, vp.y - (FOOT_Y + FOOT_H) * z, 112.0 * z, FOOT_H * z)
 	return d
+
+
+static func score_goo(f: String) -> Color:
+	## The score strip's goo: the faction's own saturated goo colour (designer 10: the dulled Hud40.goo_of read muddy),
+	## the pack's material multiplies it (score_share.gdshader goo_n are source_color = sRGB).
+	return UiKit.accent(f)
 
 
 static func goo_tint(c: Color) -> Color:
@@ -251,7 +258,7 @@ class Score extends Control:
 		m.set_shader_parameter("ends", Vector4(ends[0], ends[1], ends[2], ends[3]))
 		for i in range(4):
 			var seat: String = players[mini(i, n - 1)]
-			m.set_shader_parameter("goo_%d" % (i + 1), Hud43.goo_tint(Hud40.goo_of(seat, hud.human)))
+			m.set_shader_parameter("goo_%d" % (i + 1), Hud43.score_goo(str(hud.sim.factions.get(seat, "vex"))))
 		(get_meta("over") as Control).queue_redraw()
 
 	func _draw() -> void:

@@ -19,7 +19,7 @@ const UI_FONT := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")
 const HEAD_FONT := preload("res://assets/fonts/RussoOne-Regular.ttf")
 const FACTIONS := ["vex", "null", "bloom", "ember", "solar"]
 const K := 1280.0 / 1672.0
-const NAMES := {"vex": "VEX\nBIOENGINEERS", "null": "NULL\nCARTEL", "bloom": "BLOOM", "ember": "EMBER\nMAW", "solar": "AEGIS\nSHELLS"}
+const NAMES := {"vex": "VEX\nR&D", "null": "NULL\nFINANCE", "bloom": "BLOOM\nPEOPLE & CULTURE", "ember": "EMBER\nOPERATIONS", "solar": "AEGIS\nCOMPLIANCE"}
 
 var main: Node3D
 var content: Control
@@ -1780,6 +1780,7 @@ func _say(text: String, pos: Vector2, size: float, col := UiKit.INK, width := 0.
 func _clip(text: String, pos: Vector2, size: float, col: Color, width: float, head := false) -> Label:
 	## A one-line label cut to `width` with an ellipsis (names, map names in a row).
 	var l := UiKit.label(self, text, size, col, head)
+	UiKit.shrink_label(l, width)                      # designer 10 (11-18): shrink to fit first (to 80 % of the floor), then cut
 	l.clip_text = true
 	l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	l.size = Vector2(maxf(width, 10.0), UiKit.line_h(self, size, head))
@@ -2872,6 +2873,11 @@ func show_armies(f: String = "", back: Callable = Callable()) -> void:
 	# 43B (Daniele 2026-11-18 "Yes, import it"): the page is the 43B-pack-ARMIES layout itself (Armies43), scaled evenly
 	# into the free area; CUSTOMIZE keeps its wardrobe body under the pack's faction / section row.
 	var top := area.position.y + 6.0
+	if _backdrop:                                      # designer 10 (11-18): the pack's own room (ARMIES-PLATE), not the sky city
+		var plate := UiKit.tex(Armies43.DIR + "ARMIES-PLATE.jpg")
+		if plate != null:
+			_backdrop.texture = plate
+			_backdrop.modulate = Color(0.9, 0.9, 0.9)
 	var a43 := Armies43.new()
 	a43.setup(self, Rect2(x, top, w, area.end.y - 6.0 - top), _army, _army_tab, _armies43_tap)
 	content.add_child(a43)

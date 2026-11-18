@@ -841,8 +841,8 @@ static func _balance_set(k: String, v) -> void:
 		"FIGHT_RATE_K": FIGHT_RATE_K = v
 		"FACTION_STATS": FACTION_STATS = v
 		"forge_bonus": forge_bonus = v
-const FACTION_NAMES := {"vex": ["VEX", "BIOENGINEERS"], "null": ["NULL", "DATA CARTEL"], "bloom": ["BLOOM", ""],
-		"ember": ["EMBER", "MAW"], "solar": ["AEGIS", "SHELLS"]}
+const FACTION_NAMES := {"vex": ["VEX", "R&D"], "null": ["NULL", "FINANCE"], "bloom": ["BLOOM", "PEOPLE & CULTURE"],
+		"ember": ["EMBER", "OPERATIONS"], "solar": ["AEGIS", "COMPLIANCE"]}   # departments: WORLD-LORE-2026-11 §5
 const FACTION_TAGLINES := {"vex": "ADAPT. CONNECT. REDIRECT.", "null": "SAME SIGNAL. DIFFERENT TRUTH.",
 		"bloom": "A WILDER TOMORROW.", "ember": "PRESSURE BREEDS PROGRESS.", "solar": "HOLD THE LIGHT."}
 # ARMIES trait (Daniele 2026-10-27, Ooze Desk: "faction trait text rewritten to describe the real stat leans (no new

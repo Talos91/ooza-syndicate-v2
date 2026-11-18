@@ -700,10 +700,16 @@ func _h43_layout(vp: Vector2, u: float) -> void:
 		var want := sr.position + Vector2((Hud43.SEND_W - Hud43.VAT_PT.x) / 2.0 * u, 0.0)
 		side_panel.position += want - send_tank.global_position
 	var nr: Rect2 = z["name"]
-	map_title.position = nr.position
+	map_title.position = nr.position + Vector2(Hud43.FOOT_IN * u, 0.0)     # designer 10: clear of the bezel / camera strip
 	map_title.size.x = maxf(map_title.size.x, nr.size.x)
 	var vr: Rect2 = z["ver"]
-	version_label.position = Vector2(vr.end.x - version_label.size.x, vr.position.y)
+	for lb in [map_title, version_label]:          # cream, outlined: readable on any floor (the version was lost on the flowers)
+		lb.add_theme_color_override("font_color", Color("f4e7d4"))
+		lb.add_theme_constant_override("outline_size", maxi(3, int(round(3.0 * u))))
+		lb.add_theme_color_override("font_outline_color", Color(0.1, 0.04, 0.08, 0.9))
+	version_label.visible = true
+	version_label.size = version_label.get_combined_minimum_size()
+	version_label.position = Vector2(vr.end.x - version_label.size.x - Hud43.FOOT_IN * u, vr.position.y)
 	if score43:
 		score43.lay(z["score"])
 		status_label.position = Vector2((vp.x - status_label.size.x) / 2.0, (z["score"] as Rect2).end.y + 2.0 * u)
@@ -3103,8 +3109,12 @@ func callout_at(pos: Vector3, place: String, text: String, kind := "warn", seat 
 	var col := kind_color(kind)
 	var opts := _icon_opts(seat, kind)
 	opts["world"] = pos + Vector3(0, Rules.HUD_CALLOUT_LIFT, 0)
-	if Hud43.on():                                    # hud-43: short, fading fast (over the node, clear of its count)
-		opts["life"] = ON_BOARD_LIFE
+	if Hud43.on():                                    # hud-43 (designer 10): short, fading fast, on a dark pill BESIDE the node
+		opts["life"] = ON_BOARD_LIFE                  # (clear of its hub and its count), three at most
+		opts["pill"] = true
+		opts["beside"] = 26.0 * ui_scale
+		if callouts.find(place).is_empty():
+			callouts.trim_world(2)
 	callouts.add(place, [[text, callout_px(Rules.HUD_CALLOUT_FONT, Rules.HUD_CALLOUT_MIN_PT), col.lerp(Color.WHITE, 0.15)]], col, opts)
 
 
@@ -3163,13 +3173,17 @@ func start_banner(title: String, lines: Array) -> void:
 	## play (its clock stands still while the match is held - under the VERSUS card).
 	if not shows("notices") or callouts == null or (title == "" and lines.is_empty()):
 		return
+	if Hud43.on():                                    # designer 10: no map-name watermark over the pit (the name is bottom left)
+		title = ""
+		if lines.is_empty():
+			return
 	var rows := []
 	if title != "":
 		rows.append([title, callout_px(Rules.HUD_BANNER_FONT, Rules.HUD_CALLOUT_MIN_PT + 6.0), Color("f2fbff"), true])
 	for l in lines:
 		rows.append([str(l), callout_px(Rules.HUD_CALLOUT_FONT * 0.9, Rules.HUD_CALLOUT_MIN_PT), Color("c8e6ee")])
 	callouts.add("banner", rows, Rules.seat_color(human), {"anchor": func(): return root.get_viewport_rect().size * Vector2(0.5, 0.3),
-			"side": "center", "arrow": false, "life": Rules.HUD_BANNER_LIFE, "rise": 0.0,
+			"side": "center", "arrow": false, "life": Rules.HUD_BANNER_LIFE, "rise": 0.0, "pill": Hud43.on(),
 			"hold": func(): return bool(main.paused) and not sim.over})
 
 
@@ -3356,7 +3370,7 @@ func _on_board(text: String, kind := "info", seat := "", place := "line") -> voi
 		callout_at(sim.nodes[best]["pos"], place, text, kind, seat)
 		return
 	var opts := {"glyph": "good" if kind == "good" else ("warn" if kind == "warn" else "info"), "side": "center", "arrow": false,
-			"life": ON_BOARD_LIFE, "rise": 8.0}
+			"life": ON_BOARD_LIFE, "rise": 8.0, "pill": true}
 	opts["anchor"] = func():
 		var pr: Rect2 = main.pit_rect()
 		return Vector2(pr.get_center().x, pr.position.y + pr.size.y * 0.3)

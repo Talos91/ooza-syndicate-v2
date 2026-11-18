@@ -47,7 +47,9 @@ func add(place: String, lines: Array, col: Color, opts := {}) -> Dictionary:
 	it["arrow"] = bool(opts.get("arrow", true))
 	it["hold"] = opts.get("hold", Callable())
 	it["rise"] = float(opts.get("rise", Rules.HUD_CALLOUT_RISE)) * ui_scale
-	it["toast"] = float(opts.get("toast", 0.0))       # hud-lab: > 0 = drawn on the round-29 toast at that px per pt
+	it["toast"] = float(opts.get("toast", 0.0))
+	it["pill"] = bool(opts.get("pill", false))         # hud-43: a dark pill behind the words (as the count chips)
+	it["beside"] = float(opts.get("beside", 0.0))      # hud-43: px right of its world point (beside the node, not over the hub)       # hud-lab: > 0 = drawn on the round-29 toast at that px per pt
 	var seat := str(opts.get("seat", ""))
 	var tex: Texture2D = opts.get("emblem_tex", null)
 	if it["emblem"] != null and (seat == "" or tex == null):
@@ -162,6 +164,8 @@ func sync(dt: float, cam: Camera3D, area: Rect2, blocked: Array) -> void:
 				it["off"] = true
 				it["arrow_dir"] = dir
 				it["arrow_tip"] = tip
+			elif float(it.get("beside", 0.0)) > 0.0:
+				c = _place(it, p + Vector2(float(it["beside"]) + sz.x * 0.5, -sz.y * 0.5 - rise), sz, blocked, placed, area)
 			else:
 				c = _place(it, p - Vector2(0, sz.y * 0.5 + rise), sz, blocked, placed, area)
 		else:
@@ -300,6 +304,25 @@ static func _clear(c: Vector2, sz: Vector2, hud: Array, placed: Array, area: Rec
 	return c
 
 
+var _pill: StyleBoxFlat
+
+
+func _pill_box(col: Color) -> StyleBoxFlat:
+	if _pill == null:
+		_pill = StyleBoxFlat.new()
+		_pill.set_corner_radius_all(int(round(10.0 * ui_scale)))
+		_pill.set_border_width_all(maxi(1, int(round(1.5 * ui_scale))))
+	return _pill
+
+
+func trim_world(keep: int) -> void:
+	## hud-43: at most `keep` map callouts at once - the oldest go first.
+	var w := items.filter(func(i): return i["world"] is Vector3)
+	w.sort_custom(func(a, b): return float(a["t"]) > float(b["t"]))
+	while w.size() > keep:
+		_drop(w.pop_front())
+
+
 # ------------------------------------------------------------------ drawing
 func _draw() -> void:
 	for it in items:
@@ -318,6 +341,12 @@ func _draw() -> void:
 		var toast := float(it.get("toast", 0.0))
 		if toast > 0.0:
 			HudLab.draw_toast(self, box, col, a, toast)
+		elif bool(it.get("pill", false)):
+			var pr := box.grow_individual(8.0 * ui_scale, 3.0 * ui_scale, 8.0 * ui_scale, 3.0 * ui_scale)
+			var sb := _pill_box(col)
+			sb.bg_color = Color(0.12, 0.05, 0.09, 0.88 * a)
+			sb.border_color = Color(col, 0.9 * a)
+			draw_style_box(sb, pr)
 		for i in range(lines.size()):
 			var l: Array = lines[i]
 			var f := _font(l)
