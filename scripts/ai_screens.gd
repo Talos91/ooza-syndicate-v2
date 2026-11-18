@@ -19,6 +19,10 @@ const TILT := 12.0
 const GAP := 2.0                 # s (match time) between two reaction starts on one screen (brief: "at most 1 per AI every ~2 s")
 const STALE := 3.5               # s a queued reaction waits before it is dropped
 const IDLE_TAUNT := 10.0         # s without a reaction before the screen taunts
+const PLATE_FONT_PT := 12.5     # the plate line (the 12.5 pt floor), in the HUD unit: the screen zone is AI_H_PT tall
+const AI_H_PT := 65.0            # hud43 ai_l / ai_r height (min(AI_PT.y, 66 + 2 - AI_Y))
+const PLATE_TEXT_X := 0.5        # text start, in plate heights
+const PLATE_LAMP := Vector2(0.1, 0.28)   # lamp x, size (plate heights)
 const C := 384.0                 # the layer canvas (tools/prep_ai_layers.py SCREEN_PX)
 const MID := Vector2(192, 192)
 const LAYERS := "res://assets/art/ui/ai_layers/"
@@ -50,8 +54,8 @@ const REACT := {
 	"TAUNT":     {"mood": "SMUG",  "dur": 2.0, "prio": 1, "cd": 12.0, "body": "hop",    "eyes": "look",   "glitch": 0.0, "flare": 0.3, "emote": "taunt"},
 	"ALARM":     {"mood": "PANIC", "dur": 2.2, "prio": 3, "cd": 30.0, "body": "jitter", "eyes": "wide",   "glitch": 0.7, "flare": 0.0, "emote": "bang", "flash": Color(1, 0.3, 0.3)},
 	"KO":        {"mood": "GLEE",  "dur": 2.0, "prio": 4, "cd": 3.0,  "body": "hop",    "eyes": "happy",  "glitch": 0.0, "flare": 1.0, "emote": "happy"},
-	"WIN":       {"mood": "GLEE",  "dur": 9999.0, "prio": 7, "cd": 0.0, "body": "bounce", "eyes": "happy", "glitch": 0.0, "flare": 0.7, "emote": "happy"},
-	"LOSE":      {"mood": "OUT",   "dur": 9999.0, "prio": 6, "cd": 0.0, "body": "sag",    "eyes": "shut",  "glitch": 0.6, "flare": 0.0, "emote": "sweat"},
+	"WIN":       {"mood": "GLEE",  "dur": 9999.0, "prio": 7, "cd": 9999.0, "body": "bounce", "eyes": "happy", "glitch": 0.0, "flare": 0.7, "emote": "happy"},
+	"LOSE":      {"mood": "OUT",   "dur": 9999.0, "prio": 6, "cd": 9999.0, "body": "sag",    "eyes": "shut",  "glitch": 0.6, "flare": 0.0, "emote": "sweat"},
 	"OUT":       {"mood": "OUT",   "dur": 3.0, "prio": 6, "cd": 9999.0, "body": "sag",    "eyes": "shut",  "glitch": 0.5, "flare": 0.0, "emote": ""},
 }
 ## PERSONA per faction (WORLD-LORE-2026-11 §4 voices): energy (body motion), glitch (tears), eyes (how far the eyes move), split (two eyes
@@ -59,34 +63,19 @@ const REACT := {
 const PERSONA := {
 	"vex": {"energy": 1.35, "glitch": 1.0, "eyes": 1.0, "split": false,
 		"emotes": {"happy": "spark", "anger": "anger", "sweat": "sweat", "bang": "bang", "taunt": "ask"},
-		"lines": {"BOOT": "BETA LIVE", "TAKE": "SHIPPED!", "LOST": "LEARNINGS", "ARMY_WON": "IT SCALES!", "ARMY_LOST": "PIVOT!",
-			"CAST": "INNOVATE!", "HIT": "BUG?!", "SURGE": "HYPERGROWTH", "SLUMP": "ROADMAP...", "NEARWIN": "DISRUPTED!",
-			"NEARLOSS": "STILL BETA!", "TAUNT": "SHIP FASTER", "ALARM": "HOTFIX!", "KO": "DEPRECATED", "WIN": "LAUNCHED!",
-			"LOSE": "SUNSET.", "OUT": "OFFLINE"}},
+		"lines": {"BOOT": "BETA!", "TAKE": "SHIPPED", "LOST": "OOPS.", "ARMY_WON": "SCALE!", "ARMY_LOST": "PIVOT!", "CAST": "HYPE!", "HIT": "BUG?!", "SURGE": "GROWTH", "SLUMP": "PIVOT?", "NEARWIN": "DISRUPT", "NEARLOSS": "v0.9!", "TAUNT": "SHIP IT", "ALARM": "HOTFIX", "KO": "LEGACY", "WIN": "LAUNCH!", "LOSE": "SUNSET.", "OUT": "OFFLINE"}},
 	"ember": {"energy": 0.6, "glitch": 0.7, "eyes": 0.6, "split": false,
 		"emotes": {"happy": "spark", "anger": "anger", "sweat": "sweat", "bang": "bang", "taunt": "bang"},
-		"lines": {"BOOT": "SHIFT START", "TAKE": "THROUGHPUT", "LOST": "DOWNTIME", "ARMY_WON": "100 %", "ARMY_LOST": "FUEL.",
-			"CAST": "FIRING", "HIT": "INCIDENT", "SURGE": "ON SCHEDULE", "SLUMP": "BEHIND", "NEARWIN": "OUTPUT MAX",
-			"NEARLOSS": "OVERHEAT", "TAUNT": "IDLE = WASTE", "ALARM": "SHUTDOWN?", "KO": "BURNED.", "WIN": "TARGET MET",
-			"LOSE": "CLOSED.", "OUT": "OFFLINE"}},
+		"lines": {"BOOT": "SHIFT!", "TAKE": "OUTPUT", "LOST": "DELAY.", "ARMY_WON": "100 %", "ARMY_LOST": "FUEL.", "CAST": "FIRE!", "HIT": "FAULT.", "SURGE": "ON TIME", "SLUMP": "BEHIND", "NEARWIN": "MAX OUT", "NEARLOSS": "HOT!", "TAUNT": "IDLE?", "ALARM": "HALT!", "KO": "BURNED", "WIN": "QUOTA!", "LOSE": "CLOSED.", "OUT": "OFFLINE"}},
 	"solar": {"energy": 0.35, "glitch": 0.5, "eyes": 0.7, "split": false,
 		"emotes": {"happy": "check", "anger": "cross", "sweat": "sweat", "bang": "bang", "taunt": "check"},
-		"lines": {"BOOT": "PER POLICY", "TAKE": "APPROVED.", "LOST": "NON-COMPLIANT", "ARMY_WON": "AUDITED.", "ARMY_LOST": "INQUIRY.",
-			"CAST": "FORM 4.7.2", "HIT": "OBJECTION", "SURGE": "IN ORDER.", "SLUMP": "UNDER REVIEW", "NEARWIN": "FINAL.",
-			"NEARLOSS": "APPEAL!", "TAUNT": "FILE A FORM", "ALARM": "PER POLICY", "KO": "RESOURCE.", "WIN": "CERTIFIED.",
-			"LOSE": "AUDITED.", "OUT": "OFFLINE"}},
+		"lines": {"BOOT": "POLICY", "TAKE": "FILED.", "LOST": "DENIED", "ARMY_WON": "AUDITED.", "ARMY_LOST": "INQUIRY.", "CAST": "FORM 4.7", "HIT": "OBJECT!", "SURGE": "IN ORDER", "SLUMP": "REVIEW", "NEARWIN": "FINAL.", "NEARLOSS": "APPEAL!", "TAUNT": "FORMS?", "ALARM": "POLICY!", "KO": "CLASSED", "WIN": "PASSED.", "LOSE": "VOID.", "OUT": "OFFLINE"}},
 	"bloom": {"energy": 1.2, "glitch": 0.6, "eyes": 1.0, "split": true,
 		"emotes": {"happy": "heart", "anger": "anger", "sweat": "sweat", "bang": "bang", "taunt": "heart"},
-		"lines": {"BOOT": "THRIVE!", "TAKE": "WELCOME!", "LOST": "FEEDBACK...", "ARMY_WON": "GROWTH!", "ARMY_LOST": "SELF-CARE",
-			"CAST": "WELLNESS!", "HIT": "RUDE!", "SURGE": "ENGAGED!", "SLUMP": "SURVEY?", "NEARWIN": "THRIVING!",
-			"NEARLOSS": "BURNOUT", "TAUNT": "HUG TIME?", "ALARM": "STAY CALM!", "KO": "REHOMED!", "WIN": "WE THRIVE!",
-			"LOSE": "OFFBOARDED", "OUT": "OFFLINE"}},
+		"lines": {"BOOT": "THRIVE!", "TAKE": "HELLO!", "LOST": "OUCH...", "ARMY_WON": "GROWTH!", "ARMY_LOST": "BREATHE", "CAST": "HUGS!", "HIT": "RUDE!", "SURGE": "ENGAGED", "SLUMP": "SURVEY?", "NEARWIN": "SO WELL", "NEARLOSS": "BURNOUT", "TAUNT": "HUG?", "ALARM": "CALM!", "KO": "REHOMED", "WIN": "WE WIN!", "LOSE": "SAD.", "OUT": "OFFLINE"}},
 	"null": {"energy": 0.75, "glitch": 1.7, "eyes": 0.8, "split": true,
 		"emotes": {"happy": "coin", "anger": "anger", "sweat": "ask", "bang": "bang", "taunt": "coin"},
-		"lines": {"BOOT": "[REDACTED]", "TAKE": "MARGIN.", "LOST": "WRITE-OFF", "ARMY_WON": "PROFIT.", "ARMY_LOST": "EXPOSURE.",
-			"CAST": "NO COMMENT", "HIT": "DENIED.", "SURGE": "MARGIN UP", "SLUMP": "NO COMMENT", "NEARWIN": "CORNERED.",
-			"NEARLOSS": "LIQUIDITY?", "TAUNT": "PAY UP.", "ALARM": "SELL!", "KO": "ACQUIRED.", "WIN": "MONOPOLY.",
-			"LOSE": "LIQUIDATED", "OUT": "[REDACTED]"}},
+		"lines": {"BOOT": "N/A", "TAKE": "MARGIN.", "LOST": "LOSS.", "ARMY_WON": "PROFIT.", "ARMY_LOST": "EXPOSED", "CAST": "DENY.", "HIT": "DENIED.", "SURGE": "MARGIN+", "SLUMP": "...", "NEARWIN": "BOUGHT.", "NEARLOSS": "LIQUID?", "TAUNT": "PAY UP.", "ALARM": "SELL!", "KO": "ACQUIRE", "WIN": "OWNED.", "LOSE": "BUST.", "OUT": "N/A"}},
 }
 ## the old dev moods (--ai-mood=RAGE,GLEE) -> reactions
 const OLD_MOOD := {"GLEE": "TAKE", "RAGE": "LOST", "PANIC": "NEARLOSS", "SMUG": "NEARWIN", "OUT": "OUT"}
@@ -255,7 +244,7 @@ func _pump(i: int) -> void:
 	var q: Array = queue[i]
 	for k in range(q.size() - 1, -1, -1):            # stale / cooling entries go
 		var e: Dictionary = q[k]
-		if int(e["prio"]) < 6 and (now - float(e["at"]) > STALE or now < float(cds[i].get(e["id"] + "|" + e["seat"], -1.0))):
+		if (int(e["prio"]) < 6 and now - float(e["at"]) > STALE) or now < float(cds[i].get(e["id"] + "|" + e["seat"], -1.0)):
 			q.remove_at(k)
 	if q.is_empty():
 		return
@@ -759,6 +748,14 @@ func _glyph(ci: CanvasItem, ch: String, c: Vector2, size: float, col: Color) -> 
 	ci.draw_string(font, Vector2(c.x - w * 0.5, c.y + font.get_ascent(fs) * 0.36), ch, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 
 
+static func plate_room_pt() -> float:
+	## The width a plate line may take at PLATE_FONT_PT (pt): the plate minus the text start and a right pad.
+	var side := AI_H_PT
+	var pw := 133.0 - side + side * 0.12
+	var ph := side * 0.3
+	return pw - ph * PLATE_TEXT_X - ph * 0.12
+
+
 func _draw_plate(i: int, ci: Node2D) -> void:
 	## The mood plate on the screen's inner side (screen units): a lamp in the mood colour + the reaction's line in the AI's voice
 	## (the baseline mood word when no reaction plays). It pops a little when a reaction starts.
@@ -786,14 +783,10 @@ func _draw_plate(i: int, ci: Node2D) -> void:
 	var lamp := col
 	if id != "" and fmod(_t * 6.0, 1.0) < 0.5 and _env(i) > 0.5:
 		lamp = col.lightened(0.35)
-	ci.draw_rect(Rect2(pr.position + Vector2(pw * 0.06, ph * 0.28), Vector2(ph * 0.44, ph * 0.44)), lamp)   # the mood lamp
-	var fs := int(round(ph * 0.58))
+	ci.draw_rect(Rect2(pr.position + Vector2(ph * PLATE_LAMP.x, ph * (0.5 - PLATE_LAMP.y * 0.5)), Vector2(ph, ph) * PLATE_LAMP.y), lamp)   # the mood lamp
+	# designer 12 FIX: every line at 12.5 pt (never shrunk), one left padding for all; lines are written to fit (test_ai_reactions audits)
+	var fs := int(round(PLATE_FONT_PT * side / AI_H_PT))
 	var font := HudLab.bold()
-	var tw := font.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-	var room := pw - ph * 0.8
-	while tw > room and fs > 6:
-		fs -= 1
-		tw = font.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-	ci.draw_string(font, Vector2(pr.position.x + ph * 0.7 + (room - tw) * 0.5, pr.get_center().y + font.get_ascent(fs) * 0.36), word,
+	ci.draw_string(font, Vector2(pr.position.x + ph * PLATE_TEXT_X, pr.get_center().y + font.get_ascent(fs) * 0.36), word,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("30202a"))
 	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

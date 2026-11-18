@@ -4,6 +4,7 @@ extends SceneTree
 ## with the AI screens fed exactly as in play (sim.captured -> on_capture, sim.events, the share every 0.5 s), then checks:
 ## - THROTTLE: on every screen two reaction starts are >= AiScreens.GAP s apart (the end / an out excepted), no spam;
 ## - LIVE: the match triggers several different reactions on both screens (wired to real events, not only dev flags);
+## - FONT AUDIT: every plate line / mood word fits the plate at 12.5 pt (designer 12: never shrunk, swap the word).
 ## - TABLE: >= 10 reactions, every faction has a line for each, every layer texture and box exists.
 ## Exit code 0 = all passed.
 
@@ -119,6 +120,22 @@ func _run() -> void:
 		check(miss.is_empty(), "TABLE: %s has a line for every reaction %s" % [f, miss])
 		var tex := ["_glow", "_body", "_eyes", "_shut"].filter(func(x): return AiScreens._layer(f + x) == null or AiScreens._box(f + x).size.x <= 0)
 		check(tex.is_empty() and AiScreens._box("glitch@" + f).size.x > 0, "LAYERS: %s textures + boxes %s" % [f, tex])
+	# FONT AUDIT (designer 12 FIX): every plate line + mood word fits the plate at 12.5 pt, never shrunk
+	var font := HudLab.bold()
+	var room := AiScreens.plate_room_pt()
+	var over := []
+	var widest := 0.0
+	var words := []
+	for f in AiScreens.PERSONA:
+		words.append_array(AiScreens.PERSONA[f]["lines"].values())
+	for m in AiScreens.MOODS:
+		words.append(AiScreens.MOODS[m][1])
+	for w in words:
+		var px := font.get_string_size(w, HORIZONTAL_ALIGNMENT_LEFT, -1, int(AiScreens.PLATE_FONT_PT * 10.0)).x / 10.0
+		widest = maxf(widest, px)
+		if px > room:
+			over.append("%s %.1f" % [w, px])
+	check(over.is_empty(), "FONT AUDIT: %d lines at %.1f pt fit the %.1f pt plate (widest %.1f) %s" % [words.size(), AiScreens.PLATE_FONT_PT, room, widest, over])
 	check(AiScreens._layer("glass") != null and AiScreens._layer("frame") != null and AiScreens._layer("glitch") != null, "LAYERS: glass, frame, glitch")
 	# LIVE matches
 	_check_log("1v1 G-05", _match("res://maps4/G-05-catapult-bay.json", "1v1", {"A": "vex", "B": "null"}, secs))
