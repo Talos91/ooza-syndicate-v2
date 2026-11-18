@@ -259,6 +259,11 @@ func ground(x: float, z: float) -> float:
 	return maxf(level, bed_h(x, z))
 
 
+func surface_y() -> float:
+	## The goo surface as drawn (the painted pit keeps its plane at the 0:00 level; the canyon's drains): pieces under it are hidden.
+	return _goo.position.y if _goo != null else level
+
+
 func in_river(x: float, z: float) -> bool:
 	return level > bed_h(x, z) + 0.05
 

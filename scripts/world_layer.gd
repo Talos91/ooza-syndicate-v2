@@ -80,6 +80,8 @@ const TUBE_R_PILLAR := 2.6       # a pillar node: a glass sleeve around the colu
 const DRILL_R := 0.45            # RIVER WORLD / DRILL NODE (Daniele 11-16: "make the column skinnier"): every drill's central tube
 const TUBE_TOP := -3.5           # under the platform centre (legs and core end at -3.6)
 const TUBE_TOP_PILLAR := -2.3    # under the pillar's collar
+const TUBE_TOP_KIT2 := -0.9      # DEMO kit2 at SIZE D: the full-size column (r 1.088) meets the x0.68 hub cone 0.85 m over its bottom (-1.77; NODE-SIZE-D-SPEC)
+const DRILL_R_KIT2 := 1.088      # SIZE D: the full-size mobile goo column (M_GooColumn, 2.18 m across)
 const PUSH_T := 1.6              # s: a capture pushes the old colour out of the tube
 const INV_MAX := 0.6             # a siege fills at most this share of the tube from the top
 const INV_RATE := 0.8            # tube share per second the invader band moves
@@ -423,7 +425,7 @@ func _build_tube(n: Dictionary) -> void:
 	# tubes and Locals exist like every other buildable node's; the wide glass sleeve stays on the pillars that cannot
 	var r := TUBE_R_PILLAR if (pillar and not ("vat" in b or "machinegoon" in b)) else TUBE_R
 	if WorldRiver.enabled():
-		r = DRILL_R
+		r = DRILL_R_KIT2 if Rules.kit2 else DRILL_R
 	var mi := MeshInstance3D.new()
 	var cm := CylinderMesh.new()
 	cm.top_radius = r
@@ -445,7 +447,7 @@ func _build_tube(n: Dictionary) -> void:
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 	var owner: String = n["owner"]
-	var tb := {"id": id, "mi": mi, "mat": m, "r": r, "top_off": TUBE_TOP_PILLAR if pillar else TUBE_TOP,
+	var tb := {"id": id, "mi": mi, "mat": m, "r": r, "top_off": TUBE_TOP_PILLAR if pillar else (TUBE_TOP_KIT2 if Rules.kit2 else TUBE_TOP),
 			"owner": owner, "base": _col(owner), "base_old": _col(owner), "inv": 0.0, "inv_col": _col(owner),
 			"inv_seat": "", "pushing": false, "riders": [], "alive": true, "drain": 0.0,
 			"x": (n["pos"] as Vector3).x, "z": (n["pos"] as Vector3).z, "top_y": 999.0}

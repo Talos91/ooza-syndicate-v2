@@ -12,7 +12,7 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.24.4-demo-river4"   # DEMO bg-44b4 (a) strip the old floor world (column bases, sockets, lab district, river Locals, sky band; floor-only assets out of the Web pck); previous: 0.24.4-demo-river3 = round 44 B4 background + main 0.25.0 (the 0.25.0 match HUD; menus not in scope); previous: 0.24.4-demo-river2 DEMO quota-drill (drill node + launch + splat + NEXT LAUNCH tab); previous: 0.24.4-demo-river1 (river + quota); DEMO SHRINK (map-shrink 536b97c + this VERSION line only: "-demo" turns on Rules.demo = MapPool.DEMO picker); previous: STAGING 0.24.4: finished branches merged as they are - menu bg 35C2, HUD round 37, Rodin units, relay column, play-fixes (2026-11-15)
+const VERSION := "0.24.4-demo-river5"   # DEMO bg-44b4 (b) kit2 look at drill node size D (platform + vats x0.68, drill x1.00); previous: 0.24.4-demo-river4 = (a) strip the old floor world (column bases, sockets, lab district, river Locals, sky band; floor-only assets out of the Web pck); previous: 0.24.4-demo-river3 = round 44 B4 background + main 0.25.0 (the 0.25.0 match HUD; menus not in scope); previous: 0.24.4-demo-river2 DEMO quota-drill (drill node + launch + splat + NEXT LAUNCH tab); previous: 0.24.4-demo-river1 (river + quota); DEMO SHRINK (map-shrink 536b97c + this VERSION line only: "-demo" turns on Rules.demo = MapPool.DEMO picker); previous: STAGING 0.24.4: finished branches merged as they are - menu bg 35C2, HUD round 37, Rodin units, relay column, play-fixes (2026-11-15)
 const WORLD_LAB_FLOOR := true   # the demo's lab5 floor on every map (the fog / tube work was tuned on it); was Rules.demo only
 const LOOK_LAB2 := true   # the lab2 world look (cream decks, owner rim band, lab floor + surround) is the default (Daniele 2026-11-12: "the new status quo"); dev --look-old = the 0.24.1 look, --look=lab = test v1
 const HUD_LAB := true    # hud-lab (2026-11-13): the round-29/30 lab HUD pack (HudLab) is THE in-match HUD; dev --hud-old = the pre-lab HUD
@@ -206,6 +206,10 @@ static var proto_debug: bool = VERSION.contains("-proto") or VERSION.contains("-
 # DEMO BUILD (Daniele 2026-11-07: "put somewhere else where there's just a playable demo of this"): VERSION "...-demo<n>" =
 # the picker offers MapPool.DEMO only (R-01 STRAIT) and the world layer starts with the lab picture floor (no URL flags).
 static var demo: bool = VERSION.contains("-demo")
+# DEMO kit look (demo2-kit 24c346f, 2026-11-18; bg-44b4 at drill node SIZE D, Daniele 11-18): the platform + vats baked from
+# Models/2.0/kit-v2-detail at x0.68 (bake_demo2.py) and the drill below the deck at full size (bake_demo2_D.py) in assets/kit/kit2/.
+# View only; on in every "-demo" build (--kit2 / --no-kit2). Lasers, machinegoon, bridges, pillars stay the current kit.
+static var kit2: bool = VERSION.contains("-demo")
 const DEBUG_SPEEDS := [1, 2, 4, 8]           # x whole sim time (production, movement, cooldowns, relays, the clock)
 const DEBUG_PRODS := [1.0, 2.0, 5.0, 10.0]   # x the human seat's production only
 const DEBUG_ADD_UNITS := 100                 # shown units (x SCALE in the sim) added to the selected own node

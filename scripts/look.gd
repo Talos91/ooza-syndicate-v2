@@ -20,6 +20,7 @@ const RIM_IN := 5.86                # v2 owner rim: a 0.28 m flat band on the pl
 const RIM_OUT := 6.14
 const RIM_ENERGY := 1.5             # v2 owned rim emission (Mats.light: 3.0)
 const KIT_RIM_ENERGY := 1.5         # vat-neon round 2: 4.5 / 2.2 tonemapped every channel > 1 to WHITE (the owner colour only in the halo); <= ~1.5 keeps the hue. Was 2.2 (owner neon far too faint on a phone, Daniele 2026-11-13); owner reads at a glance
+const KIT2 := ["Platform_Standard", "Vat_T1", "Vat_T2", "Vat_T3", "Vat_T4"]   # DEMO 2 kit look keys (Rules.kit2)
 static var _rim_mesh: ArrayMesh
 static var _missing := {}
 
@@ -51,6 +52,8 @@ static func _arg() -> String:
 
 static func kit_key(key: String) -> String:
 	## The lab twin of a kit key when --look=lab and the file exists; logs each key without a twin once.
+	if Rules.kit2 and key in KIT2 and not key.begins_with("skins/"):   # DEMO 2: the baked kit look (assets/kit/kit2/)
+		return "kit2/" + key
 	if not lab or key.begins_with("skins/") or key in ["Relay_Mount", "Relay_Retract"]:   # fx / goo_territory match those paths
 		return key
 	if v2:
