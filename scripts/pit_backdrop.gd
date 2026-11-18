@@ -107,6 +107,19 @@ func _fit(vp: Vector2) -> void:
 	_o = Vector2(clampf(_o.x, vp.x - REF.x * _s.x, 0.0), clampf(_o.y, vp.y - REF.y * _s.y, 0.0))
 
 
+const LAKE_MARGIN := 0.04             # designer 11 (11-18): the playfield stays inside the lake with ~4 % margin
+
+
+func lake_rect(vp: Vector2) -> Rect2:
+	## The lake's open goo on screen (layout.json lake_pt: the crust hole minus the opaque bank), less LAKE_MARGIN of its size
+	## on every side: main._fit_nodes fits the map in it (designer 11: STRAIT 2 spilled onto the ash with the pit-box fit).
+	if _vp != vp:
+		_relayout(vp)
+	var l: Array = layout.get("lake_pt", [129.0, 76.5, 578.5, 273.5])
+	var r := Rect2(_o + Vector2(l[0], l[1]) * _s, Vector2(l[2], l[3]) * _s)
+	return r.grow_individual(-r.size.x * LAKE_MARGIN, -r.size.y * LAKE_MARGIN, -r.size.x * LAKE_MARGIN, -r.size.y * LAKE_MARGIN)
+
+
 func _relayout(vp: Vector2) -> void:
 	_vp = vp
 	_fit(vp)

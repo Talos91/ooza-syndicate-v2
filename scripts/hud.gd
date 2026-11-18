@@ -1176,12 +1176,12 @@ func sync(dt: float, cam: Camera3D) -> void:
 	stats_label.text = "%02d:%02d" % [int(sim.time) / 60, int(sim.time) % 60]
 	var show_chips := shows("strength")
 	if lab_tube:                                     # hud-lab: the tube's goo = each seat's share, no numbers; the clock
-		lab_tube.visible = top_panel.visible
+		lab_tube.visible = top_panel.visible and score43 == null   # bg-44b4 (designer 11): hud-43 hides the lab tube for good (its end pipes poked over the score housing)
 		lab_tube.show_shares = show_chips
 		lab_tube.sync()
 		if quota_bar:
 			quota_bar.sync(dt)
-			quota_bar.visible = quota_bar.visible and (lab_tube.visible or score43 != null)   # hud-43: on the score's flanks
+			quota_bar.visible = quota_bar.visible and (lab_tube.visible or (score43 != null and top_panel.visible))   # hud-43: on the score's flanks
 		if is_instance_valid(lab_feed) and dock.slots.size() > 0:
 			lab_feed.lay(dock.position + (dock.slots[0] as Control).position, HudLab.u_of(self))
 	top_left.visible = show_chips

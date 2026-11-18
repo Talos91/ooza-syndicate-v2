@@ -66,6 +66,14 @@ for e in L["elements"] + L.get("conditional_elements", []):
         save(half(Image.open(os.path.join(SRC, e["file"])).convert("RGBA")), name)
         out["elements"][e["id"]] = {"file": name, "pt": [e["x"] / SC, e["y"] / SC, e["w"] / SC, e["h"] / SC], "anchor": e["anchor"]}
 out["pit_stadium_pt"] = L["widths"]["reference_812"]["pit_stadium"]
+# the lake's open goo (crust hole minus the opaque bank), pt at the 812 reference: the camera fits the map inside it
+ca = np.array(crust)[..., 3] < 128
+rr = np.zeros_like(ca)
+rx, ry = round(x0 / r), round(y0 / r)
+ra = np.array(half(rim.crop((x0, y0, x1, y1))))[..., 3] > 128
+rr[ry:ry + ra.shape[0], rx:rx + ra.shape[1]] = ra[: ca.shape[0] - ry, : ca.shape[1] - rx]
+ys2, xs2 = np.nonzero(ca & ~rr)
+out["lake_pt"] = [xs2.min() / K, ys2.min() / K, (xs2.max() + 1 - xs2.min()) / K, (ys2.max() + 1 - ys2.min()) / K]
 json.dump(out, open(os.path.join(OUT, "layout.json"), "w"), indent=1)
 tot = 0
 for f in sorted(os.listdir(OUT)):
