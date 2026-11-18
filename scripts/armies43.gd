@@ -11,7 +11,7 @@ const DIR := "res://assets/ui/armies43/"
 const BODY := Rect2(64, 196, 3120, 1100)
 const TOP_ROW_H := 160.0                            # the faction / section row only (CUSTOMIZE keeps its own body)
 const FACTIONS := ["vex", "null", "bloom", "ember", "solar"]
-const SHORT := {"EMERGENCY EVAC": "EVAC"}
+const SHORT := {}                                   # (45B: EMERGENCY EVAC keeps its name, two lines in SKILL-NAME-FACE-TALL)
 
 static var _layout: Dictionary = {}
 
@@ -157,7 +157,7 @@ func _add_heroes(top_only: bool) -> void:
 		var x0 := 64.0 + i * 440.0
 		_hero(FACTIONS[i], _r(x0 + 24.0, 214.0, 132.0, 124.0), vc)
 	if not top_only:
-		_hero(army, _r(130.0, 608.0, 548.0, 372.0), vc)
+		_hero(army, _r(130.0, 608.0, 548.0, 330.0), vc)   # (45B: room for the faction tagline under the hero)
 
 
 func _hero(f: String, r: Rect2, vc: Color) -> void:
@@ -220,11 +220,78 @@ func _draw() -> void:
 					var side := minf(r.size.x, r.size.y) * 1.25
 					draw_texture_rect(ic, Rect2(r.get_center() - Vector2(side, side) / 2.0, Vector2(side, side)), false, Color("FAEAD1"))
 				continue
+			if file == "DIVIDER.png" and tab == "skills" and e["y"] > 560 and e["y"] < 1000:
+				r.size.x = _r(1600.0, 0, 0, 0).position.x - 16.0 * s - r.position.x   # stops before the section subtitle
+			if file.begins_with("SKILL-NAME-FACE") and _tall(_el_ctrl.get(e["id"], "")):
+				_draw_tall_face(r, st if st != "" else "NORMAL")   # 45B SKILL-NAME-FACE-TALL: a two-line name (EMERGENCY EVAC)
+				continue
 			var tx := _t(file)
 			if tx != null:
 				draw_texture_rect(tx, r, false, col)
 		else:
 			_draw_text(e, st, bd, font_floor)
+	if tab == "skills":
+		_draw_extras(font_floor)
+
+
+const UP := Color("29d3e0")                         # a stat above 100 % (the remake's cyan)
+const DOWN := Color("e2546a")                       # below 100 %
+
+
+func _tall(cid: String) -> bool:
+	## A skill name that cannot sit on one line at the floor in the card's name face (EMERGENCY EVAC).
+	if not _skill_of.has(cid):
+		return false
+	var nm := ArmyPresets.skill_name(_skill_of[cid]).to_upper()
+	var f: Font = UiKit.BODY
+	for x in _els:                                   # the name's own font (the pack's text role)
+		if x["type"] == "text" and _el_ctrl.get(x["id"], "") == cid:
+			f = _font_of(x)
+	var fl := float(UiKit.px(m, 0.0)) if m != null else 0.0
+	return nm.contains(" ") and f.get_string_size(nm, HORIZONTAL_ALIGNMENT_LEFT, -1, maxi(1, int(round(fl * 0.8)))).x > 264.0 * s
+
+
+func _draw_tall_face(face: Rect2, st: String) -> void:
+	## The tall name face (86 x 36 pt, evenly scaled to the card's 71 pt face width), centred on the face, bottom-aligned.
+	var t := Kit45.tex("SKILL-NAME-FACE-TALL-86x36pt-%s.png" % st)
+	if t == null:
+		return
+	var sz := Vector2(face.size.x, face.size.x * 36.0 / 86.0)   # the card's face width, the tall face's own proportions
+	draw_texture_rect(t, Rect2(Vector2(face.get_center().x - sz.x / 2.0, face.end.y - sz.y), sz), false)
+
+
+func _draw_extras(font_floor: float) -> void:
+	## The remake's hero card and section lines (45B ARMIES-SKILLS): the faction tagline under the hero, the stats as a
+	## two-column table (above 100 % cyan, below red) and the section subtitles beside ACTIVE / MAP SKILL.
+	var f := UiKit.BODY
+	var fs := maxi(1, int(round(maxf(36.0 * s, font_floor))))
+	var asc := (f.get_ascent(fs) - f.get_descent(fs)) / 2.0
+	var tag := str(Rules.FACTION_TAGLINES.get(army, "")).to_upper()
+	if tag != "":
+		var tfs := Kit45.fit(m, tag, false, 30.0 * s, 560.0 * s)
+		var tw := f.get_string_size(tag, HORIZONTAL_ALIGNMENT_LEFT, -1, tfs).x
+		var p := _r(404.0, 970.0, 0, 0).position
+		draw_string(f, Vector2(p.x - tw / 2.0, p.y + (f.get_ascent(tfs) - f.get_descent(tfs)) / 2.0), tag, HORIZONTAL_ALIGNMENT_LEFT, -1, tfs, Color("d9c0b3"))
+	var rows := [[["SPD", "speed"], ["HP", "health"]], [["ATK", "attack"], ["PROD", "production"]], [["GARRISON", "garrison"], ["", ""]]]
+	var ys := [1110.0, 1170.0, 1230.0] if _compact() else [1206.0, 1240.0, 1274.0]
+	var cols := [[116.0, 380.0], [430.0, 690.0]]
+	for i in range(rows.size()):
+		for j in range(rows[i].size()):
+			var k: String = rows[i][j][0]
+			if k == "":
+				continue
+			var v := _st(rows[i][j][1])
+			var vt := "%d%%" % v
+			var p := _r(cols[j][0], ys[i], 0, 0).position
+			draw_string(f, Vector2(p.x, p.y + asc), k, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("e7b68b"))
+			var vc := UP if v > 100 else (DOWN if v < 100 else Color("faead1"))
+			var vw := f.get_string_size(vt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+			var q := _r(cols[j][1] if k != "GARRISON" else 560.0, ys[i], 0, 0).position
+			draw_string(f, Vector2(q.x - vw, q.y + asc), vt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, vc)
+	for sub in [["Combat skills on every map", 608.0], ["Relay skills require a map with relays", 972.0]]:
+		var sfs := Kit45.fit(m, sub[0], false, 34.0 * s, 1080.0 * s)
+		var p2 := _r(1620.0, sub[1], 0, 0).position
+		draw_string(f, Vector2(p2.x, p2.y + (f.get_ascent(sfs) - f.get_descent(sfs)) / 2.0), sub[0], HORIZONTAL_ALIGNMENT_LEFT, -1, sfs, Color("d9c0b3"))
 
 
 func _text_for(e: Dictionary) -> Array:
@@ -252,17 +319,14 @@ func _text_for(e: Dictionary) -> Array:
 	match e["id"]:
 		"e054": return [str(UiKit.SUBS.get(army, "")) if str(UiKit.SUBS.get(army, "")) != "" else "OOZE"]
 		"e055": return [UiKit.NAMES[army]]
-		"e059": return [str(ftrait[0]).to_upper()]
-		"e060" when _compact(): return [_stats1()]          # a small screen: the trait name + the stats only (floor 12.5 pt)
+		"e059": return ["TRAIT  /  " + str(ftrait[0]).to_upper()]   # the remake: TRAIT / name, then the stats table (_draw_stats)
+		"e060" when _compact(): return [""]                 # a small screen (floor 12.5 pt): the trait name + the stats table only
 		"e061" when _compact(): return [""]
-		"e062" when _compact(): return [_stats2()]
-		"e063" when _compact(): return [""]
 		"e060", "e061":
 			var lines := _wrap(str(ftrait[1]), e, 580.0)
 			var i := 0 if e["id"] == "e060" else 1
 			return [lines[i] if i < lines.size() else ""]
-		"e062": return [_stats1()]
-		"e063": return [_stats2()]
+		"e062", "e063": return [""]
 		"e070": return [ArmyPresets.skill_name(ult).to_upper()]
 		"e071": return ["~%d s charge" % int(Rules.ult_charge_time(ult))]
 	return [str(e.get("text", ""))]
