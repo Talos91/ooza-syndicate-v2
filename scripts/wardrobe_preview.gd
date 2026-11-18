@@ -6,6 +6,7 @@ extends Cosmetics.Preview
 ## these (phones: one 3D viewport, never one per tile); set_tier() switches the tier in place.
 
 var accent := UiKit.CYAN
+var plinth := true                                   # false: the page draws its own pedestal (45B PEDESTAL-RING) under the model
 var _plinth: Node3D
 
 
@@ -70,6 +71,7 @@ func _ready() -> void:
 	ring.layers = 2
 	_plinth.add_child(ring)
 	_vp.add_child(_plinth)
+	_plinth.visible = plinth
 	_fit_plinth()
 
 

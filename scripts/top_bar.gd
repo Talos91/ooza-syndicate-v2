@@ -11,7 +11,7 @@ signal options_pressed
 signal profile_pressed
 signal back_pressed
 
-const H_PT := 34.0                                 # the remake's header height (HOME / ARMIES / PROFILE remakes)
+const H_PT := 37.0                                 # IMPORT-45B-SPEC fix 2: the header at its native 37 pt on every screen
 
 var menu                                           # the Menu (untyped: the pieces load without menu.gd)
 var slim := false
@@ -50,29 +50,36 @@ func _build(crumb: String, _f: String) -> void:
 	c.visible = false                                # Daniele 2026-11-05: no breadcrumbs (kept, hidden: the string names the page)
 	add_child(c)
 	if slim:
-		var back := _key("KEY-SMALL", _L(14, 6, 64, 22), "←  BACK", Callable(menu, "bar_back"))
+		var back := _key("KEY-SMALL", _L(14, 7.5, 64, 22), "←  BACK", Callable(menu, "bar_back"))
 		back.size_pt = 12.5
 		queue_redraw()
 		return
-	_text("OOZE", _L(16, 2, 120, 19), 17.0, UiKit.INK, true)
-	_text("SYNDICATE", _L(16, 20, 120, 11), 7.5, UiKit.MUTED, false)
+	_text("OOZE", _L(16, 4, 104, 19), 17.0, UiKit.INK, true)
+	_text("SYNDICATE", _L(16, 22, 104, 11), 7.5, UiKit.MUTED, false)
+	# IMPORT-45B-SPEC fix 1 (Daniele: the dash rule "very small almost invisible"): FLUTED-TRIM at mockup size (85.5 x 7.75 pt)
+	# either side of the crest, centre y 19.75, as painted; kept only with >= 6 pt clear of the right group, never scaled
+	var right_x := size.x - (Kit45.DW - 444.0) * u
+	for tx in [127.0, 282.0]:
+		if (tx + 85.5 + 6.0) * u <= right_x:
+			Bars45.ornament(self, "FLUTED-TRIM", _L(tx, 15.875, 85.5, 7.75))
+	Bars45.bolts(self, size, u)
 	var crest := TextureRect.new()
 	crest.texture = Kit45.art("OVERLORD-CREST")
 	crest.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	crest.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	crest.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var cr := _L(231, 5, 34, 24)
+	var cr := _L(235, 6.75, 28, 22.5)                # the mockup crest (spec fix 1)
 	crest.position = cr.position
 	crest.size = cr.size
 	add_child(crest)
 	# right group: SCRAP, CHIPS, LEVEL, SOUND, SETTINGS, ?
-	_well("COUNTER-WELL", _Rt(444, 5, 82, 24), "CUR-1", Progression.balance("soft"), "SCRAP")
-	_well("COUNTER-WELL", _Rt(532, 5, 63, 24), "CUR-2", Progression.balance("premium"), "CHIPS")
+	_well("COUNTER-WELL", _Rt(444, 6.5, 82, 24), "CUR-1", Progression.balance("soft"), "SCRAP")
+	_well("COUNTER-WELL", _Rt(532, 6.5, 63, 24), "CUR-2", Progression.balance("premium"), "CHIPS")
 	var lv := Kit45.Piece.new()
 	lv.fam = "LEVEL-WELL"
 	lv.key = "80x24pt"
 	lv.u = u
-	var lr := _Rt(601, 5, 80, 24)
+	var lr := _Rt(601, 6.5, 80, 24)
 	lv.position = lr.position
 	lv.size = lr.size
 	add_child(lv)
@@ -80,7 +87,7 @@ func _build(crumb: String, _f: String) -> void:
 	_text("LEVEL %d" % level, lr, 11.0, UiKit.INK, false, 1)
 	var prof := _tap(lr.grow_individual(0, 5 * u, 0, 5 * u), Callable(menu, "show_profile"))
 	prof.tooltip_text = "PROFILE"
-	var snd := _key("UTILITY-BUTTON", _Rt(691, 5, 31, 24), "", Callable())
+	var snd := _key("UTILITY-BUTTON", _Rt(691, 6.5, 31, 24), "", Callable())
 	snd.tooltip_text = "SOUND"
 	snd.glyph = Kit45.art("ICON-SOUND")
 	snd.glyph_rect = Rect2(8, 4, 15, 16)
@@ -102,11 +109,11 @@ func _build(crumb: String, _f: String) -> void:
 		Music.toggle_on()                            # OFF at once, everywhere (Music.set_on stops the players itself)
 		Sfx.play_ui("tap")
 		cross.queue_redraw())
-	var gear := _key("UTILITY-BUTTON", _Rt(728, 5, 31, 24), "", Callable(menu, "show_options"))
+	var gear := _key("UTILITY-BUTTON", _Rt(728, 6.5, 31, 24), "", Callable(menu, "show_options"))
 	gear.tooltip_text = "OPTIONS"
 	gear.glyph = Kit45.art("ICON-SETTINGS")
 	gear.glyph_rect = Rect2(8, 4, 15, 16)
-	var help := _key("UTILITY-BUTTON", _Rt(765, 5, 31, 24), "?", Callable(menu, "show_help"))
+	var help := _key("UTILITY-BUTTON", _Rt(765, 6.5, 31, 24), "?", Callable(menu, "show_help"))
 	help.tooltip_text = "HELP"
 	help.glyph = Kit45.art("ICON-HELP")
 	help.glyph_rect = Rect2(8, 4, 15, 16)

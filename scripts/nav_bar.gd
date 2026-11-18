@@ -33,7 +33,7 @@ func _build(_f: String) -> void:
 	## glyphs), the open tab SELECTED = the cyan seat rim on the whole key (not an underline). Centred, the remake's 38 pt bar.
 	var w: float = menu.content.size.x
 	var u := minf(w / Kit45.DW, float(menu.content.size.y) / Kit45.DH)
-	var h := 38.0 * u
+	var h := 42.0 * u                                  # IMPORT-45B-SPEC fix 2: native 42 pt (y 333..375), buttons 6 pt clear
 	size = Vector2(w, h)
 	position = Vector2(0, float(menu.content.size.y) - h)
 	mouse_filter = Control.MOUSE_FILTER_PASS
@@ -46,6 +46,9 @@ func _build(_f: String) -> void:
 		Kit45.nine(sh, Kit45.tex("NAV-CABINET-812x42pt-STATIC.png"), Rect2(Vector2.ZERO, sh.size), Kit45.variant("NAV-CABINET")["slice"], u))
 	shade = sh
 	add_child(shade)
+	Bars45.ornament(self, "FLUTED-TRIM", Rect2(Vector2(23.0, 18.875) * u, Vector2(85.5, 7.75) * u))     # spec fix 1: x 23 and
+	Bars45.ornament(self, "FLUTED-TRIM", Rect2(Vector2(w - (Kit45.DW - 673.0) * u, 18.875 * u), Vector2(85.5, 7.75) * u))   # x 673, cy 355.75
+	Bars45.bolts(self, size, u)
 	var span := 100.0 * TABS.size() + 6.0 * (TABS.size() - 1)
 	var x0 := (w - span * u) / 2.0
 	for i in range(TABS.size()):
@@ -61,7 +64,7 @@ func _build(_f: String) -> void:
 		b.glyph_rect = Rect2(11, 7, 15, 16)
 		b.size_pt = 12.5
 		var hit := maxf(30.0 * u, Kit45.MIN_HIT * u)
-		b.position = Vector2(x0 + i * 106.0 * u, 4.0 * u - (hit - 30.0 * u) / 2.0)
+		b.position = Vector2(x0 + i * 106.0 * u, 6.0 * u - (hit - 30.0 * u) / 2.0)
 		b.size = Vector2(100.0 * u, hit)
 		b.art = Rect2(Vector2(0, (hit - 30.0 * u) / 2.0), Vector2(100.0, 30.0) * u)
 		# UI (0.22.1): through the Menu (it outlives a rebuild during the tap's flash frame), not this bar's signal

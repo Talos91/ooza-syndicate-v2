@@ -12,8 +12,9 @@ from PIL import Image
 
 DEL = r"H:/My Drive/PROJECTS/Ooze Syndicate/References/Art direction 2026-11 - syndicate uniforms/DIRECTOR-PACKAGE/deliveries/"
 PAINT = DEL + "45-menu-parts-paint-B/"
+OVER = DEL + "45-menu-parts-paint-B2/import-2x/parts/"   # 45B2: the SELECTED fix, same names, replaces 45B files (designer 11 PASS)
 ARMIES = DEL + "43B-pack-ARMIES/parts/"
-ART = ["OVERLORD-CREST", "CUR-1", "CUR-2", "ICON-SOUND", "ICON-SETTINGS", "ICON-HELP",
+ART = ["FLUTED-TRIM", "BOLT", "OVERLORD-CREST", "CUR-1", "CUR-2", "ICON-SOUND", "ICON-SETTINGS", "ICON-HELP",
        "NAV-HOME-INK", "NAV-ARMIES-INK", "NAV-PROFILE-INK", "NAV-GUIDE-INK", "SEAT-LAMP"]
 out = sys.argv[1]
 os.makedirs(out + "/parts", exist_ok=True)
@@ -40,7 +41,8 @@ for name, p in pj["parts"].items():
     fams[name] = {"mode": p["mode"], "variants": vs}
 tot = 0
 for f in sorted(used):
-    shutil.copyfile(PAINT + "import-2x/parts/" + f, out + "/parts/" + f)
+    src = OVER + f if os.path.exists(OVER + f) else PAINT + "import-2x/parts/" + f
+    shutil.copyfile(src, out + "/parts/" + f)
     tot += os.path.getsize(out + "/parts/" + f)
 for a in ART:
     im = Image.open(ARMIES + a + ".png").convert("RGBA")

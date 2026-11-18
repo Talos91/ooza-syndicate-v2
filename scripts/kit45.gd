@@ -138,6 +138,41 @@ static func nine(ci: CanvasItem, t: Texture2D, r: Rect2, sl: Array, u: float, co
 			ci.draw_texture_rect_region(t, d, s, col)
 
 
+const INK_CREAM := Color("faead1")                  # 45B2: cream text and glyphs on the copper SELECTED plates
+static var _ink_cache: Dictionary = {}
+
+
+static func ink_on(fam: String, key: String, st: String, slot: Array) -> Color:
+	## The lettering colour for a face: dark on a light (cream) face, cream on a dark one (copper SELECTED, plum, DISABLED),
+	## measured once per file under the label slot (the part's centre when it has none).
+	var v := variant(fam, key)
+	var file := str(state_of(v, st).get("file", ""))
+	if _ink_cache.has(file):
+		return _ink_cache[file]
+	var col := INK_DARK
+	var t := tex(file)
+	var img: Image = t.get_image() if t != null else null
+	if img != null:
+		if img.is_compressed():
+			img.decompress()
+		var sz := Vector2(img.get_size())
+		var pt_px := sz.x / float(v["size"][0])
+		var r := Rect2(Vector2(float(slot[0]), float(slot[1])) * pt_px, Vector2(float(slot[2]), float(slot[3])) * pt_px) if slot.size() == 4 				else Rect2(sz * 0.3, sz * 0.4)
+		var lum := 0.0
+		var n := 0
+		for i in range(5):
+			for j in range(3):
+				var p := r.position + r.size * Vector2((i + 0.5) / 5.0, (j + 0.5) / 3.0)
+				var c := img.get_pixel(clampi(int(p.x), 0, img.get_width() - 1), clampi(int(p.y), 0, img.get_height() - 1))
+				if c.a > 0.5:
+					lum += c.get_luminance()
+					n += 1
+		if n > 0 and lum / n < 0.45:
+			col = INK_OFF if st == "DISABLED" or st == "LOCKED" else INK_CREAM
+	_ink_cache[file] = col
+	return col
+
+
 static func floor_px(m) -> float:
 	## The text floor in canvas units (12.5 pt on a phone; 0 on desktop).
 	return float(UiKit.px(m, 0.0)) if m != null else 0.0
@@ -285,6 +320,7 @@ class Btn extends Button:
 	var glyph_rect := Rect2()                         # pt, inside the art (0 size = no glyph)
 	var size_pt := 0.0                                # label size (0 = from the slot / art height)
 	var lock_state := ""                              # a fixed state (LOCKED, EQUIPPED...) over the four
+	var label_slot := false                           # the label sits in the part's own label slot (cards, tiles), not mid-face
 
 	func _ready() -> void:
 		flat = true
@@ -315,15 +351,16 @@ class Btn extends Button:
 		var lr := Rect2(art.position + Vector2(4, 0) * u, art.size - Vector2(8, 0) * u)
 		if not sl.is_empty():
 			lr = Rect2(art.position + Vector2(float(sl[0]), float(sl[1])) * u, Vector2(float(sl[2]), float(sl[3])) * u)
-			lr = Rect2(lr.position.x, art.position.y, lr.size.x, art.size.y)   # vertically: the whole face (the floor may outgrow the slot)
+			if not label_slot:
+				lr = Rect2(lr.position.x, art.position.y, lr.size.x, art.size.y)   # vertically: the whole face (the floor may outgrow the slot)
 		if glyph != null and glyph_rect.size.x > 0.0:
 			var gr := Rect2(art.position + glyph_rect.position * u, glyph_rect.size * u)
-			draw_texture_rect(glyph, gr, false, INK_DARK if st != "DISABLED" else INK_OFF)
+			draw_texture_rect(glyph, gr, false, Kit45.ink_on(fam, key, st, sl))
 			var gx := gr.end.x + 4.0 * u - art.position.x
 			lr = Rect2(art.position.x + gx, lr.position.y, art.size.x - gx - 6.0 * u, lr.size.y)
 		if label == "":
 			return
-		var col := ink if ink.a > 0.0 else (INK_OFF if st == "DISABLED" else INK_DARK)
+		var col := ink if ink.a > 0.0 else Kit45.ink_on(fam, key, st, sl)
 		var want := (size_pt if size_pt > 0.0 else minf(art.size.y / u * 0.48, 13.0)) * u
 		Kit45.draw_text(self, m, label, lr, want, col, false, 1, 2)
 

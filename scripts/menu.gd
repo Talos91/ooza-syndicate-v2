@@ -2859,13 +2859,18 @@ func show_armies(f: String = "", back: Callable = Callable()) -> void:
 		if plate != null:
 			_backdrop.texture = plate
 			_backdrop.modulate = Color(0.9, 0.9, 0.9)
+	# 45B (the remake): the pack's body sits on the remake canvas (Kit45.Stage) - faction row at y 40, 780 pt wide from
+	# x 16 - so SKILLS and CUSTOMIZE (built on the same stage) line up to the point
+	var st := Kit45.Stage.new()
+	st.setup(self, content.size)
+	content.add_child(st)
+	_stage = st
 	var a43 := Armies43.new()
-	a43.setup(self, Rect2(x, top, w, area.end.y - 6.0 - top), _army, _army_tab, _armies43_tap)
+	a43.setup(self, Rect2(st.P(16, 40), Vector2(780, 290) * st.u), _army, _army_tab, _armies43_tap)
 	content.add_child(a43)
 	_a43 = a43
 	if _army_tab == "customize":
-		var rh := Armies43.TOP_ROW_H * a43.s
-		_customize_body(Rect2(x, top + rh + 12.0, w, area.end.y - 10.0 - (top + rh + 12.0)))
+		_customize_body(st)
 		shell_raise()
 		return
 	if _skill_tip != "":
@@ -3555,11 +3560,17 @@ func show_cosmetics(f: String = "") -> void:
 	show_armies()
 
 
-func _customize_body(r: Rect2) -> void:
-	## The wardrobe in the CUSTOMIZE tab: categories, the turning preview, the looks and EQUIP / UNLOCK.
-	var x := r.position.x
-	var w := r.size.x
-	var top := r.position.y
+const WARD_TILE := {"territory": "NEON", "vat": "VAT", "forge": "FORGE", "laser": "LASER", "machinegoon": "GATLING",
+		"monster_hub": "HUB", "monster": "MONSTER"}
+const WARD_TILE_AT := [[15, 83], [83, 83], [15, 133], [83, 133], [15, 183], [83, 183], [15, 233]]   # 45A2 approved 12.5 pt fit
+const WARD_CARD_AT := [[354, 83], [466, 83], [578, 83], [690, 83], [354, 187], [466, 187], [578, 187], [690, 187]]
+
+
+func _customize_body(st: Kit45.Stage) -> void:
+	## CUSTOMIZE = the remake (43B-five-screen-remake/ARMIES-CUSTOMIZE, 45A2 approved 12.5 pt fit, 45B paint): the category
+	## tiles (what each family wears now, in its icon well), the preview cabinet "VEX / VAT  DEFAULT" with the LIVE 3D model
+	## on the seat-lit pedestal and the T1-T4 tier tabs (Daniele 11-18), eight skin cards (rendered thumbnails, name face,
+	## LOCKED tag, EQUIPPED tag), the info strip and EQUIP / UNLOCK. Every look of a family fits at once (no scrolling).
 	var cat := _ward_cat if _ward_cat in _ward_cats() else "vat"
 	var looks: Array = TERRITORY_LOOKS.keys() if cat == "territory" else Cosmetics.OPTIONS[cat]
 	var played := ArmyPresets.cosmetic_loadout_for(_army)          # what plays (a locked pick plays as the default)
@@ -3568,17 +3579,148 @@ func _customize_body(r: Rect2) -> void:
 	var sel := str(_ward_sel.get(cat, ArmyPresets.core_territory if cat == "territory" else str(saved[cat])))
 	if not sel in looks:
 		sel = equipped
-	var h := r.size.y
-	# Daniele 2026-11-05: back to rail | stage | looks - the rail shows each category as its MODEL (the default, or the
-	# look you wear), all seven at once; the looks column shows every look; nothing pages or scrolls
-	var rail_w := _ward_rail(Vector2(x, top), h, cat, played)
-	# round 3d (Daniele 2026-11-05: "the preview box is too big and can be halved"): a narrow stage; the looks get the
-	# room - every look as its model picture, the look's line and EQUIP / UNLOCK under them
-	var pv_w := floorf(w * 0.26)
-	var pv_x := x + rail_w + 12.0
-	_ward_stage(Vector2(pv_x, top), Vector2(pv_w, h), cat, sel, equipped)
-	var lx := pv_x + pv_w + 12.0
-	_ward_looks_grid(Vector2(lx, top), Vector2(x + w - lx, h), cat, looks, sel, equipped)
+	var seat := Kit45.seat()
+	# the categories
+	var cats := _ward_cats()
+	for i in range(mini(cats.size(), WARD_TILE_AT.size())):
+		var cc: String = cats[i]
+		var at: Array = WARD_TILE_AT[i]
+		var tb := st.key("CUST-CATEGORY-TILE", at[0], at[1], 64, 46, str(WARD_TILE.get(cc, cc.to_upper())), func():
+			_ward_cat = cc
+			show_cosmetics(), cc == cat, false, "64x46pt")
+		tb.tooltip_text = COSMETIC_FAMILY_LABEL[cc]
+		tb.size_pt = 12.5
+		tb.label_slot = true
+		var now := ArmyPresets.core_territory if cc == "territory" else str(played[cc])
+		if cc == "territory":
+			var wl := Kit45.Txt.new()
+			wl.m = self
+			wl.text = str(TERRITORY_LOOKS[now][0])
+			wl.size_cu = 9.0 * st.u
+			wl.col = seat
+			wl.align = 1
+			wl.position = tb.art.position + Vector2(4, 4) * st.u
+			wl.size = Vector2(56, 20) * st.u
+			tb.add_child(wl)
+		else:
+			var pic := LookThumbs.rect(cc, now, _army, Vector2(28, 20) * st.u)
+			pic.position = tb.art.position + Vector2(18, 4) * st.u
+			tb.add_child(pic)
+	# the preview cabinet: title, live 3D model on the pedestal, tier tabs
+	st.piece("CUST-PREVIEW-CABINET", 153, 83, 195, 195, "STATIC", "195x195pt")
+	var kt: String = ("ALL FACTIONS" if cat == "territory" else UiKit.NAMES[_army]) + "  /  " + COSMETIC_FAMILY_LABEL[cat]
+	st.txt(kt, 171, 92, 157, 14, 9.0, Kit45.KICK)
+	st.txt(_ward_look_name(cat, sel).to_upper(), 171, 106, 157, 18, 14.0, UiKit.INK, true)
+	var ped := st.piece("PEDESTAL-RING", 182.5, 231, 136, 31, "STATIC", "136x31pt")
+	ped.tints = {"seat": seat}
+	var vr := st.R(163, 132, 175, 160)                  # the model's feet on the pedestal ring (its centre y 246.5)
+	var tiers := {"vat": 4, "machinegoon": 3}.get(cat, 0) as int
+	var pv: WardrobePreview = null
+	if cat == "territory":
+		st.txt(str(TERRITORY_LOOKS[sel][0]), 163, 150, 175, 60, 34.0, seat, true, 1)
+	else:
+		var tier := clampi(_ward_tier, 1, tiers) if tiers > 0 else 0
+		pv = WardrobePreview.make(cat, sel, _army, tier, vr.size)
+		pv.plinth = false                              # the 45B pedestal ring (seat colour) is the plinth
+		pv.accent = seat                               # neon = seat colour (COLOUR RULE 11-15)
+		pv.position = vr.position
+		pv.mouse_filter = Control.MOUSE_FILTER_IGNORE   # (it reaches over the tier tabs: taps go through)
+		st.add_child(pv)
+	if tiers > 0:                                       # in place: the preview switches its model, no rebuild
+		var tabs := []
+		for t in range(1, tiers + 1):
+			var tt: int = t
+			var tbx := st.key("TIER-TAB", 155.0 + (t - 1) * 48.0, 297.5, 45, 22, "T%d" % t, Callable(), t == clampi(_ward_tier, 1, tiers), false, "45x22pt")
+			tbx.tooltip_text = "TIER %d" % t
+			tabs.append(tbx)
+			tbx.pressed.connect(func():
+				_ward_tier = tt
+				if pv != null:
+					pv.set_tier(tt)
+				for i in range(tabs.size()):
+					tabs[i].selected = i + 1 == tt
+					tabs[i].queue_redraw())
+	# the looks
+	for i in range(mini(looks.size(), WARD_CARD_AT.size())):
+		var lid: String = looks[i]
+		var at: Array = WARD_CARD_AT[i]
+		var ls := _ward_state(cat, lid, equipped)
+		var card := st.key("CUST-SKIN-CARD", at[0], at[1], 107, 100, _ward_look_name(cat, lid).to_upper(), func():
+			_ward_sel[cat] = lid
+			show_cosmetics(), lid == sel, false, "107x100pt")
+		card.label_slot = true
+		card.size_pt = 12.5
+		if ls["locked"] and lid != sel:
+			card.lock_state = "LOCKED"
+		elif ls["equipped"]:
+			card.lock_state = "EQUIPPED"                  # (its tag says so; the seat rim lights it too)
+		var rw := Rect2(card.art.position + Vector2(6, 6) * st.u, Vector2(95, 65) * st.u)
+		if cat == "territory":
+			var wl2 := Kit45.Txt.new()
+			wl2.m = self
+			wl2.text = str(TERRITORY_LOOKS[lid][0])
+			wl2.size_cu = 22.0 * st.u
+			wl2.col = seat
+			wl2.head = true
+			wl2.align = 1
+			wl2.position = rw.position
+			wl2.size = rw.size
+			card.add_child(wl2)
+		else:
+			var pic2 := LookThumbs.rect(cat, lid, _army, rw.size)
+			pic2.position = rw.position
+			if ls["locked"]:
+				pic2.modulate = Color(1, 1, 1, 0.45)     # LOCKED: the render dimmed under its tag
+			card.add_child(pic2)
+		if ls["locked"]:
+			var tag := Kit45.Piece.new()
+			tag.fam = "LOCKED-TAG"
+			tag.key = "68x19pt"
+			tag.u = st.u
+			tag.position = card.art.position + Vector2(8.75, 9) * st.u
+			tag.size = Vector2(68, 19) * st.u
+			card.add_child(tag)
+			var tl := Kit45.Txt.new()
+			tl.m = self
+			tl.text = "LOCKED"
+			tl.size_cu = 9.0 * st.u
+			tl.col = UiKit.INK
+			tl.align = 1
+			tl.position = tag.position + Vector2(6, 1.5) * st.u
+			tl.size = Vector2(56, 16) * st.u
+			card.add_child(tl)
+		elif ls["equipped"]:
+			var et := Kit45.Txt.new()                  # the EQUIPPED state's tag carries its word
+			et.m = self
+			et.text = "EQUIPPED"
+			et.size_cu = 9.0 * st.u
+			et.col = Kit45.INK_CREAM                    # (cream on the copper EQUIPPED tag, 45B2)
+			et.align = 1
+			et.position = card.art.position + Vector2(12.25, 10.5) * st.u
+			et.size = Vector2(65.5, 16) * st.u
+			card.add_child(et)
+	# the info strip and the action
+	var ls2 := _ward_state(cat, sel, equipped)
+	st.piece("INFO-STRIP", 354, 296, 291, 33, "STATIC", "291x33pt")
+	st.txt(_ward_detail(cat, sel, ls2), 367, 297, 270, 31, 9.0, LOCK_COL if ls2["locked"] else UiKit.MUTED, false, 0, 2)
+	var item := "" if cat == "territory" else Progression.cosmetic_item(cat, sel, _army)
+	if ls2["equipped"]:
+		st.key("PRIMARY-WIDE", 664, 296, 133, 33, "EQUIPPED", Callable(), false, true, "133x33pt")
+	elif ls2["locked"] and not Progression.price(item).is_empty():   # PROGRESSION: UNLOCK where it can be bought
+		st.key("PRIMARY-WIDE", 664, 296, 133, 33, "UNLOCK", func():
+			_buy_prompt(item, _ward_look_name(cat, sel).to_upper(), "A look only: tier read, footprint and colour stay the same.",
+					func(): show_cosmetics()), true, false, "133x33pt")
+	elif ls2["locked"]:
+		st.key("PRIMARY-WIDE", 664, 296, 133, 33, "LOCKED", Callable(), false, true, "133x33pt")
+	else:
+		st.key("PRIMARY-WIDE", 664, 296, 133, 33, "EQUIP", func():
+			if cat == "territory":
+				ArmyPresets.set_core_territory(sel)
+			else:
+				ArmyPresets.set_cosmetic_pick(_army, cat, sel)
+				_preset_changed()
+			_ward_sel.erase(cat)
+			show_cosmetics(), true, false, "133x33pt")
 
 
 func _ward_factions(y: float) -> void:
