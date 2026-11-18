@@ -1,31 +1,28 @@
 class_name TopBar
 extends Control
-## The app shell's top bar (Alpha 21 UI pass): the wordmark, a breadcrumb ("OOZE / CAMPAIGN"), both balances, the
-## level ring + "LEVEL n · x / y campaign stars" (tap: PROFILE), a gear (OPTIONS) and "?" (HELP). Full screen width
-## on every shell page. `slim` (a phone's subflow - faction, battlefield, setup, lobby...; SCREEN-SYSTEM.md "Mobile
-## layout"): only BACK and the breadcrumb, so the page keeps its height. Canvas units (UiKit); >= 44 pt on phones.
+## The app shell's header (UI remake 45B, Daniele 11-18; GAP-LIST §0): the 45B HEADER-CABINET full width, OOZE /
+## SYNDICATE in cream type and the Overlord crest at the left, two currency wells (SCRAP, CHIPS, thousands comma), the
+## LEVEL well (tap: PROFILE) and three square cream keys (SOUND, SETTINGS, ?) at the right - the remake's HOME header,
+## 812 x 34 pt, left group anchored left, right group anchored right. `slim` (a phone's subflow): BACK replaces the
+## wordmark and the right group stays off, so the page keeps its height.
 
 signal help_pressed
 signal options_pressed
 signal profile_pressed
 signal back_pressed
 
+const H_PT := 34.0                                 # the remake's header height (HOME / ARMIES / PROFILE remakes)
+
 var menu                                           # the Menu (untyped: the pieces load without menu.gd)
 var slim := false
-var _strip_box: StyleBox
-var _strip_glass: StyleBox
-var _ring_c := Vector2.ZERO
-var _ring_r := 0.0
-var _ring_col := UiKit.CYAN
-var _level := 1
+var glass := false                                 # (kept for callers: HOME's header is the same cabinet now)
+var u := 1.0                                       # canvas units per pt (Kit45.Stage of the content)
 
 
 static func make(m, crumb: String, f := "vex", p_slim := false) -> TopBar:
 	var t := TopBar.new()
 	t.menu = m
 	t.slim = p_slim
-	t._strip_box = MenuSkin.strip(1.0)                # loaded here, not first inside _draw (drew opaque WHITE on SETUP's slim bar)
-	t._strip_glass = MenuSkin.strip(0.6)
 	t._build(crumb, f)
 	return t
 
@@ -34,196 +31,164 @@ func bar_height() -> float:
 	return size.y
 
 
-func _build(crumb: String, f: String) -> void:
+func _L(x: float, y: float, w: float, h: float) -> Rect2:
+	return Rect2(Vector2(x, y) * u, Vector2(w, h) * u)
+
+
+func _Rt(x: float, y: float, w: float, h: float) -> Rect2:
+	## A right-group rect: the remake's x measured from the 812 pt right edge, anchored to this bar's right edge.
+	return Rect2(Vector2(size.x - (Kit45.DW - x) * u, y * u), Vector2(w, h) * u)
+
+
+func _build(crumb: String, _f: String) -> void:
 	var w: float = menu.content.size.x
-	var pp := UiKit.pt(menu)                          # 40B2: the round keys are 30 pt with a 33 pt tap box (designer 9)
-	var q := (33.0 / pp) if pp > 0.0 else 46.0
-	var h := maxf(58.0, q + 10.0)
+	u = minf(w / Kit45.DW, float(menu.content.size.y) / Kit45.DH)
 	position = Vector2.ZERO
-	size = Vector2(w, h)
+	size = Vector2(w, H_PT * u)
 	mouse_filter = Control.MOUSE_FILTER_PASS
-	_ring_col = UiKit.accent(f)
-	var x := 18.0
-	if slim:
-		# UI (0.22.1): the bars' taps act through the Menu, which outlives a rebuild - a phone's resize can rebuild the page
-		# (and free this bar) during the tap's flash frame, and a tap then did nothing (Daniele: "double or triple tap")
-		var back := UiKit.make_btn(menu, "←  BACK", Vector2(maxf(120.0, UiKit.text_w(menu, "←  BACK", 15, true) + 36.0), q),
-				Callable(menu, "bar_back"), "secondary", f, 15)   # iOS: wide enough for its grown text ("← BAC" at 320 pt)
-		back.position = Vector2(x, (h - back.size.y) / 2.0)
-		add_child(back)
-		x += back.size.x + 18.0
-	else:
-		var mark := TextureRect.new()                # the wordmark, left
-		mark.texture = load("res://assets/ui/Ooze-Syndicate-Wordmark.svg")
-		mark.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		mark.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		add_child(mark)
-		mark.position = Vector2(x, h * 0.2)
-		mark.size = Vector2(112, h * 0.6)
-		x += 112.0 + 26.0
 	var c := UiKit.label(menu, crumb.to_upper(), 12, UiKit.MUTED, true, 3)
-	c.position = Vector2(x, (h - c.get_minimum_size().y) / 2.0)
-	c.visible = false                                # Daniele 2026-11-05: "no need for breadcrumbs ... we are in game not a site"
-	add_child(c)                                     # (kept, hidden: the crumb string still names the page)
+	c.visible = false                                # Daniele 2026-11-05: no breadcrumbs (kept, hidden: the string names the page)
+	add_child(c)
 	if slim:
+		var back := _key("KEY-SMALL", _L(14, 6, 64, 22), "←  BACK", Callable(menu, "bar_back"))
+		back.size_pt = 12.5
 		queue_redraw()
 		return
-	# right to left: "?", the gear, MUSIC, the level block, the balances
-	var help := _square("?", Vector2(w - 14.0 - q, (h - q) / 2.0), q, f)
-	help.tooltip_text = "HELP"
-	help.pressed.connect(func(): UiKit.acknowledge(help, Callable(menu, "show_help")))
-	var gear := _square("", help.position - Vector2(q + 8.0, 0), q, f)
-	gear.tooltip_text = "OPTIONS"
-	gear.pressed.connect(func(): UiKit.acknowledge(gear, Callable(menu, "show_options")))
-	var glyph := Control.new()                       # a drawn gear (no icon for it in the kit yet)
-	glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	glyph.position = gear.position
-	glyph.size = gear.size
-	glyph.draw.connect(func(): _draw_gear(glyph, q))
-	add_child(glyph)
-	# MUSIC (Daniele 2026-09-29/30): the top-right instant mute - Music.toggle_on(), a drawn note glyph (slashed + dim OFF)
-	var music_btn := _square("", gear.position - Vector2(q + 8.0, 0), q, f)
-	music_btn.tooltip_text = "SOUND"
-	var music_glyph := Control.new()
-	music_glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	music_glyph.position = music_btn.position
-	music_glyph.size = music_btn.size
-	music_glyph.draw.connect(func(): _draw_note(music_glyph, q))
-	music_btn.pressed.connect(func():
+	_text("OOZE", _L(16, 2, 120, 19), 17.0, UiKit.INK, true)
+	_text("SYNDICATE", _L(16, 20, 120, 11), 7.5, UiKit.MUTED, false)
+	var crest := TextureRect.new()
+	crest.texture = Kit45.art("OVERLORD-CREST")
+	crest.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	crest.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	crest.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var cr := _L(231, 5, 34, 24)
+	crest.position = cr.position
+	crest.size = cr.size
+	add_child(crest)
+	# right group: SCRAP, CHIPS, LEVEL, SOUND, SETTINGS, ?
+	_well("COUNTER-WELL", _Rt(444, 5, 82, 24), "CUR-1", Progression.balance("soft"), "SCRAP")
+	_well("COUNTER-WELL", _Rt(532, 5, 63, 24), "CUR-2", Progression.balance("premium"), "CHIPS")
+	var lv := Kit45.Piece.new()
+	lv.fam = "LEVEL-WELL"
+	lv.key = "80x24pt"
+	lv.u = u
+	var lr := _Rt(601, 5, 80, 24)
+	lv.position = lr.position
+	lv.size = lr.size
+	add_child(lv)
+	var level := int(Progression.level_for(Progression.xp)["level"])
+	_text("LEVEL %d" % level, lr, 11.0, UiKit.INK, false, 1)
+	var prof := _tap(lr.grow_individual(0, 5 * u, 0, 5 * u), Callable(menu, "show_profile"))
+	prof.tooltip_text = "PROFILE"
+	var snd := _key("UTILITY-BUTTON", _Rt(691, 5, 31, 24), "", Callable())
+	snd.tooltip_text = "SOUND"
+	snd.glyph = Kit45.art("ICON-SOUND")
+	snd.glyph_rect = Rect2(8, 4, 15, 16)
+	snd.selected = false
+	var cross := Control.new()                       # SOUND OFF: a cross beside the speaker (note 16: never a broken glyph)
+	cross.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cross.position = snd.art.position
+	cross.size = snd.art.size
+	cross.draw.connect(func():
+		if Music.music_on():
+			return
+		var q := cross.size
+		var lw := maxf(1.5, 1.6 * u)
+		cross.draw_rect(Rect2(q * Vector2(0.18, 0.12), q * Vector2(0.64, 0.76)), Color(Kit45.INK_DARK, 0.0))
+		cross.draw_line(q * Vector2(0.58, 0.32), q * Vector2(0.82, 0.68), Color("b3263a"), lw)
+		cross.draw_line(q * Vector2(0.82, 0.32), q * Vector2(0.58, 0.68), Color("b3263a"), lw))
+	snd.add_child(cross)
+	snd.pressed.connect(func():
 		Music.toggle_on()                            # OFF at once, everywhere (Music.set_on stops the players itself)
 		Sfx.play_ui("tap")
-		music_glyph.queue_redraw())
-	add_child(music_glyph)
-	var lf := Progression.level_for(Progression.xp)
-	_level = int(lf["level"])
-	var cf := f if Campaign.has_content(f) else "vex"
-	var top := UiKit.label(menu, "LEVEL %d" % _level, 15, UiKit.INK, true)
-	var sub := UiKit.label(menu, "%d / %d campaign stars" % [Campaign.stars_total(cf), Campaign.stars_max(cf)], 12, UiKit.MUTED)
-	if not Campaign.ENABLED:                           # the campaign is off (Daniele 2026-11-15): no star count, LEVEL alone
-		sub.text = ""
-	var text_w := maxf(UiKit.text_w(menu, top.text, 15, true), UiKit.text_w(menu, sub.text, 12))
-	if sub.text == "":
-		text_w += 22.0                                 # (room for the "›" chevron, which sat on the 1 once the stars text left)
-	_ring_r = minf(17.0, h * 0.28)
-	var block_w := _ring_r * 2.0 + 12.0 + text_w
-	var bx := music_btn.position.x - 22.0 - block_w
-	_ring_c = Vector2(bx + _ring_r, h / 2.0)
-	var th := top.get_minimum_size().y + (sub.get_minimum_size().y if sub.text != "" else 0.0)
-	top.position = Vector2(bx + _ring_r * 2.0 + 12.0, (h - th) / 2.0)
-	sub.position = top.position + Vector2(0, top.get_minimum_size().y)
-	add_child(top)
-	add_child(sub)
-	# UI (Daniele: "Where's PROFILE?"): a translucent framed block, not flat, so the ring drawn in _draw still shows
-	# through it, with a "›" chevron; behind the labels (moved to top's index) so LEVEL n / the stars stay crisp on it.
-	var prof := UiKit.flat_button(menu, "", 12)       # the whole level block is PROFILE's tap target
-	prof.tooltip_text = "PROFILE"
-	var prof_sb := UiKit.sb(Color(UiKit.BASE, 0.35), UiKit.FRAME, 1)
-	for st in ["normal", "hover", "pressed"]:
-		prof.add_theme_stylebox_override(st, prof_sb)
-	prof.position = Vector2(bx - 6.0, 0)
-	prof.size = Vector2(block_w + 12.0, h)
-	prof.pressed.connect(func(): UiKit.acknowledge(prof, Callable(menu, "show_profile")))
-	add_child(prof)
-	move_child(prof, top.get_index())
-	var chev := UiKit.label(menu, "›", 18, UiKit.MUTED)
-	chev.position = prof.position + Vector2(prof.size.x - 22.0, (h - chev.get_minimum_size().y) / 2.0)
-	add_child(chev)
-	var bxr := bx - 18.0                              # PROGRESSION: SCRAP and CHIPS, as on the old profile card
-	var p := UiKit.pt(menu)                           # the ticker sizes in pt: exact on phones, the old card's size on desktop
-	for cur in ["premium", "soft"]:
-		var t := RewardTicker.make(Progression.balance(cur), cur, func(n: float) -> float: return n / p if p > 0.0 else n * 0.62 * 1.6 * UiKit.K)
-		t.sign = false
-		t.chip = true
-		t.named = false
-		t.tooltip_text = Rules.CURRENCY_NAMES.get(cur, "")
-		t.fit()
-		add_child(t)
-		t.play(true)
-		bxr -= t.size.x
-		t.position = Vector2(bxr, (h - t.size.y) / 2.0)
-		bxr -= 16.0
-	# iOS (Safari's 320-340 pt): the breadcrumb never runs under the balances - "OOZE / " goes first, then the whole
-	# crumb (the lit tab below already says where you are)
-	var room := bxr + 16.0 - 14.0 - x
-	var cw := func(t: String) -> float: return UiKit.text_w(menu, t, 12, true) + t.length() * 3.0   # (a label's own
-	if cw.call(c.text) > room and crumb.contains("/"):                                            # size isn't ready yet)
-		c.text = crumb.get_slice("/", crumb.get_slice_count("/") - 1).strip_edges().to_upper()
-	c.visible = false and cw.call(c.text) <= room
+		cross.queue_redraw())
+	var gear := _key("UTILITY-BUTTON", _Rt(728, 5, 31, 24), "", Callable(menu, "show_options"))
+	gear.tooltip_text = "OPTIONS"
+	gear.glyph = Kit45.art("ICON-SETTINGS")
+	gear.glyph_rect = Rect2(8, 4, 15, 16)
+	var help := _key("UTILITY-BUTTON", _Rt(765, 5, 31, 24), "?", Callable(menu, "show_help"))
+	help.tooltip_text = "HELP"
+	help.glyph = Kit45.art("ICON-HELP")
+	help.glyph_rect = Rect2(8, 4, 15, 16)
+	help.label = ""
 	queue_redraw()
 
 
-func _square(text: String, pos: Vector2, q: float, f: String) -> Button:
-	var b := UiKit.make_btn(menu, text, Vector2(q, q), Callable(), "small", f, 20)
-	b.custom_minimum_size = Vector2(q, q)               # (make_btn grows a key to 44 pt; the bar keeps 33)
-	b.size = Vector2(q, q)
-	b.position = pos
-	b.clip_text = false
+func _key(fam: String, r: Rect2, label: String, call: Callable) -> Kit45.Btn:
+	var b := Kit45.Btn.new()
+	b.m = menu
+	b.fam = fam
+	b.key = Kit45.nearest(fam, r.size.x / u, r.size.y / u)
+	b.label = label
+	b.u = u
+	var hit := maxf(r.size.y, Kit45.MIN_HIT * u)
+	b.position = Vector2(r.position.x, maxf(0.0, r.position.y - (hit - r.size.y) / 2.0))
+	b.size = Vector2(r.size.x, hit)
+	b.art = Rect2(Vector2(0, r.position.y - b.position.y), r.size)
+	if call.is_valid():
+		b.pressed.connect(func(): UiKit.acknowledge(b, call))
 	add_child(b)
-	_keys.append([b, pos, q])
-	if _keys.size() == 1:
-		_fit_keys.call_deferred()                      # after MenuSkin._settle (deferred too), which grows a key to its art / 44 pt
 	return b
 
 
-var _keys: Array = []
+func _tap(r: Rect2, call: Callable) -> Button:
+	var b := Button.new()
+	b.flat = true
+	b.focus_mode = Control.FOCUS_NONE
+	for sn in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
+		b.add_theme_stylebox_override(sn, StyleBoxEmpty.new())
+	b.position = r.position
+	b.size = r.size
+	b.pressed.connect(func(): UiKit.acknowledge(b, call))
+	add_child(b)
+	return b
 
 
-func _fit_keys() -> void:
-	## designer 10 (11-18): the top-right keys stay inside the header cabinet and the safe area (33 pt, the bar's own size).
-	for k in _keys:
-		var b: Button = k[0]
-		if is_instance_valid(b):
-			b.custom_minimum_size = Vector2(k[2], k[2])
-			b.size = Vector2(k[2], k[2])
-			b.position = k[1]
+func _text(t: String, r: Rect2, size_pt: float, col: Color, head := false, align := 0) -> Kit45.Txt:
+	var l := Kit45.Txt.new()
+	l.m = menu
+	l.text = t
+	l.size_cu = size_pt * u
+	l.col = col
+	l.head = head
+	l.align = align
+	l.position = r.position
+	l.size = r.size
+	add_child(l)
+	return l
 
 
-func _draw_gear(c: Control, q: float) -> void:
-	var o := Vector2(q, q) / 2.0
-	var r := q * 0.19
-	var col := MenuSkin.INK_DARK
-	for i in range(8):                                 # eight teeth
-		var a := TAU * i / 8.0
-		var d := Vector2(cos(a), sin(a))
-		c.draw_line(o + d * r * 0.9, o + d * r * 1.45, col, q * 0.085)
-	c.draw_arc(o, r, 0.0, TAU, 32, col, q * 0.07, true)
-	c.draw_arc(o, r * 0.42, 0.0, TAU, 20, col, q * 0.05, true)
+func _well(fam: String, r: Rect2, glyph: String, amount: int, tip: String) -> void:
+	var p := Kit45.Piece.new()
+	p.fam = fam
+	p.key = Kit45.nearest(fam, r.size.x / u, r.size.y / u)
+	p.u = u
+	p.position = r.position
+	p.size = r.size
+	p.tooltip_text = tip
+	add_child(p)
+	var g := TextureRect.new()
+	g.texture = Kit45.art(glyph)
+	g.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	g.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	g.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	g.position = r.position + Vector2(9, 5) * u
+	g.size = Vector2(14, 14) * u
+	add_child(g)
+	_text(group(amount), Rect2(r.position + Vector2(27, 0) * u, Vector2(r.size.x - 33.0 * u, r.size.y)), 12.0, UiKit.INK, false, 2)
 
 
-func _draw_note(c: Control, q: float) -> void:
-	## SOUND key (note 16, "broken icon"): a speaker with two sound waves (the 43B top-bar glyph); OFF = the waves give way
-	## to a cross, drawn in the same ink, so the key never reads as a broken note.
-	var on := Music.music_on()
-	var col := MenuSkin.INK_DARK
-	var w := q * 0.07
-	var body := PackedVector2Array([Vector2(0.22, 0.42), Vector2(0.34, 0.42), Vector2(0.5, 0.28), Vector2(0.5, 0.72),
-		Vector2(0.34, 0.58), Vector2(0.22, 0.58)])
-	for i in body.size():
-		body[i] *= q
-	c.draw_colored_polygon(body, col)
-	if on:
-		c.draw_arc(Vector2(q * 0.5, q * 0.5), q * 0.12, -0.9, 0.9, 12, col, w, true)
-		c.draw_arc(Vector2(q * 0.5, q * 0.5), q * 0.23, -0.9, 0.9, 16, col, w, true)
-	else:
-		c.draw_line(Vector2(q * 0.6, q * 0.38), Vector2(q * 0.8, q * 0.62), col, w * 1.1)
-		c.draw_line(Vector2(q * 0.8, q * 0.38), Vector2(q * 0.6, q * 0.62), col, w * 1.1)
-
-
-var glass := false                                 # HOME (35C2): the bar is a glass strip over the painting
+static func group(n: int) -> String:
+	## 6620 -> "6,620" (the remake's thousands comma).
+	var s := str(absi(n))
+	var out := ""
+	while s.length() > 3:
+		out = "," + s.substr(s.length() - 3) + out
+		s = s.substr(0, s.length() - 3)
+	return ("-" if n < 0 else "") + s + out
 
 
 func _draw() -> void:
-	var sf: Vector4 = menu.safe                       # the back reaches over the notch bands and the status bar
-	var r := Rect2(-sf.x, -sf.y, size.x + sf.x + sf.z, size.y + sf.y)
-	if slim:
-		draw_style_box(_strip_box, r)
-		return
-	draw_style_box(_strip_glass if glass else _strip_box, r)   # 40B2 dark glass bar (HOME: 60 % glass over the painting)
-	draw_circle(_ring_c, _ring_r, UiKit.BASE)
-	draw_arc(_ring_c, _ring_r, 0.0, TAU, 40, Color(_ring_col, 0.9), 1.5, true)
-	var font := UiKit.BODY
-	var fs := UiKit.px(menu, 15)
-	var s := str(_level)
-	var tw := font.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-	draw_string(font, _ring_c + Vector2(-tw / 2.0, fs * 0.36), s, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, UiKit.INK)
+	var sf: Vector4 = menu.safe                       # the cabinet reaches over the notch bands and the status bar
+	Kit45.nine(self, Kit45.tex("HEADER-CABINET-812x37pt-STATIC.png"), Rect2(-sf.x, -sf.y, size.x + sf.x + sf.z, size.y + sf.y),
+			Kit45.variant("HEADER-CABINET")["slice"], u)

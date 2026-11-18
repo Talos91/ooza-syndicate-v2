@@ -28,40 +28,43 @@ func bar_height() -> float:
 	return size.y
 
 
-func _build(f: String) -> void:
+func _build(_f: String) -> void:
+	## UI remake 45B (GAP-LIST §0): the 45B NAV-CABINET full width, four cream NAV-BUTTON keys (100 x 30 pt, the 43B line
+	## glyphs), the open tab SELECTED = the cyan seat rim on the whole key (not an underline). Centred, the remake's 38 pt bar.
 	var w: float = menu.content.size.x
-	var th := UiKit.tap_h(menu, 50.0)                 # a tab
-	var h := th + 10.0
+	var u := minf(w / Kit45.DW, float(menu.content.size.y) / Kit45.DH)
+	var h := 38.0 * u
 	size = Vector2(w, h)
 	position = Vector2(0, float(menu.content.size.y) - h)
 	mouse_filter = Control.MOUSE_FILTER_PASS
-	var acc := UiKit.accent(f)
-	var sf: Vector4 = menu.safe                        # the back reaches over the notch bands and the home indicator
-	var sh := Panel.new()                              # 40B2 dark glass strip (HOME sets shade.modulate.a for the 60 % glass)
+	var sf: Vector4 = menu.safe                        # the cabinet reaches over the notch bands and the home indicator
+	var sh := Control.new()
 	sh.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	sh.add_theme_stylebox_override("panel", MenuSkin.strip())
 	sh.position = Vector2(-sf.x, 0)
 	sh.size = Vector2(w + sf.x + sf.z, h + sf.w)
+	sh.draw.connect(func():
+		Kit45.nine(sh, Kit45.tex("NAV-CABINET-812x42pt-STATIC.png"), Rect2(Vector2.ZERO, sh.size), Kit45.variant("NAV-CABINET")["slice"], u))
 	shade = sh
 	add_child(shade)
-	var longest := 0.0                               # every tab as wide as the longest label needs (phones grow the text)
-	for t in TABS:
-		longest = maxf(longest, UiKit.text_w(menu, t[1], 15, true))
-	var tw := minf(maxf(150.0, longest + 48.0 + th * 0.66), (w - 40.0) / TABS.size())   # + the 43B glyph and its gap
-	var x0 := (w - tw * TABS.size()) / 2.0
+	var span := 100.0 * TABS.size() + 6.0 * (TABS.size() - 1)
+	var x0 := (w - span * u) / 2.0
 	for i in range(TABS.size()):
 		var id: String = TABS[i][0]
+		var b := Kit45.Btn.new()
+		b.m = menu
+		b.fam = "NAV-BUTTON"
+		b.key = "100x30pt"
+		b.label = TABS[i][1]
+		b.u = u
+		b.selected = id == active
+		b.glyph = Kit45.art("NAV-%s-INK" % id.to_upper())
+		b.glyph_rect = Rect2(11, 7, 15, 16)
+		b.size_pt = 12.5
+		var hit := maxf(30.0 * u, Kit45.MIN_HIT * u)
+		b.position = Vector2(x0 + i * 106.0 * u, 4.0 * u - (hit - 30.0 * u) / 2.0)
+		b.size = Vector2(100.0 * u, hit)
+		b.art = Rect2(Vector2(0, (hit - 30.0 * u) / 2.0), Vector2(100.0, 30.0) * u)
 		# UI (0.22.1): through the Menu (it outlives a rebuild during the tap's flash frame), not this bar's signal
-		# 43B nav (proof HOME / ARMIES): every tab a cream key with its glyph; the open one lit (SELECTED paint + seat lamp)
-		var b := UiKit.make_btn(menu, TABS[i][1], Vector2(tw - 12.0, th), Callable(menu, "_on_tab").bind(id),
-				"secondary", f, 15)
-		MenuSkin.style_ivory(b, "tab" if id == active else "secondary")
-		b.icon = MenuSkin.icon("NAV-" + id.to_upper())
-		b.expand_icon = true
-		b.add_theme_constant_override("icon_max_width", int(th * 0.5))
-		b.add_theme_constant_override("h_separation", int(th * 0.16))
-		for k in ["icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_hover_pressed_color", "icon_focus_color"]:
-			b.add_theme_color_override(k, MenuSkin.INK_DARK)
-		b.position = Vector2(x0 + i * tw + 6.0, (h - b.size.y) / 2.0)
+		b.pressed.connect(Callable(menu, "_on_tab").bind(id))
 		add_child(b)
 		buttons[id] = b

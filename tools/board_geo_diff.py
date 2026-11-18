@@ -3,6 +3,8 @@
     python tools/board_geo_diff.py "<...>/gmn-2/geometry-master-round-07" "<...>/gmn-2/boards"
     python tools/board_geo_diff.py --spec "<...>/DIRECTOR-RESTART/09-GEOMETRY-SPEC/geometry-spec.json" "<cut folder>" [bolt-stamps.json]
 
+    python tools/board_geo_diff.py --parts "<45A2 geometry pack>" "<45B paint pack>"     (one PNG per part state + parts.json)
+
 --spec: the INSIDE of the plates (alpha alone can't see it): every dark inset rect measured on the cut piece (tools/board_cut.py
 output) must match the spec within TOL px, and every bolt in the pack's QA bolt-stamps.json must have the spec's centre and diameter.
 
@@ -134,7 +136,49 @@ def main(master: Path, new: Path) -> int:
     return 1 if fails else 0
 
 
+def strip2x(o):
+    """parts.json geometry without the paint pass's added 2x import fields"""
+    if isinstance(o, dict):
+        return {k: strip2x(v) for k, v in o.items() if not k.startswith("import_2x")}
+    if isinstance(o, list):
+        return [strip2x(v) for v in o]
+    return o
+
+
+def parts_check(master: Path, new: Path) -> int:
+    """45-series packs (one PNG per part state in parts/ + parts.json): every master file must exist in the new pack with the same
+    canvas and the same alpha shape (alpha > 128, XOR <= MAX_PCT of the shape); WHITE masks must match; parts.json geometry
+    (variants, canvas, slots, slices) must be unchanged apart from the added import_2x fields."""
+    fails = 0
+    mj = json.loads((master / "parts.json").read_text(encoding="utf-8"))["parts"]
+    nj = json.loads((new / "parts.json").read_text(encoding="utf-8"))["parts"]
+    for name, part in mj.items():
+        q = nj.get(name)
+        if q is None:
+            print(f"FAIL {name}: missing in parts.json"); fails += 1; continue
+        a, b = strip2x(part.get("variants")), strip2x(q.get("variants"))
+        if a != b:
+            print(f"FAIL {name}: geometry metadata changed"); fails += 1
+    files = sorted((master / "parts").glob("*.png"))
+    for f in files:
+        g = new / "parts" / f.name
+        if not g.exists():
+            print(f"FAIL {f.name}: missing"); fails += 1; continue
+        ia, ib = Image.open(f), Image.open(g)
+        if ia.size != ib.size:
+            print(f"FAIL {f.name}: canvas {ia.size} -> {ib.size}"); fails += 1; continue
+        ma = np.array(ia.convert("RGBA").getchannel("A")) > 128
+        mb = np.array(ib.convert("RGBA").getchannel("A")) > 128
+        pct = 100.0 * (ma ^ mb).sum() / max(ma.sum(), 1)
+        if pct > MAX_PCT:
+            print(f"FAIL {f.name}: shape differs {pct:.2f} %"); fails += 1
+    print(f"{len(mj)} parts / {len(files)} files checked against the master; {fails} geometry failures")
+    return 1 if fails else 0
+
+
 if __name__ == "__main__":
+    if sys.argv[1] == "--parts":
+        sys.exit(parts_check(Path(sys.argv[2]), Path(sys.argv[3])))
     if sys.argv[1] == "--spec":
         sys.exit(spec_check(Path(sys.argv[2]), Path(sys.argv[3]), Path(sys.argv[4]) if len(sys.argv) > 4 else None))
     sys.exit(main(Path(sys.argv[1]), Path(sys.argv[2])))

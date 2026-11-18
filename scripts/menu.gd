@@ -218,6 +218,7 @@ func clear_page(art: String) -> void:
 	_built_pt = 0.0                                   # no rebuild check while this page is being built
 	_shell = art == "shell"                           # UI: before _fit(), which sizes a shell page full width
 	top_bar = null
+	_stage = null
 	nav_bar = null
 	content = Control.new()
 	add_child(content)
@@ -513,10 +514,10 @@ func shell_open(crumb: String, tab: String, back := Callable(), f := "") -> Rect
 	if _backdrop:
 		_den.hide_den()
 		_backdrop_ax = 0.5
-		var bg := UiKit.background(shell_f)
+		var bg := UiKit.tex(Armies43.DIR + "ARMIES-PLATE.jpg")   # GAP-LIST §0: one room plate behind every menu (the remake)
 		if bg != null:
 			_backdrop.texture = bg
-		_backdrop.modulate = Color(0.55, 0.58, 0.62)
+		_backdrop.modulate = Color(0.9, 0.9, 0.9)
 		_backdrop_ay = 0.5
 		_place_backdrop()
 	top_bar = TopBar.make(self, crumb, shell_f, shell_slim)
@@ -766,11 +767,6 @@ func show_main() -> void:
 		_backdrop_ax = _den.backdrop_anchor_x()
 		_backdrop_ay = 0.0                             # (crop from the floor and tail, never the ceiling: the TV stays under the top bar)
 		_place_backdrop()
-	if top_bar != null:
-		top_bar.glass = true
-		top_bar.queue_redraw()
-	if nav_bar != null and nav_bar.shade != null:
-		nav_bar.shade.modulate.a = 0.55
 	_home_column(area, hero)
 	shell_raise()
 	if _install_available():
@@ -797,100 +793,85 @@ func _next_words(prev: int) -> int:
 	return n
 
 
-func _home_column(area: Rect2, hero: String) -> void:
-	## HOME on the 35C2 painting, in the staging layout (Daniele 2026-11-15: "i like with old style the main menu"):
-	## tagline + title plate top left (FULLSCREEN / QUIT and the version under them), three cards along the bottom
-	## (PLAY VS AI, ONLINE, CAMPAIGN), CHALLENGES and TRAINING stacked at the bottom right, clear of the TV. CAMPAIGN and
-	## TRAINING are disabled, COMING SOON (flip Campaign.ENABLED / TutorialDirector.ENABLED to bring them back).
-	var acc := UiKit.accent(hero)
-	var qr := (_den.quiet_right() - content.position.x) / content.scale.x
-	_fade_left(area, clampf(qr + 40.0, 260.0, content.size.x * 0.5))
-	var x := shell_x()
-	var w := content.size.x - x * 2.0
-	var gap := 12.0
-	var pad := 14.0
-	var bh := UiKit.tap_h(self, 46.0)
-	var th := pad + UiKit.line_h(self, 12, true) + 4.0 + UiKit.line_h(self, 16, true) + UiKit.line_h(self, 13) + 10.0 + bh + pad
-	var ty := area.end.y - th - 10.0
-	var fr := [0.35, 0.35, 0.30]                      # PLAY and ONLINE equal, CAMPAIGN third (wide enough for COMING SOON)
-	var avail := minf(w * 0.64, 900.0) - gap * (fr.size() - 1)
-	var tiles := []
-	var tx := x
-	for k in fr:
-		tiles.append(Rect2(tx, ty, floorf(avail * k), th))
-		tx += floorf(avail * k) + gap
-	_home_play(tiles[0], pad, bh)
-	_home_online(tiles[1], pad, bh)
-	_home_campaign(tiles[2], pad, bh)
-	var cards_right: float = (tiles[2] as Rect2).end.x
-	# bottom right, right of the CAMPAIGN card (never over the TV): CHALLENGES above TRAINING, bottom-aligned with the cards
-	var ready_n := Progression.claimable()
-	var ct := "CHALLENGES" + ("  ·  %d TO CLAIM" % ready_n if ready_n > 0 else "")
-	var lt := "TRAINING · COMING SOON"
-	var rw := maxf(UiKit.text_w(self, ct, 15, true), UiKit.text_w(self, lt, 15, true)) + 44.0
-	rw = minf(rw, content.size.x - x - cards_right - gap)
-	var rx := content.size.x - x - rw
-	var by2 := ty + th - bh                            # TRAINING's top
-	var ry := by2 - 8.0 - bh                           # CHALLENGES' top
-	var tvb := (_den.tv_bottom() - content.position.y) / content.scale.y
-	var lbl := lt if not TutorialDirector.ENABLED else "TRAINING  →"
-	var lbl_s := lbl if TutorialDirector.ENABLED else "TRAINING
-COMING SOON"   # (a name is never dropped: two lines when one will not fit)
-	if ry < tvb + 6.0:                                 # a short phone: the stack would reach the TV, so the pair sits side by side
-		var sw := (content.size.x - x - cards_right - gap - 8.0) / 2.0
-		var sh := bh
-		var sy := maxf(ty + th - sh, tvb + 8.0)     # (>= 8 units under the TV bezel; the pair may end a little under the cards)
-		rx = cards_right + gap
-		_col_back(Rect2(rx, sy, sw * 2.0 + 8.0, sh))
-		UiKit.btn(self, ct, Vector2(rx, sy), Vector2(sw, sh), show_challenges, "primary" if ready_n > 0 else "secondary", hero, UiKit.fit_size(self, ct, sw, 13.0))
-		var lb2 := UiKit.btn(self, UiKit.fit_text(self, lbl, lbl_s, sw, 13.0), Vector2(rx + sw + 8.0, sy), Vector2(sw, sh), show_tutorial, "selected", hero, UiKit.fit_size(self, lbl, sw, 13.0))
-		lb2.disabled = not TutorialDirector.ENABLED
-	else:
-		_col_back(Rect2(rx, ry, rw, bh * 2.0 + 8.0))
-		UiKit.btn(self, ct, Vector2(rx, ry), Vector2(rw, bh), show_challenges, "primary" if ready_n > 0 else "secondary", hero, 15)
-		var lb := UiKit.btn(self, UiKit.fit_text(self, lbl, lbl_s, rw, 15.0), Vector2(rx, by2), Vector2(rw, bh), show_tutorial, "selected", hero, UiKit.fit_size(self, lbl, rw, 15.0))
-		lb.disabled = not TutorialDirector.ENABLED
-	# the headline top left, FULLSCREEN (QUIT on desktop) and the version under it
-	var fh := UiKit.tap_h(self, 36.0)
-	var free := ty - area.position.y - 12.0 - fh - 10.0
-	var hx := x + 8.0
-	var hy := area.position.y + 12.0
-	var hw := maxf(qr - hx, 200.0)
+func _home_column(_area: Rect2, hero: String) -> void:
+	## HOME = the remake (Daniele 11-18, 43B-five-screen-remake/HOME; 45B parts, sizes.json HOME): over the Overlord lounge,
+	## the cyan tagline + two-line headline without a box, FULLSCREEN (QUIT on desktop) + the version under it, three
+	## HERO-CABINET cards at the bottom left (PLAY VS AI: CHANGE / PLAY ->, ONLINE: HOST / JOIN, CAMPAIGN: COMING SOON) and
+	## CHALLENGES over TRAINING · COMING SOON in a column at the bottom right, so the Overlord and the TV stay in view.
+	var st := Kit45.Stage.new()
+	st.setup(self, content.size)
+	content.add_child(st)
+	_stage = st
 	var words: Array = HOME_WORDS[maxi(_home_words, 0)]
-	var title2: String = "%s\n%s" % [words[1], words[2]]
-	var long_line: String = words[1] if str(words[1]).length() >= str(words[2]).length() else words[2]
-	var sizes := [[44.0, title2], [32.0, title2], [26.0, "%s %s" % [words[1], words[2]]]]
-	for st in sizes:
-		var lines: int = str(st[1]).count("\n") + 1
-		var need: float = UiKit.line_h(self, 13, true) + 6.0 + UiKit.line_h(self, st[0], true) * lines
-		if (need <= free and UiKit.text_w(self, long_line, st[0], true) <= hw) or st == sizes[-1]:
-			var bw: float = maxf(UiKit.text_w(self, str(words[0]), 13, true) + str(words[0]).length() * 3.0, UiKit.text_w(self, long_line, st[0], true))
-			if need <= free:
-				UiKit.band(self, Rect2(hx - 16.0, hy - 8.0, minf(bw + 40.0, qr - hx + 40.0), need + 18.0))   # 40B2 title plate: dark glass under tagline + title
-			_shell_add(UiKit.label(self, str(words[0]), 13, UiKit.COPPER, true, 3), Vector2(hx, hy))
-			hy += UiKit.line_h(self, 13, true) + 6.0
-			if need <= free:
-				_shell_add(UiKit.label(self, st[1], st[0], UiKit.INK, true), Vector2(hx - 3.0, hy))
-				hy += UiKit.line_h(self, st[0], true) * lines + 6.0
-			break
-	var fb := UiKit.flat_button(self, "FULLSCREEN" if OS.has_feature("web") else "QUIT", 13, UiKit.MUTED)
-	MenuSkin.style_ivory(fb, "quit")                   # 43B: QUIT is a control (the dark QUIT key), not loose text
-	fb.size = Vector2(UiKit.text_w(self, fb.text, 13, true) + 48.0, fh)
-	fb.pressed.connect(func():
+	st.txt(str(words[0]), 18, 48, 330, 14, 9.0, Kit45.CYAN_KICK, false)
+	st.txt("%s
+%s" % [words[1], words[2]], 15, 64, 380, 64, 27.0, UiKit.INK, true, 0, 2)
+	var web := OS.has_feature("web")
+	var fb := st.key("KEY-SMALL", 17, 134, 96, 24, "FULLSCREEN" if web else "QUIT", func():
 		if OS.has_feature("web"):
 			FullscreenGate.request()
 		else:
 			get_tree().quit())
-	var ver := UiKit.label(self, Rules.version_label(), 12, UiKit.DIM)
-	if hy + fh <= ty - 6.0:
-		_shell_add(fb, Vector2(hx - 10.0, hy))
-		_shell_add(ver, Vector2(hx - 10.0 + fb.size.x, hy + (fh - ver.get_minimum_size().y) / 2.0))
-		hy += fh
+	fb.size_pt = 12.5
+	st.txt(Rules.version_label(), 122, 136, 160, 20, 10.0, UiKit.MUTED, false)
+	var ip := st.P(17, 166)
+	_home_install_x = ip.x
+	_home_install_y = ip.y                             # (INSTALL THE GAME: under FULLSCREEN at the left, never on the TV)
+	# PLAY VS AI
+	var sm := _setup_summary()
+	_home_card(st, 15, 174, "PLAY VS AI", str(sm[0]), str(sm[1]))
+	st.key("KEY-SMALL", 25, 300, 60, 22, "CHANGE", show_setup)
+	st.key("PRIMARY-WIDE", 91, 300, 88, 22, "PLAY  →", deploy, true)
+	# ONLINE
+	_home_card(st, 197.5, 154, "ONLINE", "PLAY FRIENDS", "A room, a four-letter code.")
+	if not Net.rejoin.is_empty():                      # dropped out of a room: back into the same seat
+		var rb := st.key("KEY-SMALL", 208, 300, 134, 22, "RECONNECT %s" % str(Net.rejoin["code"]), func():
+			ArmyPresets.send_to(Net, str(Net.rejoin.get("faction", faction)))
+			Net.reconnect()
+			show_lobby(), true, not web)
+		rb.size_pt = 12.5
 	else:
-		fb.free()
-		ver.free()
-	_home_install_x = x
-	_home_install_y = hy + 8.0                         # (INSTALL THE GAME: under the header at the left, never on the TV)
+		var hb := st.key("KEY-SMALL", 208, 300, 60, 22, "HOST", func():
+			ArmyPresets.send_to(Net, faction)
+			Net.host_room(faction)
+			show_lobby(), false, not web)
+		var jb := st.key("KEY-SMALL", 278, 300, 64, 22, "JOIN", func():
+			_join_open = true
+			Net.status = ""
+			_code_error = ""
+			show_main(), false, not web)
+		if not web:
+			hb.tooltip_text = "Online rooms run in the browser build"
+			jb.tooltip_text = hb.tooltip_text
+	# CAMPAIGN
+	var cf := _hub_faction()
+	if Campaign.ENABLED and cf != "":
+		var nxt := Campaign.next_open(cf)
+		_home_card(st, 360, 154, "CAMPAIGN", str(UiKit.NAMES[cf]), "★ %d / %d" % [Campaign.stars_total(cf), Campaign.stars_max(cf)])
+		st.key("KEY-SMALL", 370, 300, 134, 22, "CONTINUE" if nxt != "" else "REPLAY", func():
+			_hub_f = cf
+			show_campaign())
+	else:                                              # off for now (Daniele 2026-11-15): the card stays, COMING SOON
+		_home_card(st, 360, 154, "CAMPAIGN", "THE CITY", "")
+		st.key("KEY-SMALL", 370, 300, 134, 22, "COMING SOON", Callable(), false, true)
+	# CHALLENGES over TRAINING (the right column)
+	var ready_n := Progression.claimable()
+	var ct := "CHALLENGES" + (" · %d TO CLAIM" % ready_n if ready_n > 0 else "")
+	st.key("KEY-SMALL", 650, 266, 147, 27, ct, show_challenges, ready_n > 0)
+	var tl := "TRAINING  →" if TutorialDirector.ENABLED else "TRAINING · COMING SOON"
+	st.key("KEY-SMALL", 650, 300, 147, 27, tl, show_tutorial, false, not TutorialDirector.ENABLED)
+
+
+var _stage: Kit45.Stage                            # the open page's remake canvas (Kit45), null on older pages
+
+
+func _home_card(st: Kit45.Stage, x: float, w: float, kicker: String, title: String, sub: String) -> void:
+	## One HOME card: the 78 pt HERO-CABINET, its kicker (cyan small caps), title (cream) and caption (muted).
+	st.piece("HERO-CABINET", x, 251, w, 78)
+	st.txt(kicker, x + 10, 254, w - 20, 14, 8.0, Kit45.CYAN_KICK)
+	st.txt(title, x + 10, 268, w - 20, 16, 12.0, UiKit.INK)
+	if sub != "":
+		st.txt(sub, x + 10, 283, w - 20, 14, 8.0, UiKit.MUTED)
 
 
 func _col_back(r: Rect2) -> void:
@@ -1551,7 +1532,7 @@ func _profile_card(pos: Vector2) -> void:
 	_balance(Progression.balance("soft"), "soft", pos + P(14, 80), 0.62 * K * 1.6, false)      # the marks name them
 	_balance(Progression.balance("premium"), "premium", pos + P(196, 80), 0.62 * K * 1.6, false)
 	var ready_n := Progression.claimable()
-	var cb := nav_button("CHALLENGES" + ("  ·  %d TO CLAIM" % ready_n if ready_n > 0 else ""), pos + P(0, 146), P(360, 64),
+	var cb := nav_button("CHALLENGES" + (" · %d TO CLAIM" % ready_n if ready_n > 0 else ""), pos + P(0, 146), P(360, 64),
 			show_challenges, ready_n > 0)
 	cb.add_theme_font_size_override("font_size", int(round(fsz(21) * K)))
 
