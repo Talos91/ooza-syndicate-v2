@@ -225,6 +225,13 @@ func _draw() -> void:
 			if file.begins_with("SKILL-NAME-FACE") and _tall(_el_ctrl.get(e["id"], "")):
 				_draw_tall_face(r, st if st != "" else "NORMAL")   # 45B SKILL-NAME-FACE-TALL: a two-line name (EMERGENCY EVAC)
 				continue
+			if file == "SEAT-LAMP.png":                # 45B2: the SELECTED faces carry their own seat lamp (mask)
+				continue
+			if SEL45.has(file):                        # 45B2 (designer 11 FIX 1): SELECTED faces from the overlay
+				var fam: String = SEL45[file]
+				var u := r.size.x / (float(e["w"]) / 4.0)
+				Kit45.draw_part(self, fam, Kit45.nearest(fam, float(e["w"]) / 4.0, float(e["h"]) / 4.0), "SELECTED", r, u)
+				continue
 			var tx := _t(file)
 			if tx != null:
 				draw_texture_rect(tx, r, false, col)
@@ -234,21 +241,58 @@ func _draw() -> void:
 		_draw_extras(font_floor)
 
 
+const SEL45 := {"FACTION-TAB-SELECTED.png": "FACTION-TAB", "SECTION-TAB-SELECTED.png": "SECTION-TAB",
+		"SKILL-CARD-SELECTED.png": "SKILL-CARD", "SKILL-NAME-FACE-SELECTED.png": "SKILL-NAME-FACE"}
 const UP := Color("29d3e0")                         # a stat above 100 % (the remake's cyan)
 const DOWN := Color("e2546a")                       # below 100 %
 
 
 func _tall(cid: String) -> bool:
-	## A skill name that cannot sit on one line at the floor in the card's name face (EMERGENCY EVAC).
+	## A skill name that cannot sit on one line at the 12.5 pt floor in its name face (SPORE BURST, FOG OF WAR, EMERGENCY EVAC).
 	if not _skill_of.has(cid):
 		return false
+	var nm := _skill_label(cid)
+	var fe := _face_of(cid)
+	if fe.is_empty() or not nm.contains(" "):
+		return false
+	var fl := maxf(float(UiKit.px(m, 0.0)) if m != null else 0.0, 1.0)
+	return UiKit.BODY.get_string_size(nm, HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(fl * 0.8))).x > _r(0, 0, float(fe["w"]) - 24.0, 0).size.x
+
+
+func _skill_label(cid: String) -> String:
 	var nm := ArmyPresets.skill_name(_skill_of[cid]).to_upper()
-	var f: Font = UiKit.BODY
-	for x in _els:                                   # the name's own font (the pack's text role)
+	return SHORT.get(nm, nm)
+
+
+func _face_of(cid: String) -> Dictionary:
+	for x in _els:
+		if x["type"] == "image" and _el_ctrl.get(x["id"], "") == cid and str(x["file"]).begins_with("SKILL-NAME-FACE"):
+			return x
+	return {}
+
+
+func _skill_name(e: Dictionary, cid: String, st: String, bd: Dictionary) -> void:
+	## designer 11 FIX 2 / 4: the whole name in its face (the tall face when it needs two lines), never under the floor;
+	## drawn once (the delivered FOG OF / WAR pair: by the first element).
+	for x in _els:
 		if x["type"] == "text" and _el_ctrl.get(x["id"], "") == cid:
-			f = _font_of(x)
-	var fl := float(UiKit.px(m, 0.0)) if m != null else 0.0
-	return nm.contains(" ") and f.get_string_size(nm, HORIZONTAL_ALIGNMENT_LEFT, -1, maxi(1, int(round(fl * 0.8)))).x > 264.0 * s
+			if x["id"] != e["id"]:
+				return
+			break
+	var fe := _face_of(cid)
+	if fe.is_empty():
+		return
+	var r := _r(fe["x"], fe["y"], fe["w"], fe["h"])
+	if _tall(cid):
+		var sz := Vector2(r.size.x, r.size.x * 36.0 / 86.0)
+		r = Rect2(Vector2(r.get_center().x - sz.x / 2.0, r.end.y - sz.y), sz)
+	var col := Color(e["color"])
+	if bd.has("text_colors") and st != "":
+		col = Color(bd["text_colors"][st])
+	if st == "SELECTED":
+		col = Kit45.INK_CREAM                          # 45B2: cream on the copper SELECTED face
+	Kit45.draw_text(self, m, _skill_label(cid), r.grow_individual(-_r(0, 0, 10, 0).size.x, 0, -_r(0, 0, 10, 0).size.x, 0),
+			float(e["font"]["size_px"]) * s, col, false, 1, 2, 0.8)   # (this page's names: down to 80 % of the floor, as before)
 
 
 func _draw_tall_face(face: Rect2, st: String) -> void:
@@ -267,8 +311,11 @@ func _draw_extras(font_floor: float) -> void:
 	var fs := maxi(1, int(round(maxf(36.0 * s, font_floor))))
 	var asc := (f.get_ascent(fs) - f.get_descent(fs)) / 2.0
 	var tag := str(Rules.FACTION_TAGLINES.get(army, "")).to_upper()
+	var tfit := Kit45.fit(m, tag, false, 30.0 * s, 640.0 * s)
+	if tag != "" and f.get_string_size(tag, HORIZONTAL_ALIGNMENT_LEFT, -1, tfit).x > 640.0 * s:
+		tag = ""                                       # designer 11 FIX 2: a small screen has no room for it at the floor
 	if tag != "":
-		var tfs := Kit45.fit(m, tag, false, 30.0 * s, 560.0 * s)
+		var tfs := tfit
 		var tw := f.get_string_size(tag, HORIZONTAL_ALIGNMENT_LEFT, -1, tfs).x
 		var p := _r(404.0, 970.0, 0, 0).position
 		draw_string(f, Vector2(p.x - tw / 2.0, p.y + (f.get_ascent(tfs) - f.get_descent(tfs)) / 2.0), tag, HORIZONTAL_ALIGNMENT_LEFT, -1, tfs, Color("d9c0b3"))
@@ -287,6 +334,7 @@ func _draw_extras(font_floor: float) -> void:
 			var vc := UP if v > 100 else (DOWN if v < 100 else Color("faead1"))
 			var vw := f.get_string_size(vt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 			var q := _r(cols[j][1] if k != "GARRISON" else 560.0, ys[i], 0, 0).position
+			q.x = maxf(q.x, p.x + f.get_string_size(k, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 16.0 * s + vw)   # FIX 2: never on its label
 			draw_string(f, Vector2(q.x - vw, q.y + asc), vt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, vc)
 	for sub in [["Combat skills on every map", 608.0], ["Relay skills require a map with relays", 972.0]]:
 		var sfs := Kit45.fit(m, sub[0], false, 34.0 * s, 1080.0 * s)
@@ -388,6 +436,10 @@ func _room(e: Dictionary) -> float:
 
 
 func _draw_text(e: Dictionary, st: String, bd: Dictionary, font_floor: float) -> void:
+	var scid: String = _el_ctrl.get(e["id"], "")
+	if _skill_of.has(scid):
+		_skill_name(e, scid, st, bd)
+		return
 	var lines := _text_for(e)
 	var t: String = lines[0]
 	if t == "":
@@ -412,6 +464,8 @@ func _draw_text(e: Dictionary, st: String, bd: Dictionary, font_floor: float) ->
 	var col := Color(e["color"])
 	if bd.has("text_colors") and st != "":
 		col = Color(bd["text_colors"][st])
+		if st == "SELECTED" and _el_ctrl.get(e["id"], "") in ["SKILLS", "CUSTOMIZE"]:
+			col = Kit45.INK_CREAM                      # 45B2: cream on the copper SELECTED tab
 	elif e.has("state_colors") and st != "":
 		col = Color(e["state_colors"].get(st, e["color"]))
 	var ap: Array = e.get("anchor_position", [e["x"], e["y"] + e["h"] / 2.0])

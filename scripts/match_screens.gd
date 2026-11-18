@@ -132,7 +132,7 @@ func _split() -> float:
 
 
 func result_width() -> float:
-	return vp().x - (_split() + margin() * 0.4) - margin()
+	return vp().x - (_split() + margin() * 0.4) - margin() - 20.0
 
 
 func reward_scale(base: float) -> float:
@@ -157,7 +157,7 @@ func result(d: Dictionary) -> Dictionary:
 	_hero_block(mg, split - mg * 0.5, mg, v.y - mg, "win" if won0 else ("" if bool(d.get("draw", false)) else "loss"))
 	var page := _group()
 	var x := split + mg * 0.4
-	var w := v.x - x - mg
+	var w := v.x - x - mg - 20.0                      # FIX 11: the plate (col + 20) keeps the safe margin
 	var y := 0.0
 	var title_h := 0.0
 	var acc := MenuSkin.seat()                         # 0.24.5: kickers / accents follow the SEAT (cyan for seat A), never the faction
@@ -249,7 +249,7 @@ func result(d: Dictionary) -> Dictionary:
 	if not (d.get("quiet", []) as Array).is_empty():
 		y += UiKit.tap_h(self, 44.0)
 	_result_plates(page, Rect2(x, 0.0, w, y), title_h, won0, bool(d.get("draw", false)))
-	page.position.y = clampf((v.y - y) / 2.0, 8.0, maxf(8.0, v.y - y - 8.0))
+	page.position.y = clampf((v.y - y) / 2.0, 24.0, maxf(24.0, v.y - y - 24.0))   # FIX 11: off the bottom edge
 	out["page"] = page
 	content = layer
 	return out
@@ -296,10 +296,7 @@ class ResultFx extends Control:
 		var w := size.x
 		var h := size.y
 		if mood == "win":
-			var warm := Color(1.0, 0.86, 0.5, 0.0)
-			var lit := Color(1.0, 0.86, 0.5, 0.42)
-			draw_polygon(PackedVector2Array([Vector2(w * 0.38, 3.0), Vector2(w * 0.66, 3.0), Vector2(w * 0.54, h - 3.0), Vector2(w * 0.26, h - 3.0)]),
-					PackedColorArray([warm, warm, lit, lit]))
+			# (designer 11 FIX 11: no diagonal streak across the title; the warm sheen stays)
 			draw_rect(Rect2(3.0, 3.0, w - 6.0, h * 0.18), Color(1.0, 0.9, 0.62, 0.07))
 		elif mood == "loss":
 			var c := Color(0.82, 0.9, 1.0, 0.3)

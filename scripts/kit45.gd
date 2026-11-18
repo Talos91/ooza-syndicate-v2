@@ -358,7 +358,13 @@ class Btn extends Button:
 			var sr := func(a: Array) -> Rect2: return Rect2(art.position + Vector2(float(a[0]), float(a[1])) * u, Vector2(float(a[2]), float(a[3])) * u)
 			var ac: Array = slots.get("accessory", [])
 			var right := 0.0
-			if not ac.is_empty() and (acc_tex != null or acc_col.a > 0.0):
+			var room_v: Rect2 = sr.call(vs)                # FIX 2: the value first - the thumbnail only where the value still fits
+			var need := UiKit.HEAD.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(maxf(13.0 * u, Kit45.floor_px(m))))).x
+			var acc_room := room_v.size.x
+			if not ac.is_empty():
+				var ar0: Rect2 = sr.call(ac)
+				acc_room = ar0.position.x - room_v.position.x - 3.0 * u
+			if not ac.is_empty() and (acc_tex != null or acc_col.a > 0.0) and need <= acc_room:
 				var ar: Rect2 = sr.call(ac)
 				if acc_tex != null:
 					var ts := Vector2(acc_tex.get_size())
@@ -390,6 +396,10 @@ class Btn extends Button:
 			return
 		var col := ink if ink.a > 0.0 else Kit45.ink_on(fam, key, st, sl)
 		var want := (size_pt if size_pt > 0.0 else minf(art.size.y / u * 0.48, 13.0)) * u
+		var hf: Font = UiKit.BODY
+		if hf.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(maxf(Kit45.floor_px(m), 1.0)))).x > lr.size.x:
+			var x0 := lr.position.x if glyph != null and glyph_rect.size.x > 0.0 else art.position.x + 4.0 * u
+			lr = Rect2(x0, lr.position.y, art.end.x - 4.0 * u - x0, lr.size.y)   # FIX 2: the whole face before a cut
 		Kit45.draw_text(self, m, label, lr, want, col, false, 1, 2)
 
 
@@ -409,13 +419,13 @@ class Txt extends Control:
 		Kit45.draw_text(self, m, text, Rect2(Vector2.ZERO, size), size_cu, col, head, align, max_lines)
 
 
-static func draw_text(ci: CanvasItem, m, t: String, r: Rect2, size_cu: float, col: Color, head := false, align := 0, max_lines := 1) -> void:
+static func draw_text(ci: CanvasItem, m, t: String, r: Rect2, size_cu: float, col: Color, head := false, align := 0, max_lines := 1, lo_frac := 1.0) -> void:
 	## Text in r, vertically centred: one line shrunk to fit (never under the floor), else word-wrapped onto max_lines,
 	## else clipped with an ellipsis. Explicit "\n" splits lines.
 	if t == "":
 		return
 	var f: Font = UiKit.HEAD if head else UiKit.BODY
-	var lo := maxf(floor_px(m), 1.0)
+	var lo := maxf(floor_px(m) * lo_frac, 1.0)
 	var fs := maxf(size_cu, lo)
 	var lines: Array = t.split("\n")
 	var w := func(s: String, z: float) -> float: return f.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(z))).x
@@ -426,7 +436,10 @@ static func draw_text(ci: CanvasItem, m, t: String, r: Rect2, size_cu: float, co
 		return mx
 	while fs > lo and widest.call(lines, fs) > r.size.x:
 		fs -= 0.5
-	if widest.call(lines, fs) > r.size.x and max_lines > lines.size():
+	var cap := max_lines
+	if widest.call(lines, fs) > r.size.x and max_lines == 1 and lines.size() == 1 and t.contains(" ") 			and f.get_height(maxi(1, int(round(fs)))) * 0.98 * 2.0 <= r.size.y + 2.0:
+		cap = 2                                        # designer 11 FIX 2: at the floor, two lines where the box holds them
+	if widest.call(lines, fs) > r.size.x and cap > lines.size():
 		var words := t.replace("\n", " ").split(" ")
 		lines = []
 		var cur := ""
@@ -438,7 +451,7 @@ static func draw_text(ci: CanvasItem, m, t: String, r: Rect2, size_cu: float, co
 			else:
 				cur = tryl
 		lines.append(cur)
-		while lines.size() > max_lines:
+		while lines.size() > cap:
 			var last: String = lines.pop_back()
 			lines[-1] = str(lines[-1]) + " " + last
 	var ifs := maxi(1, int(round(fs)))

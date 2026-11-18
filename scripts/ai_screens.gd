@@ -119,6 +119,8 @@ func on_out(seat: String) -> void:
 func _process(dt: float) -> void:
 	if hud == null or hud.sim == null:
 		return
+	var covered: bool = hud.pause_panel != null and hud.pause_panel.visible   # designer 11 FIX 9: PAUSE hides the AI screens it would cut
+	visible = not covered
 	_t += dt
 	for i in range(2):
 		if hold[i] > 0.0:

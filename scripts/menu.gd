@@ -855,7 +855,7 @@ func _home_column(_area: Rect2, hero: String) -> void:
 	var ready_n := Progression.claimable()
 	var ct := "CHALLENGES" + (" · %d TO CLAIM" % ready_n if ready_n > 0 else "")
 	st.key("KEY-SMALL", 650, 266, 147, 27, ct, show_challenges, ready_n > 0)
-	var tl := "TRAINING  →" if TutorialDirector.ENABLED else "TRAINING · COMING SOON"
+	var tl := "TRAINING  →" if TutorialDirector.ENABLED else "TRAINING · SOON"
 	st.key("KEY-SMALL", 650, 300, 147, 27, tl, show_tutorial, false, not TutorialDirector.ENABLED)
 
 
@@ -1518,9 +1518,10 @@ func show_profile() -> void:
 		row.fill = 1.0 if owned else float(fs["vat_wins"]) / float(need)
 		row.tints = {"fill": UiKit.accent(f)}
 		st.pic(UiKit.tex(UiKit.ai_screen_path(f)), 369, y + 4, 30, 21)
-		st.txt(str(UiKit.NAMES[f]), 407, y, 155, 15, 12.5, UiKit.accent(f), true)
-		st.txt("PLAYED %d · WON %d" % [int(fs["plays"]), int(fs["wins"])], 407, y + 14, 167, 15, 12.5, UiKit.INK)
-		st.txt("VAT UNLOCKED" if owned else "VAT %d / %d WINS" % [int(fs["vat_wins"]), need], 604, y + 14, 174, 14, 12.5,
+		# designer 11 FIX 6: one line, centred in the row (name · played / won · vat), >= 3 pt clear of the rims
+		st.txt(str(UiKit.NAMES[f]), 407, y + 4, 66, 21, 12.5, UiKit.accent(f), true)
+		st.txt("PLAYED %d · WON %d" % [int(fs["plays"]), int(fs["wins"])], 476, y + 4, 150, 21, 12.5, UiKit.INK)
+		st.txt("VAT UNLOCKED" if owned else "VAT %d / %d WINS" % [int(fs["vat_wins"]), need], 628, y + 4, 152, 21, 12.5,
 				UiKit.accent(f) if owned else UiKit.MUTED, true, 2)
 	shell_raise()
 
@@ -1532,7 +1533,7 @@ func show_challenges(just_claimed := "") -> void:
 	_meta_open("challenges", show_main)
 	var kick := "DAILY RESET %s · WEEKLY %s" % [Progression.duration_text(Progression.seconds_to_reset("daily")).to_upper(),
 			Progression.duration_text(Progression.seconds_to_reset("weekly")).to_upper()]
-	var st := _profile_tabs("CHALLENGES", "OOZE / CHALLENGES", func(): _meta_back("challenges", show_main), kick, Vector2(200, 652))
+	var st := _profile_tabs("CHALLENGES", "OOZE / CHALLENGES", func(): _meta_back("challenges", show_main), kick, Vector2(200, 638))
 	_page = "challenges"
 	var rerolled: bool = Progression.challenges.get("daily", {}).get("rerolled", false)
 	var list := []
@@ -1540,7 +1541,7 @@ func show_challenges(just_claimed := "") -> void:
 		for c in Progression.current_challenges(kind):
 			list.append([kind, c])
 	var n_pages := maxi(1, ceili(list.size() / 3.0))
-	var p := _pager(st, "challenges", n_pages, func(): show_challenges(), 660, 39)
+	var p := _pager(st, "challenges", n_pages, func(): show_challenges(), 646, 39)   # FIX 7: inside the 16 pt edge
 	for k in range(3):
 		var i := p * 3 + k
 		if i >= list.size():
@@ -3358,6 +3359,8 @@ func _customize_body(st: Kit45.Stage) -> void:
 		elif ls["equipped"]:
 			card.lock_state = "EQUIPPED"                  # (its tag says so; the seat rim lights it too)
 		var rw := Rect2(card.art.position + Vector2(6, 6) * st.u, Vector2(95, 65) * st.u)
+		if ls["locked"] or ls["equipped"]:              # designer 11 FIX 5: the tag keeps the top band, the picture below it
+			rw = Rect2(card.art.position + Vector2(6, 30) * st.u, Vector2(95, 41) * st.u)
 		if cat == "territory":
 			var wl2 := Kit45.Txt.new()
 			wl2.m = self
@@ -3405,13 +3408,13 @@ func _customize_body(st: Kit45.Stage) -> void:
 	# the info strip and the action
 	var ls2 := _ward_state(cat, sel, equipped)
 	st.piece("INFO-STRIP", 354, 296, 291, 33, "STATIC", "291x33pt")
-	st.txt(_ward_detail(cat, sel, ls2), 367, 297, 270, 31, 9.0, LOCK_COL if ls2["locked"] else UiKit.MUTED, false, 0, 2)
+	st.txt(_ward_detail(cat, sel, ls2), 367, 299, 270, 27, 9.0, LOCK_COL if ls2["locked"] else UiKit.MUTED, false, 0, 2)
 	var item := "" if cat == "territory" else Progression.cosmetic_item(cat, sel, _army)
 	if ls2["equipped"]:
 		st.key("PRIMARY-WIDE", 664, 296, 133, 33, "EQUIPPED", Callable(), false, true, "133x33pt")
 	elif ls2["locked"] and not Progression.price(item).is_empty():   # PROGRESSION: UNLOCK where it can be bought
 		st.key("PRIMARY-WIDE", 664, 296, 133, 33, "UNLOCK", func():
-			_buy_prompt(item, _ward_look_name(cat, sel).to_upper(), "A look only: tier read, footprint and colour stay the same.",
+			_buy_prompt(item, _ward_look_name(cat, sel).to_upper(), "A look only: play is unchanged.",
 					func(): show_cosmetics()), true, false, "133x33pt")
 	elif ls2["locked"]:
 		st.key("PRIMARY-WIDE", 664, 296, 133, 33, "LOCKED", Callable(), false, true, "133x33pt")
@@ -3628,7 +3631,7 @@ func _ward_action(pos: Vector2, dims: Vector2, cat: String, sel: String, equippe
 		eb.add_theme_color_override("font_disabled_color", acc)
 	elif st["locked"] and not Progression.price(item).is_empty():   # PROGRESSION: UNLOCK where it can be bought
 		UiKit.btn(self, "UNLOCK", pos, dims, func():
-			_buy_prompt(item, _ward_look_name(cat, sel).to_upper(), "A look only: tier read, footprint and colour stay the same.",
+			_buy_prompt(item, _ward_look_name(cat, sel).to_upper(), "A look only: play is unchanged.",
 					func(): show_cosmetics()), "primary", _army, 16)
 	elif st["locked"]:
 		var lb := UiKit.btn(self, "LOCKED", pos, dims, Callable(), "secondary", _army, 16)
@@ -3662,7 +3665,7 @@ func _ward_detail(cat: String, sel: String, st: Dictionary) -> String:
 		if not st["locked"] and not st["equipped"]:     # (worn already: nothing to add)
 			out += "  ·  OPEN WHILE TESTING"
 	else:
-		out = "A look only: tier read, footprint and colour stay the same."
+		out = "A look only: play is unchanged."
 		if cat in ["monster_hub", "monster"] or sel == "faction":
 			out += " Made for %s." % UiKit.NAMES[_army]
 	if not ArmyPresets.saved:
@@ -3833,7 +3836,10 @@ func show_maps() -> void:
 	for md in _pool_modes():
 		keys.append(["mode", md])
 	keys += [["list", "recent"], ["list", "favourites"], ["random", ""]]
-	var kx := 797.0 - 64.0 * keys.size() + 4.0
+	var kw := func(kk: Array) -> float: return 76.0 if kk[0] == "random" or kk[1] == "recent" else 60.0   # FIX 2: the next size for the long words
+	var kx := 801.0
+	for kk in keys:
+		kx -= kw.call(kk) + 4.0
 	for kk in keys:
 		var kind: String = kk[0]
 		var val: String = kk[1]
@@ -3867,9 +3873,10 @@ func show_maps() -> void:
 						map_path = pool[randi() % pool.size()]["path"]
 					_map_page = -1
 					show_maps()
-		var b := st.key("KEY-SMALL", kx, 40, 60, 30, label, call, lit, off, "60x30pt")
+		var wide: bool = kw.call(kk) > 60.0
+		var b := st.key("KEY-SMALL", kx, 38 if wide else 40, kw.call(kk), 34 if wide else 30, label, call, lit, off, "76x34pt" if wide else "60x30pt")
 		b.size_pt = 12.5
-		kx += 64.0
+		kx += kw.call(kk) + 4.0
 	# the cards: 2 x 5 a page
 	var per := 10
 	var pages := maxi(1, ceili(shown.size() / float(per)))
@@ -4751,8 +4758,8 @@ func show_lobby() -> void:
 	# the map
 	var sel := _selected_map()
 	st.piece("MAP-CARD", 15, 81, 220, 169)
-	st.txt(str(sel.get("name", "")).replace("*", "").to_upper(), 27.8, 97.5, 113, 15, 12.5, UiKit.INK, true)
-	st.txt("%d NODES" % sel.get("nodes", []).size(), 148.5, 97.5, 73, 15, 12.5, Kit45.KICK, true, 2)
+	st.txt(str(sel.get("name", "")).replace("*", "").to_upper(), 27.8, 97.5, 100, 15, 12.5, UiKit.INK, true)
+	st.txt("%d NODES" % sel.get("nodes", []).size(), 128.0, 97.5, 94, 15, 12.5, Kit45.KICK, true, 2)   # FIX 2: room at the floor
 	st.pic(UiKit.map_thumb(MapPool.thumb(str(sel.get("code", "")))), 23.5, 126, 203, 114)
 	if host and not locked:
 		st.tap(15, 81, 220, 169, _open_maps)
@@ -4788,7 +4795,7 @@ func show_lobby() -> void:
 	_sel45(st, xs[5], 261, 126, 34, "RULES", "DEFAULT" if rdef else "CUSTOM", func(): _open_lobby_sheet("rules"))
 	# the status strip + DEPLOY / READY
 	st.piece("STATUS-STRIP", 15, 299, 544, 33)
-	st.txt("%d / %d SEATS" % [Net.roster.size(), Net.slots()], 28, 307, 92, 16, 12.5, Kit45.KICK, true)
+	st.txt("%d / %d SEATS" % [Net.roster.size(), Net.slots()], 28, 307, 112, 16, 12.5, Kit45.KICK, true)
 	var hint := ""
 	var waiting := Net.present_ids().filter(func(id): return not Net.is_ready(int(id))).size()
 	if _lobby_note != "":                              # READY: the host's last notice (e.g. "Settings changed - press READY again")
@@ -4799,7 +4806,7 @@ func show_lobby() -> void:
 		hint = ("Waiting for %d player%s to press READY." % [waiting, "" if waiting == 1 else "s"]) if waiting > 0 else "Share the room code and keep this tab open."
 	else:
 		hint = "The host deploys when everyone is ready." if Net.is_ready(Net.local_id()) else "Press READY when your picks are set."
-	st.txt(hint, 124, 307, 425, 16, 12.5, UiKit.STAR if _lobby_note != "" else UiKit.INK, false)
+	st.txt(hint, 144, 307, 405, 16, 12.5, UiKit.STAR if _lobby_note != "" else UiKit.INK, false)
 	if host:
 		var go := st.key("PRIMARY-WIDE", 568, 299, 229, 33, "DEPLOY  →", func(): Net.start_match(), true, not Net.can_start())
 		go.size_pt = 14.0
@@ -5490,8 +5497,8 @@ func _challenge_row45(st: Kit45.Stage, kind: String, c: Dictionary, x: float, y:
 	row.fill = float(c["progress"]) / maxf(1.0, float(c["target"]))
 	row.tints = {"fill": Kit45.seat(), "seat": Kit45.seat()}
 	var ink := Kit45.ink_on("CHALLENGE-ROW", row.key, state, [13, 9, 426, 16])
-	st.txt(("DAILY · " if kind == "daily" else "WEEKLY · ") + str(c["text"]), x + 13, y + 9, 426, 16, 13.0, Color(ink, 0.55) if claimed else ink, true)
-	st.txt("%d / %d" % [int(c["progress"]), int(c["target"])], x + 13, y + 29, 426, 16, 12.5, ink)
+	st.txt(str(c["text"]), x + 13, y + 9, 615, 16, 13.0, Color(ink, 0.55) if claimed else ink, true)   # FIX 2: the title gets the line
+	st.txt(("DAILY · " if kind == "daily" else "WEEKLY · ") + "%d / %d" % [int(c["progress"]), int(c["target"])], x + 13, y + 29, 426, 16, 12.5, ink)
 	var reward := "%s  ·  +%d XP" % [Progression.amount_text(int(c["soft"])), int(c["xp"])]
 	if int(c["premium"]) > 0:
 		reward += "  ·  " + Progression.amount_text(int(c["premium"]), "premium")
@@ -5576,23 +5583,37 @@ func _opt45(st: Kit45.Stage, at: Array, label: String, opts: Array, off := false
 
 
 func _vol45(st: Kit45.Stage, at: Array, label: String, steps: Array, now: int, shown: String, set_v: Callable, off := false) -> void:
-	## A volume row: the label, - , the bar (XP-BAR, seat colour) with its value, + ; the steps of Rules.
+	## A volume row as the remake's slider (designer 11 FIX 10): the label, the track (XP-BAR, seat-colour fill) with a 34 pt
+	## tap / drag box over it, the value at the right. Discrete steps of Rules; the value is set on release.
 	var x: float = at[0]
 	var y: float = at[1]
 	st.txt(label, x, y + 9, 96, 16, 12.5, UiKit.INK, true)
-	var i := steps.find(now)
-	var mb := st.key("KEY-SMALL", x + 100, y, 36, 34, "−", func():
-		set_v.call(int(steps[maxi(0, i - 1)]))
-		show_options(), false, off or i <= 0)
-	mb.size_pt = 16.0
-	var bar := st.piece("XP-BAR", x + 142, y + 13, 120, 8)
+	var i := maxi(0, steps.find(now))
+	var bar := st.piece("XP-BAR", x + 100, y + 13, 200, 8)
 	bar.fill = float(i + 1) / float(steps.size()) if not off else 0.0
 	bar.tints = {"fill": Kit45.seat()}
-	st.txt(shown, x + 266, y + 9, 46, 16, 12.5, UiKit.INK if not off else UiKit.MUTED, true, 1)
-	var pb := st.key("KEY-SMALL", x + 316, y, 36, 34, "+", func():
-		set_v.call(int(steps[mini(steps.size() - 1, i + 1)]))
-		show_options(), false, off or i >= steps.size() - 1)
-	pb.size_pt = 16.0
+	st.txt(shown, x + 304, y + 9, 50, 16, 12.5, UiKit.INK if not off else UiKit.MUTED, true, 1)
+	if off:
+		at[1] = y + 41.0
+		return
+	var hit := st.tap(x + 96, y, 208, 34, Callable())
+	hit.name = "Slider " + label
+	var pick := func(px: float) -> int:
+		return clampi(int(round(clampf(px / hit.size.x, 0.0, 1.0) * steps.size() - 0.5)), 0, steps.size() - 1)
+	hit.gui_input.connect(func(e: InputEvent):
+		var pos := Vector2(-1, -1)
+		if e is InputEventMouseButton and (e as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+			pos = (e as InputEventMouseButton).position
+		elif e is InputEventMouseMotion and ((e as InputEventMouseMotion).button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+			pos = (e as InputEventMouseMotion).position
+		if pos.x < 0.0:
+			return
+		var k: int = pick.call(pos.x)
+		bar.fill = float(k + 1) / float(steps.size())
+		bar.queue_redraw()
+		if e is InputEventMouseButton and not (e as InputEventMouseButton).pressed:
+			set_v.call(int(steps[k]))
+			show_options())
 	at[1] = y + 41.0
 
 

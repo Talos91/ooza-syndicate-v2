@@ -39,8 +39,8 @@ var _shot := ""
 var online := false                                # ONLINE: a room's round (hold_online) - a loading screen, not a hold
 var net: Node = null                               # ONLINE: the Net the card watches (the autoload; tests hand in theirs)
 var _screens := []                                 # PREMATCH AI SCREENS: [TextureRect, faction, blink phase] - the AI blinks now and then
-const HERO_K := 0.76                               # the ooze's share of its cell (feet on the cell's floor), the AI screen above it
-const SCREEN_K := 0.30                             # the AI screen's size (of the cell)
+const HERO_K := 0.72                               # the ooze's share of its cell (feet on the cell's floor), the AI screen above it
+const SCREEN_K := 0.25                             # the AI screen's size (of the cell)
 const BLINK_EVERY := 4.2
 const BLINK_FOR := 0.14
 var _frames := 0                                   # ONLINE: frames drawn under the card (the warm-up needs a few)
@@ -337,7 +337,7 @@ func _build() -> void:
 	var bh := UiKit.tap_h(self, 50.0)
 	var info_h := UiKit.line_h(self, 15, true)
 	var hint_h := UiKit.line_h(self, 12)
-	var foot := bh + info_h + hint_h + 30.0
+	var foot := bh + info_h + hint_h + 44.0           # FIX 8: the countdown off the bottom edge
 	var col_h := H - top - foot - 20.0
 	var half := (W - x * 2.0) * 0.4
 	_side(sides[0], Vector2(x, top), Vector2(half, col_h), true)
@@ -381,7 +381,7 @@ func _build() -> void:
 	b.position = Vector2((W - bw) / 2.0, y)
 	content.add_child(b)
 	y += b.size.y + 8.0
-	_count = UiKit.label(self, "", 12, UiKit.DIM, true, 2)
+	_count = UiKit.label(self, "", 12, UiKit.INK, true, 2)   # FIX 8: cream, readable
 	_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_count.size = Vector2(W, hint_h)
 	_count.position = Vector2(0, y)
@@ -479,7 +479,7 @@ func _side(seats: Array, pos: Vector2, dims: Vector2, mine: bool) -> float:
 		scr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		scr.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		scr.size = Vector2(ss, ss)
-		scr.position = Vector2((hs - ss) / 2.0, -ss * 0.04)
+		scr.position = Vector2((hs - ss) / 2.0, -hs * 0.03)   # FIX 8: >= 4 pt over the ooze's head
 		cell.add_child(scr)
 		_screens.append([scr, f, float(i) * 1.3 + (0.0 if mine else 0.7)])
 		var hero := UiKit.hero(self, f, Vector2.ZERO, Vector2(hs, hs) * HERO_K, false, Rules.seat_color(seat))
