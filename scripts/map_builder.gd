@@ -110,6 +110,8 @@ static func _can_raise(e: Dictionary) -> bool:
 static func piece(name: String) -> Node3D:
 	## Loads through Cosmetics.kit_path (light kit vs kit_hd, "Phones only" - Alpha 21): the path itself
 	## is the cache key, so a profile/HD-pack change mid-session never hands back the wrong quality.
+	if Rules.kit2 and not _kit2_warm:
+		_warm_kit2()
 	var scene: PackedScene
 	if name.begins_with("skins/"):                  # 0.19.0 cosmetics: loaded on demand, never kept here
 		scene = Cosmetics.cached(name)
@@ -129,6 +131,22 @@ static func piece(name: String) -> Node3D:
 				(c as Node3D).position = (c as Node3D).position * float(fit["scale"]) - Vector3(0, float(fit["drop"]), 0)
 	Mats.apply_detail(node)                         # Alpha 16: surface detail on the flat kit colours
 	return node
+
+
+static var _kit2_warm := false
+
+
+static func _warm_kit2() -> void:
+	## KIT2 (demo2-kit 24c346f): Mats.detail caches one material per kit material NAME, seeded by the first piece that carries it; the lab
+	## platform + vat (now replaced by kit2 pieces) used to be first and seeded the cream OS_Plate / OS_Steel every bridge deck shares.
+	## Seed it from them the same way, so the bridges keep 0.25.0's look.
+	_kit2_warm = true
+	for key in ["Platform_Standard", "Vat_T1_capneon"]:
+		var path := "res://assets/kit/labkit/%s.glb" % key
+		if ResourceLoader.exists(path):
+			var n: Node = (load(path) as PackedScene).instantiate()
+			Mats.apply_detail(n)
+			n.free()
 
 
 static func put(parent: Node3D, name: String, pos: Vector3, heading := 0.0, stretch := 1.0) -> Node3D:
