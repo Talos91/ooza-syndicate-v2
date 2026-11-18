@@ -160,6 +160,54 @@ var sync_us := 0                 # the last sync's cost (perf probe)
 var _warm := 3                   # frames the pools draw one hidden instance so their shaders compile at load
 
 
+var _dump_at := 3.0 if "--world-dump" in OS.get_cmdline_user_args() else -1.0   # dev: --world-dump prints the 3D inventory once
+
+
+static func _tris(m: Mesh) -> int:
+	if m == null:
+		return 0
+	var n := 0
+	for k in m.get_surface_count():
+		var a := m.surface_get_arrays(k)
+		var idx = a[Mesh.ARRAY_INDEX]
+		n += (idx.size() if idx != null else (a[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()) / 3
+	return n
+
+
+static func world_dump(root: Node) -> void:
+	## --world-dump: every visible 3D geometry node with its surfaces (≈ draws) and triangles, then the totals
+	var tot := [0, 0]
+	for g in root.find_children("*", "GeometryInstance3D", true, false):
+		var gi := g as GeometryInstance3D
+		if not gi.is_visible_in_tree():
+			continue
+		var tris := 0
+		var surf := 0
+		if gi is MeshInstance3D and (gi as MeshInstance3D).mesh != null:
+			tris = _tris((gi as MeshInstance3D).mesh)
+			surf = (gi as MeshInstance3D).mesh.get_surface_count()
+		elif gi is MultiMeshInstance3D and (gi as MultiMeshInstance3D).multimesh != null:
+			var mm := (gi as MultiMeshInstance3D).multimesh
+			var vis := mm.visible_instance_count if mm.visible_instance_count >= 0 else mm.instance_count
+			tris = _tris(mm.mesh) * vis
+			surf = mm.mesh.get_surface_count() if mm.mesh != null and vis > 0 else 0
+		tot[0] += surf
+		tot[1] += tris
+		var who := ""
+		var a: Node = gi
+		while a != null and who == "":
+			if a.get_script() != null:
+				who = (a.get_script() as Script).resource_path.get_file()
+			a = a.get_parent()
+		var mname := ""
+		if gi is MeshInstance3D and (gi as MeshInstance3D).mesh != null:
+			mname = (gi as MeshInstance3D).mesh.resource_path.get_file() + ":" + (gi as MeshInstance3D).mesh.resource_name
+		elif gi is MultiMeshInstance3D and (gi as MultiMeshInstance3D).multimesh != null and (gi as MultiMeshInstance3D).multimesh.mesh != null:
+			mname = (gi as MultiMeshInstance3D).multimesh.mesh.resource_name + "x" + str((gi as MultiMeshInstance3D).multimesh.visible_instance_count)
+		print("WDUMP %s | %s | %s %s surf=%d tris=%d" % [who, gi.name, gi.get_class(), mname, surf, tris])
+	print("WDUMP TOTAL surf=%d tris=%d" % tot)
+
+
 static func wanted() -> bool:
 	return Rules.world_layer
 
@@ -227,7 +275,7 @@ func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
 	column = VatColumn.new()
 	add_child(column)
 	column.setup(self)
-	if floor_lab5 and not "--no-dressing" in OS.get_cmdline_user_args() and not Look.lab: add_child(WorldDressing.new())   # WORLD COMPLETE LAB (LAB LOOK TEST: the surround replaces it)
+	if floor_lab5 and not rv and not "--no-dressing" in OS.get_cmdline_user_args() and not Look.lab: add_child(WorldDressing.new())   # STRIP (bg-44b4 a): no lab district in the river   # WORLD COMPLETE LAB (LAB LOOK TEST: the surround replaces it)
 	Look.lab_world(_main)                            # LAB LOOK TEST (no-op without --look=lab)
 	if rv:
 		river.setup(self, _main, _low)               # (again: its air over the lab's)
@@ -444,7 +492,9 @@ func _build_pools() -> void:
 	skm.render_priority = -9
 	squad.material = skm
 	_socket_mm = _mm(squad, maxi(_tubes.size(), 1), true)
-	var ent_mesh: Mesh = WorldTubes.column_base_mesh()
+	# STRIP (bg-44b4 job a, Daniele 11-18 via designer 11): the river has no floor, so no column base: the labkit node base
+	# (9.8k tris a copy) is never built; an empty mesh keeps VatColumn's readers working, and nothing of it is drawn
+	var ent_mesh: Mesh = ArrayMesh.new() if WorldRiver.enabled() else WorldTubes.column_base_mesh()
 	_ent_mat = ShaderMaterial.new()
 	_ent_mat.shader = SHADER_ENTRANCE
 	_ent_mat.set_shader_parameter("abyss", haze_abyss())
@@ -477,8 +527,8 @@ func _build_pools() -> void:
 		_ent_mm.set_instance_custom_data(i, Color(0, 0, 0, 0))
 		_ent_mm.set_instance_color(i, Color.WHITE)
 		_sock_lit(tb, tb["base"])
-	_socket_mm.visible_instance_count = _tubes.size()
-	_ent_mm.visible_instance_count = _tubes.size()
+	_socket_mm.visible_instance_count = _tubes.size() if not WorldRiver.enabled() else 0   # STRIP: no floor sockets / bases
+	_ent_mm.visible_instance_count = _tubes.size() if not WorldRiver.enabled() else 0
 
 
 func _orient_entrances() -> void:
@@ -719,6 +769,9 @@ func sync(dt: float) -> void:
 		_pending.sort_custom(func(a, b): return a[0] < b[0])
 	if river != null:
 		river.step(dt)
+	if _dump_at >= 0.0 and _t >= _dump_at:
+		_dump_at = -1.0
+		world_dump(get_tree().root)
 	_tubes_step(dt)
 	if locals != null:
 		locals.step(dt)

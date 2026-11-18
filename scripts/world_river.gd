@@ -103,7 +103,8 @@ func setup(w: WorldLayer, m: Node, low: bool) -> void:
 		drain_t = INF                                 # the tutorial: a full river (conservative reading)
 	elif not Rules.last_stand:
 		drain_t = Rules.VERY_LAST_STAND_TIME          # Last Stand OFF: dry at the Very Last Stand
-	_sky(m)
+	if not PitBackdrop.on:                            # STRIP (bg-44b4 a): the painted pit has no sky band
+		_sky(m)
 	for e in m.find_children("*", "WorldEnvironment", true, false):
 		var env := (e as WorldEnvironment).environment
 		if env != null:
@@ -216,7 +217,8 @@ func build(cam: Camera3D) -> void:
 	drills = WorldDrill.new()                         # DRILL NODE (blueprint 11-16): junction, screw bit, branches by tier
 	add_child(drills)
 	drills.build(self)
-	_build_locals()
+	if not PitBackdrop.on:                            # STRIP (bg-44b4 a): no Locals walking the banks in the painted pit
+		_build_locals()
 
 
 func _to_uw(p: Vector2) -> Vector2:
@@ -408,7 +410,8 @@ func step(dt: float) -> void:
 		_goo_mat.set_shader_parameter("t0", progress)
 	if drills != null:
 		drills.step(dt)
-	_locals_step(dt)
+	if _loc_mm != null:
+		_locals_step(dt)
 
 
 func _vat_rate(n: Dictionary) -> float:
