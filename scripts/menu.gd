@@ -820,7 +820,7 @@ func _home_column(_area: Rect2, hero: String) -> void:
 	st.key("KEY-SMALL", 25, 300, 60, 22, "CHANGE", show_setup)
 	st.key("PRIMARY-WIDE", 91, 300, 88, 22, "PLAY  →", deploy, true)
 	# ONLINE
-	_home_card(st, 197.5, 154, "ONLINE", "PLAY FRIENDS", "A room, a four-letter code.")
+	_home_card(st, 197.5, 154, "ONLINE", "PLAY FRIENDS", "Room code, up to 4.")   # designer 11: one line at the floor (no ellipsis)
 	if not Net.rejoin.is_empty():                      # dropped out of a room: back into the same seat
 		var rb := st.key("KEY-SMALL", 208, 300, 134, 22, "RECONNECT %s" % str(Net.rejoin["code"]), func():
 			ArmyPresets.send_to(Net, str(Net.rejoin.get("faction", faction)))
