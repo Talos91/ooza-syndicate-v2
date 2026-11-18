@@ -190,5 +190,13 @@
   76.5,
   579.0,
   274.0
- ]
+ ],
+ "lake_mask": {
+  "file": "lake_mask.png",
+  "px_per_pt": 1,
+  "margin_pt": [
+   12,
+   5
+  ]
+ }
 }

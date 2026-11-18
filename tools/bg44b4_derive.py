@@ -74,6 +74,19 @@ ra = np.array(half(rim.crop((x0, y0, x1, y1))))[..., 3] > 128
 rr[ry:ry + ra.shape[0], rx:rx + ra.shape[1]] = ra[: ca.shape[0] - ry, : ca.shape[1] - rx]
 ys2, xs2 = np.nonzero(ca & ~rr)
 out["lake_pt"] = [xs2.min() / K, ys2.min() / K, (xs2.max() + 1 - xs2.min()) / K, (ys2.max() + 1 - ys2.min()) / K]
+# LAKE MASK (Daniele 11-18: "what needs to be in the pit is the bottom of the node (as in the drill)"): 1 px per pt at the 812
+# reference, 255 = open goo eroded by 2 % of the lake's size (pit_backdrop.gd moves the painted pit so every node base lands on 255)
+lake = (ca & ~rr).astype(np.uint8)
+lk = np.array(Image.fromarray(lake * 255).resize((L["canvas"]["phone_w"], L["canvas"]["phone_h"]), Image.BOX)) >= 128
+ex, ey = max(1, round(out["lake_pt"][2] * 0.02)), max(1, round(out["lake_pt"][3] * 0.02))
+er = lk.copy()
+for dx in range(-ex, ex + 1):
+    er &= np.roll(lk, dx, axis=1)
+lk2 = er.copy()
+for dy in range(-ey, ey + 1):
+    lk2 &= np.roll(er, dy, axis=0)
+Image.fromarray(lk2.astype(np.uint8) * 255).save(os.path.join(OUT, "lake_mask.png"), optimize=True)
+out["lake_mask"] = {"file": "lake_mask.png", "px_per_pt": 1, "margin_pt": [ex, ey]}
 json.dump(out, open(os.path.join(OUT, "layout.json"), "w"), indent=1)
 tot = 0
 for f in sorted(os.listdir(OUT)):

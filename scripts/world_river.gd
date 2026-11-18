@@ -203,10 +203,16 @@ func build(cam: Camera3D) -> void:
 			H[j * nu + i] = h
 			lowest = minf(lowest, h)
 	dry_y = lowest
-	if not PitBackdrop.on:                            # ROUND 44 B4: the painted pit replaces the canyon, the goo plane and the cracks
+	if not PitBackdrop.on:                            # ROUND 44 B4: the painted pit replaces the canyon and the cracks
 		_build_bed()
 		_build_goo()
 		_build_cracks()
+	else:                                             # ... and the goo plane is painted as the backdrop: drills end at its surface
+		_build_goo()
+		var sc = main.get("scenery")
+		if sc != null and sc.get("pit") != null:
+			_goo.material_override = sc.pit.mirror_material()
+			_goo_mat = null
 	drills = WorldDrill.new()                         # DRILL NODE (blueprint 11-16): junction, screw bit, branches by tier
 	add_child(drills)
 	drills.build(self)
@@ -395,7 +401,7 @@ func step(dt: float) -> void:
 		build(cam)
 	progress = clampf(sim.time / drain_t, 0.0, 1.0) if drain_t < INF else 0.0
 	level = lerpf(top_y, dry_y, progress)
-	if _goo != null:
+	if _goo != null and _bed_mat != null:
 		_goo.position.y = level
 		_goo.visible = progress < 1.0
 		_bed_mat.set_shader_parameter("level", level)

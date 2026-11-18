@@ -1112,8 +1112,7 @@ func _fit_camera() -> void:
 		_base_pitch = cam_pitch                       # (a probe may have set it after _start_map)
 	cam_pitch = _base_pitch                           # the start view stays exactly as it was
 	_start_fit = _fit_nodes(sim.nodes)
-	if not (scenery and scenery.pit):                 # ROUND 44 B4: the pure lake fit, no per-map zoom past it (designer 11)
-		_start_fit[1] *= MapCamera.zoom_for(str(map.get("code", "")))   # Daniele 2026-11-13: "zoom in a bit" (per map, phone_fit)
+	_start_fit[1] *= MapCamera.zoom_for(str(map.get("code", "")))   # Daniele 2026-11-13: "zoom in a bit" (per map, phone_fit)
 	cam_target = _start_fit[0]
 	cam_dist = _start_fit[1]
 	if _fit_gone > 0 and scenario_focus == Vector3.INF:   # resized after a Last Stand zoom: keep the survivors framed
@@ -1190,8 +1189,6 @@ func _fit_nodes(nodes: Array) -> Array:
 	var free := Rect2(left, top, maxf(right - left, 100.0), maxf(bottom - top, 100.0))
 	if use_hud and not mission_overlay and MapCamera.FIT_PIT:   # map-pass: frame THE PIT (Daniele's frame 11-18), centred on it
 		free = pit_rect()
-		if scenery and scenery.pit:                    # ROUND 44 B4 (bg-44b4): inside the painted lake's open goo, 4 % margin
-			free = scenery.pit.lake_rect(vp)
 	var pts := []
 	for n in nodes:
 		var p: Vector3 = n["pos"]
@@ -2053,6 +2050,9 @@ func _take_shot(t: float, last: bool) -> void:
 	var path := "%s/shot_%05.1f.png" % [shot_dir if shot_dir != "" else OS.get_user_data_dir(), t]
 	img.save_png(path)
 	print("screenshot ", path)
+	if scenery and scenery.pit:                        # ROUND 44 B4: the shot's node bases against the painted lake (dev check)
+		var pc: Array = scenery.pit.count_inside()
+		print("PIT CHECK t=%.1f: %d of %d bases inside (drop %.0f pt)" % [t, pc[0], pc[1], scenery.pit.drop_pt])
 	if last:
 		print("telemetry ", Telemetry.save(sim, map.get("code", ""), trace))
 		get_tree().quit()

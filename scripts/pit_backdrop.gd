@@ -16,6 +16,8 @@ extends RefCounted
 
 const DIR := "res://assets/art/bg44b4/"
 const GOO_SHADER := preload("res://shaders/pit_goo.gdshader")
+const MIRROR_SHADER := preload("res://shaders/pit_mirror.gdshader")
+const MIRROR_BIAS := 4.5 / 255.0      # the goo plane's measured residual vs the 2D background (desktop GL Compatibility shots)
 const REF := Vector2(812.0, 375.0)
 static var on := false
 
@@ -28,6 +30,7 @@ var _goo: ColorRect
 var _mounts: Dictionary = {}         # id -> TextureRect
 var _mount_root: Control
 var _vp := Vector2.ZERO
+var mirror: ShaderMaterial            # the river's goo plane, painted as the backdrop (pit_mirror.gdshader; WorldRiver uses it)
 
 
 static func wanted() -> bool:
@@ -105,19 +108,98 @@ func _fit(vp: Vector2) -> void:
 	_s = Vector2(maxf(_s.x, vp.x / REF.x), maxf(_s.y, vp.y / REF.y))
 	_o = pr.get_center() - c * _s
 	_o = Vector2(clampf(_o.x, vp.x - REF.x * _s.x, 0.0), clampf(_o.y, vp.y - REF.y * _s.y, 0.0))
+	if absf(drop_pt) > 0.001:                         # DROP (Daniele 11-18): the painted pit block lower by drop_pt (pt of the frame)
+		var cy := _o.y + c.y * _s.y + drop_pt * _s.y   # the lake centre's new screen y
+		_o.y += drop_pt * _s.y
+		if _o.y > 0.0:                                # the crust must still reach the screen top: stretch the frame down from y 0
+			_s.y = cy / c.y
+			_o.y = 0.0
+		elif _o.y + REF.y * _s.y < vp.y:              # (a lift) ... and the bottom
+			_s.y = (vp.y - cy) / (REF.y - c.y)
+			_o.y = cy - c.y * _s.y
 
 
-const LAKE_MARGIN := 0.04             # designer 11 (11-18): the playfield stays inside the lake with ~4 % margin
+# BASES IN THE LAKE (Daniele 2026-11-18: "the problem is prolly just to move the pit a bit lower ... what needs to be in the pit is
+# the bottom of the node (as in the drill) the top can end up visibly outside as long as its base is IN the pit"). A node's base =
+# its drill foot at the goo surface (the river world's level at 0:00, WorldRiver.top_y), projected by the fitted start camera; the
+# map fit and per-map zoom stay 0.25.0's. drop_pt = the smallest move (pt, + = lower; DROP_RANGE) that lands every base on the lake
+# mask (lake_mask.png: the open goo eroded by 2 % of the lake's size). Picked once the start view is fitted (and again on a resize).
+const DROP_RANGE := Vector2(-20.0, 90.0)
+var drop_pt := 0.0
+var _mask: Image
+var _placed := false
+var bases_in := 0
+var bases_n := 0
 
 
-func lake_rect(vp: Vector2) -> Rect2:
-	## The lake's open goo on screen (layout.json lake_pt: the crust hole minus the opaque bank), less LAKE_MARGIN of its size
-	## on every side: main._fit_nodes fits the map in it (designer 11: STRAIT 2 spilled onto the ash with the pit-box fit).
-	if _vp != vp:
+func _bases_screen() -> Array:
+	var cam: Camera3D = main.get("cam")
+	var sim = main.get("sim")
+	if cam == null or sim == null:
+		return []
+	var y := 0.0
+	var wl = main.get("world_layer")
+	var lo := INF
+	for n in sim.nodes:
+		lo = minf(lo, (n["pos"] as Vector3).y)
+	y = (wl.river.top_y if wl != null and wl.river != null else minf(lo, 0.0) - 5.0)
+	var out := []
+	for i in range(sim.nodes.size()):
+		if sim.collapsed.has(i):                      # launched / dropped: no base left
+			continue
+		var p: Vector3 = sim.nodes[i]["pos"]
+		out.append(cam.unproject_position(Vector3(p.x, y, p.z)))
+	return out
+
+
+func _inside(q: Vector2) -> bool:
+	## screen px -> the frame's pt -> the lake mask (1 px per pt)
+	if _mask == null:
+		return true
+	var f := (q - _o) / _s
+	var x := int(floor(f.x))
+	var y := int(floor(f.y))
+	if x < 0 or y < 0 or x >= _mask.get_width() or y >= _mask.get_height():
+		return false
+	return _mask.get_pixel(x, y).r > 0.5
+
+
+func count_inside() -> Array:
+	var pts := _bases_screen()
+	var k := 0
+	for q in pts:
+		if _inside(q):
+			k += 1
+	return [k, pts.size()]
+
+
+func place_bases() -> void:
+	_placed = true
+	if _mask == null:
+		var t := _tex(str((layout.get("lake_mask", {}) as Dictionary).get("file", "lake_mask.png")))
+		_mask = t.get_image() if t != null else null
+		if _mask != null and _mask.is_compressed():
+			_mask.decompress()
+	var vp: Vector2 = main.get_viewport().get_visible_rect().size
+	var best := [-1, 0.0]
+	var cands: Array = []
+	for d in range(int(DROP_RANGE.x), int(DROP_RANGE.y) + 1):
+		cands.append(float(d))
+	cands.sort_custom(func(a, b): return absf(a) < absf(b) or (absf(a) == absf(b) and a > b))
+	for d in cands:
+		drop_pt = d
 		_relayout(vp)
-	var l: Array = layout.get("lake_pt", [129.0, 76.5, 578.5, 273.5])
-	var r := Rect2(_o + Vector2(l[0], l[1]) * _s, Vector2(l[2], l[3]) * _s)
-	return r.grow_individual(-r.size.x * LAKE_MARGIN, -r.size.y * LAKE_MARGIN, -r.size.x * LAKE_MARGIN, -r.size.y * LAKE_MARGIN)
+		var c := count_inside()
+		if int(c[0]) > int(best[0]):
+			best = [int(c[0]), d]
+		if int(c[0]) == int(c[1]):
+			break
+	drop_pt = best[1]
+	_relayout(vp)
+	var c2 := count_inside()
+	bases_in = c2[0]
+	bases_n = c2[1]
+	print("PIT DROP %.0f pt: %d of %d bases inside (viewport %dx%d)" % [drop_pt, bases_in, bases_n, vp.x, vp.y])
 
 
 func _relayout(vp: Vector2) -> void:
@@ -134,6 +216,45 @@ func _relayout(vp: Vector2) -> void:
 	mat.set_shader_parameter("rect_px", vp)
 	mat.set_shader_parameter("anchor_px", _o + Vector2(an[0], an[1]) * _s)
 	mat.set_shader_parameter("period_px", Vector2(per[0], per[1]) * _s)
+	if mirror != null:
+		_mirror_uniforms(vp)
+
+
+func mirror_material() -> ShaderMaterial:
+	## WorldRiver's goo plane material: the backdrop repainted in screen space (opaque: drills end at the goo surface).
+	if mirror == null:
+		mirror = ShaderMaterial.new()
+		mirror.shader = MIRROR_SHADER
+		mirror.set_shader_parameter("goo_tile", _tex(str(_el("goo_tile").get("file", "goo_tile.png"))))
+		mirror.set_shader_parameter("crust", _tex(str(_el("crust").get("file", "crust.png"))))
+		mirror.set_shader_parameter("rim", _tex(str(_el("rim").get("file", "rim.png"))))
+		var r: Array = _el("rim").get("pt", [0, 0, REF.x, REF.y])
+		mirror.set_shader_parameter("rim_pt", Vector4(r[0], r[1], r[2], r[3]))
+		mirror.set_shader_parameter("ref", REF)
+		var env: Environment = main.get_viewport().world_3d.environment if main.get_viewport().world_3d else null
+		for e in main.find_children("*", "WorldEnvironment", true, false):
+			env = (e as WorldEnvironment).environment
+		if env != null:                               # undo the 3D post chain (pit_mirror.gdshader inv_post)
+			mirror.set_shader_parameter("tonemap_on", false)   # measured (Compatibility, unshaded): no filmic curve on it
+			mirror.set_shader_parameter("srgb_bias", MIRROR_BIAS)
+			mirror.set_shader_parameter("exposure", env.tonemap_exposure)
+			mirror.set_shader_parameter("white", env.tonemap_white)
+			mirror.set_shader_parameter("contrast", env.adjustment_contrast if env.adjustment_enabled else 1.0)
+			mirror.set_shader_parameter("saturation", env.adjustment_saturation if env.adjustment_enabled else 1.0)
+		if _vp != Vector2.ZERO:
+			_mirror_uniforms(_vp)
+	return mirror
+
+
+func _mirror_uniforms(vp: Vector2) -> void:
+	var g := _el("goo_tile")
+	var per: Array = g.get("period_pt", [395, 258])
+	var an: Array = g.get("anchor_pt", [422.24, 213.54])
+	mirror.set_shader_parameter("vp", vp)
+	mirror.set_shader_parameter("frame_o", _o)
+	mirror.set_shader_parameter("frame_s", _s)
+	mirror.set_shader_parameter("anchor_px", _o + Vector2(an[0], an[1]) * _s)
+	mirror.set_shader_parameter("period_px", Vector2(per[0], per[1]) * _s)
 
 
 # ------------------------------------------------------------------ the mounts under the HUD
@@ -221,6 +342,9 @@ func sync() -> void:
 		var vp: Vector2 = main.get_viewport().get_visible_rect().size
 		if vp != _vp:
 			_relayout(vp)
+			_placed = false
+		if not _placed and bool(main.get("started")) and main.get("cam") != null:
+			place_bases()
 	if _mount_root == null or hud == null:
 		return
 	var vp2: Vector2 = hud.get_viewport().get_visible_rect().size
