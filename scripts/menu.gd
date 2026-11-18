@@ -1255,15 +1255,19 @@ func _viewer_col() -> Color:
 	return Rules.HUES.get(str(Net.room_colours().get(seat, "")), Rules.SEATS.get(seat, MenuSkin.seat()))
 
 
-func _cutout_mark(f: String, pos: Vector2, dims: Vector2, rim := Color(0, 0, 0, 0)) -> Control:
-	## Small faction chips (pickers, room seats): the AI mark in its socket (40B2 M-L / M-K), seat-A rim.
-	var h := Control.new()
-	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	h.position = pos
-	h.size = dims
-	var side := minf(dims.x, dims.y)
-	MenuSkin.ai_hero(self, f, Vector2((dims.x - side) / 2.0, (dims.y - side) / 2.0), side, "", h, rim)
-	return h
+func _cutout_mark(f: String, pos: Vector2, dims: Vector2, _rim := Color(0, 0, 0, 0)) -> Control:
+	## Small faction chips (room seats, pickers): the faction AI's small screen (UiKit.ai_screen_path: brass bezel, the AI on
+	## its glitch back), no ring socket around it (Daniele 11-18: "the circle around the AI is not necessary ... use the
+	## small screen instead").
+	var t := TextureRect.new()
+	t.texture = UiKit.tex(UiKit.ai_screen_path(f))
+	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	t.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	t.position = pos
+	t.size = dims
+	return t
 
 
 func _roster_tile(f: String, pos: Vector2, dims: Vector2) -> void:
@@ -5873,7 +5877,7 @@ func _seat45(st: Kit45.Stage, i: int, id: int, colours: Dictionary, x: float, y:
 	st.txt(seat, x + 8, y + 4, 16, 16, 12.5, Kit45.INK_DARK, true, 1)
 	if id >= 0:
 		var f: String = str(Net.roster[id]["faction"])
-		st.add_child(_cutout_mark(f, st.P(x + 11, y + 26), Vector2(32, 32) * st.u))
+		st.add_child(_cutout_mark(f, st.P(x + 8, y + 23), Vector2(38, 38) * st.u))
 		var lo = Net.roster[id].get("loadout", {})
 		var eff := ArmyPresets.effective(f, lo if lo is Dictionary else {}, ArmyPresets.map_has_relays(_selected_map()))
 		var ids := [eff["active"], eff["map"], eff["ultimate"]]
