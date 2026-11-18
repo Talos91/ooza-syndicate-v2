@@ -28,18 +28,10 @@ var _pressed := ""
 var _skill_of: Dictionary = {}                      # control id -> skill id
 var _tex: Dictionary = {}
 var on_tap: Callable                                # on_tap.call(control_id)
-# 16:9 phones (Daniele 11-18 "Keep 12.5 pt minimum"): the 812 pt canvas squeezed into 640 pt leaves the name faces too
-# narrow for BACKWASH / DEMOLISH / SINKHOLE at the floor, so the page shows one section at a time (ACTIVE SKILL / MAP SKILL
-# tabs), its seven cards 4 + 3, scaled evenly as large as the area allows. Other sizes keep the delivered layout.
-var paged := false
-var page := "active"                                # paged: the open section ("active" | "map" = the menu's _skills_slot)
-var kc := 0.25                                      # paged: the cards' scale (canvas units per 4x px)
-var _place: Dictionary = {}                         # paged: card control id -> its rect in this control (the open section)
-var _tabs: Dictionary = {}                          # paged: "PAGE-ACTIVE" / "PAGE-MAP" -> its rect in this control
+# Daniele 11-18 ("one page as before"): on a 16:9 phone (the 812 pt canvas in 640 pt) the delivered one-page layout keeps
+# all 14 cards and this page's labels may go down to 80 % of the 12.5 pt floor; every other size stays at the floor.
+var lo := 1.0
 var _ult_end := 0.0                                 # the ultimate's name's right edge (the charge line starts after it)
-var _sub_rect := Rect2()                            # paged: the open section's subtitle, right of the tabs
-const PAGE_TABS := {"PAGE-ACTIVE": ["ACTIVE SKILL", "active"], "PAGE-MAP": ["MAP SKILL", "map"]}
-const SUBS := {"active": "Combat skills on every map", "map": "Relay skills require a map with relays"}
 
 
 static func layout() -> Dictionary:
@@ -82,12 +74,7 @@ func setup(menu: Node, area: Rect2, f: String, t: String, tap: Callable) -> void
 			continue
 		_els.append(e)
 	_els.sort_custom(func(a, b): return a["z"] < b["z"])
-	if not top_only:
-		var sl = m.get("_skills_slot") if m != null else null
-		page = "map" if str(sl) == "map" else "active"
-		paged = _needs_pages()
-		if paged:
-			_layout_pages()
+	lo = 0.8 if _tight() else 1.0
 	_refresh_states()
 	_add_buttons(top_only)
 	_add_heroes(top_only)
@@ -113,8 +100,6 @@ func _refresh_states() -> void:
 		if id == _pressed and st != "DISABLED":
 			st = "PRESSED"
 		_state[id] = st
-	for t in _tabs:
-		_state[t] = "PRESSED" if t == _pressed else ("SELECTED" if PAGE_TABS[t][1] == page else "NORMAL")
 
 
 func _faction_of(cid: String) -> String:
@@ -128,95 +113,20 @@ func skill_of(cid: String) -> String:
 
 func rect_of(id: String) -> Rect2:
 	## A control's (or the ultimate cabinet's, id "ULT") rect in the menu's content coordinates.
-	if _tabs.has(id):
-		return Rect2(position + _tabs[id].position, _tabs[id].size)
-	if _place.has(id):
-		return Rect2(position + _place[id].position, _place[id].size)
 	var b: Array = [784, 392, 2152, 152] if id == "ULT" else _ctrl[id]["bounds"]
 	return Rect2(position + origin + (Vector2(b[0], b[1]) - BODY.position) * s, Vector2(b[2], b[3]) * s)
 
 
-func _needs_pages() -> bool:
-	## A word of a skill name wider than its name face at the 12.5 pt floor (the face's 280 px less its 10 px pads).
+func _tight() -> bool:
+	## A word of a skill name wider than its name face at the 12.5 pt floor (16:9: BACKWASH / DEMOLISH / SINKHOLE).
 	var fl := float(UiKit.px(m, 0.0)) if m != null else 0.0
-	return fl > 0.0 and _widest_word(fl) > 260.0 * s
-
-
-func _widest_word(fl: float) -> float:
+	if fl <= 0.0:
+		return false
 	var mx := 0.0
 	for cid in _skill_of:
 		for w in _skill_label(cid).split(" "):
 			mx = maxf(mx, UiKit.BODY.get_string_size(w, HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(fl))).x)
-	return mx
-
-
-func _layout_pages() -> void:
-	## The open section's seven cards as 4 + 3 under the two section tabs (and the section's subtitle right of them),
-	## evenly scaled as large as the area allows: the skill area's width, down to the area's bottom (the free band over
-	## the nav bar on a 16:9 phone). The hero cabinet, ultimate cabinet and RESET stay where the delivery puts them.
-	var fl := float(UiKit.px(m, 0.0))
-	var x0 := _r(784, 0, 0, 0).position.x
-	var x1 := _r(3168, 0, 0, 0).position.x
-	var y0 := _r(0, 572, 0, 0).position.y
-	var y1 := size.y - 8.0 * s
-	var lw := 0.0
-	for t in PAGE_TABS:
-		lw = maxf(lw, UiKit.BODY.get_string_size(PAGE_TABS[t][0], HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(fl))).x)
-	var tw := maxf(428.0 * s, lw + 64.0 * s)        # the 107 x 33 pt SECTION-TAB, wider where its words need it
-	var th := tw * 33.0 / 107.0
-	var tg := 24.0 * s
-	_tabs["PAGE-ACTIVE"] = Rect2(x0, y0, tw, th)
-	_tabs["PAGE-MAP"] = Rect2(x0 + tw + tg, y0, tw, th)
-	var sx := x0 + 2.0 * tw + tg + 32.0 * s
-	_sub_rect = Rect2(sx, y0, x1 - sx, th)
-	var cy := y0 + th + 24.0 * s
-	var gap := 24.0
-	kc = minf((x1 - x0) / (4.0 * 320.0 + 3.0 * gap), (y1 - cy) / (2.0 * 252.0 + gap))
-	var pitch_x := (x1 - x0 - 320.0 * kc) / 3.0       # the four columns spread over the whole skill area
-	var ids: Array = []
-	for cid in _skill_of:
-		var sid: String = _skill_of[cid]
-		if (sid in Rules.ACTIVE_SKILLS) == (page == "active"):
-			ids.append(cid)
-	for i in range(ids.size()):
-		var r := i / 4
-		var c := i % 4
-		_place[ids[i]] = Rect2(Vector2(x0 + c * pitch_x, cy + r * (252.0 + gap) * kc), Vector2(320.0, 252.0) * kc)
-
-
-func _sc(cid: String) -> float:
-	## The scale a control's elements draw at (a paged card: k; else the body's).
-	return kc if _place.has(cid) else s
-
-
-func _er(e: Dictionary) -> Rect2:
-	## An element's rect in this control: on its paged card when it has one, else where the delivery puts it.
-	var cid: String = _el_ctrl.get(e["id"], "")
-	if _place.has(cid):
-		var b: Array = _ctrl[cid]["bounds"]
-		var t: Rect2 = _place[cid]
-		return Rect2(t.position + (Vector2(e["x"], e["y"]) - Vector2(b[0], b[1])) * kc, Vector2(e["w"], e["h"]) * kc)
-	return _r(e["x"], e["y"], e["w"], e["h"])
-
-
-func _hidden(e: Dictionary) -> bool:
-	## Paged: the closed section's cards and the two section lines (the tabs say it).
-	if not paged:
-		return false
-	if e["id"] in ["e075", "e076", "e119", "e120"]:
-		return true
-	var cid: String = _el_ctrl.get(e["id"], "")
-	return _skill_of.has(cid) and not _place.has(cid)
-
-
-func _draw_tabs() -> void:
-	for t in _tabs:
-		var r: Rect2 = _tabs[t]
-		var st: String = _state.get(t, "NORMAL")
-		Kit45.draw_part(self, "SECTION-TAB", "107x33pt", st, r, r.size.x / 107.0)
-		var col := Kit45.ink_on("SECTION-TAB", "107x33pt", st, [])
-		Kit45.draw_text(self, m, PAGE_TABS[t][0], r.grow_individual(-12.0 * s, 0, -12.0 * s, 0), 40.0 * s, col, false, 1, 1)
-	Kit45.draw_text(self, m, SUBS[page], _sub_rect, 34.0 * s, Color("d9c0b3"), false, 0, 2)
+	return mx > 260.0 * s
 
 
 func _r(x: float, y: float, w: float, h: float) -> Rect2:
@@ -227,16 +137,11 @@ func _add_buttons(top_only: bool) -> void:
 	var ids: Array = _ctrl.keys()
 	if not top_only:
 		ids.append("ULT")
-	ids.append_array(_tabs.keys())
 	for id in ids:
-		if _tabs.has(id):
-			pass
-		elif top_only and id != "ULT" and _ctrl[id]["bounds"][1] >= BODY.position.y + TOP_ROW_H:
+		if top_only and id != "ULT" and _ctrl[id]["bounds"][1] >= BODY.position.y + TOP_ROW_H:
 			continue
 		if top_only and id == "ULT":
 			continue
-		if paged and _skill_of.has(id) and not _place.has(id):
-			continue                                 # paged: the closed section's cards
 		var b := Button.new()
 		b.flat = true
 		b.focus_mode = Control.FOCUS_NONE
@@ -314,9 +219,7 @@ func _draw() -> void:
 			continue
 		if e.get("visible_states") != null and st != "" and not (st in e["visible_states"]):
 			continue
-		if _hidden(e):
-			continue
-		var r := _er(e)
+		var r := _r(e["x"], e["y"], e["w"], e["h"])
 		if e["type"] == "image":
 			var file: String = e["file"]
 			if file.begins_with("HERO-") and file != "HERO-CABINET.png" and file != "HERO-TITLE-BAR.png" and file != "HERO-WELL.png":
@@ -353,8 +256,6 @@ func _draw() -> void:
 			_draw_text(e, st, bd, font_floor)
 	if tab == "skills":
 		_draw_extras(font_floor)
-	if paged:
-		_draw_tabs()
 
 
 const SEL45 := {"FACTION-TAB-SELECTED.png": "FACTION-TAB", "SECTION-TAB-SELECTED.png": "SECTION-TAB",
@@ -372,7 +273,7 @@ func _tall(cid: String) -> bool:
 	if fe.is_empty() or not nm.contains(" "):
 		return false
 	var fl := maxf(float(UiKit.px(m, 0.0)) if m != null else 0.0, 1.0)
-	return UiKit.BODY.get_string_size(nm, HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(fl))).x > (float(fe["w"]) - 24.0) * _sc(cid)
+	return UiKit.BODY.get_string_size(nm, HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(fl * lo))).x > _r(0, 0, float(fe["w"]) - 24.0, 0).size.x
 
 
 func _skill_label(cid: String) -> String:
@@ -398,7 +299,7 @@ func _skill_name(e: Dictionary, cid: String, st: String, bd: Dictionary) -> void
 	var fe := _face_of(cid)
 	if fe.is_empty():
 		return
-	var r := _er(fe)
+	var r := _r(fe["x"], fe["y"], fe["w"], fe["h"])
 	if _tall(cid):
 		var sz := Vector2(r.size.x, r.size.x * 36.0 / 86.0)
 		r = Rect2(Vector2(r.get_center().x - sz.x / 2.0, r.end.y - sz.y), sz)
@@ -407,9 +308,8 @@ func _skill_name(e: Dictionary, cid: String, st: String, bd: Dictionary) -> void
 		col = Color(bd["text_colors"][st])
 	if st == "SELECTED":
 		col = Kit45.INK_CREAM                          # 45B2: cream on the copper SELECTED face
-	var pad := 10.0 * _sc(cid)
-	Kit45.draw_text(self, m, _skill_label(cid), r.grow_individual(-pad, 0, -pad, 0),
-			float(e["font"]["size_px"]) * _sc(cid), col, false, 1, 2)   # never under the 12.5 pt floor (Daniele 11-18)
+	Kit45.draw_text(self, m, _skill_label(cid), r.grow_individual(-_r(0, 0, 10, 0).size.x, 0, -_r(0, 0, 10, 0).size.x, 0),
+			float(e["font"]["size_px"]) * s, col, false, 1, 2, lo)   # (16:9 only: down to 80 % of the floor, Daniele 11-18)
 
 
 func _draw_tall_face(face: Rect2, st: String) -> void:
@@ -429,7 +329,7 @@ func _draw_extras(font_floor: float) -> void:
 	var asc := (f.get_ascent(fs) - f.get_descent(fs)) / 2.0
 	var tag := str(Rules.FACTION_TAGLINES.get(army, "")).to_upper()
 	var tfit := Kit45.fit(m, tag, false, 30.0 * s, 640.0 * s)
-	if tag != "" and (paged or f.get_string_size(tag, HORIZONTAL_ALIGNMENT_LEFT, -1, tfit).x > 640.0 * s):
+	if tag != "" and f.get_string_size(tag, HORIZONTAL_ALIGNMENT_LEFT, -1, tfit).x > 640.0 * s:
 		tag = ""                                       # designer 11 FIX 2: a small screen has no room for it at the floor
 	if tag != "":
 		var tfs := tfit
@@ -455,7 +355,7 @@ func _draw_extras(font_floor: float) -> void:
 			q.x = maxf(q.x, p.x + f.get_string_size(k, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 16.0 * s + vw)   # FIX 2: never on its label
 			draw_string(f, Vector2(q.x - vw, q.y + asc), vt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, vc)
 			Kit45.audit_note(m, k + " " + vt, fs)
-	for sub in ([] if paged else [["Combat skills on every map", 608.0], ["Relay skills require a map with relays", 972.0]]):
+	for sub in [["Combat skills on every map", 608.0], ["Relay skills require a map with relays", 972.0]]:
 		var sfs := Kit45.fit(m, sub[0], false, 34.0 * s, 1080.0 * s)
 		var p2 := _r(1620.0, sub[1], 0, 0).position
 		draw_string(f, Vector2(p2.x, p2.y + (f.get_ascent(sfs) - f.get_descent(sfs)) / 2.0), sub[0], HORIZONTAL_ALIGNMENT_LEFT, -1, sfs, Color("d9c0b3"))
@@ -490,8 +390,8 @@ func _text_for(e: Dictionary) -> Array:
 		"e059":                                         # the remake: TRAIT / name, then the stats table (_draw_stats)
 			var full := "TRAIT  /  " + str(ftrait[0]).to_upper()
 			var fl := float(UiKit.px(m, 0.0)) if m != null else 0.0
-			if _font_of(e).get_string_size(full, HORIZONTAL_ALIGNMENT_LEFT, -1, maxi(1, roundi(maxf(48.0 * s, fl)))).x > _room(e) * s:
-				return [str(ftrait[0]).to_upper()]          # 12.5 pt floor (Daniele 11-18): the trait's name alone where both don't fit
+			if _font_of(e).get_string_size(full, HORIZONTAL_ALIGNMENT_LEFT, -1, maxi(1, roundi(maxf(48.0 * s, fl * lo)))).x > _room(e) * s:
+				return [str(ftrait[0]).to_upper()]          # the trait's name alone where both don't fit at the floor
 			return [full]
 		"e060" when _compact(): return [""]                 # a small screen (floor 12.5 pt): the trait name + the stats table only
 		"e061" when _compact(): return [""]
@@ -555,7 +455,7 @@ func _room(e: Dictionary) -> float:
 		"RESET-BUTTON": return 184.0
 	match e["id"]:
 		"e054", "e055": return 560.0
-		"e070": return 1100.0                        # (one line; the charge line moves right of it - _ult_end)
+		"e070": return 440.0
 		"e059": return 584.0                         # the hero cabinet's inner width
 		"e071": return 1000.0
 	return 600.0
@@ -573,15 +473,15 @@ func _draw_text(e: Dictionary, st: String, bd: Dictionary, font_floor: float) ->
 	var f := _font_of(e)
 	var fs := maxf(float(e["font"]["size_px"]) * s, font_floor)
 	var room := _room(e) * s
-	while fs > font_floor and f.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(fs))).x > room:
-		fs -= 0.5                                    # one line first, never under the 12.5 pt floor (Daniele 11-18)
+	while fs > font_floor * lo and f.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(fs))).x > room:
+		fs -= 0.5                                    # one line first (16:9 only: down to 80 % of the floor)
 	var two: Array = []
 	if f.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(fs))).x > room and t.contains(" "):
 		var w := t.split(" ")                        # still too wide (EMERGENCY EVAC): two lines in the face
 		var half := ceili(w.size() / 2.0)
 		two = [" ".join(w.slice(0, half)), " ".join(w.slice(half))]
 		fs = maxf(float(e["font"]["size_px"]) * s, font_floor)
-		while fs > font_floor and maxf(f.get_string_size(two[0], HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(fs))).x,
+		while fs > font_floor * lo and maxf(f.get_string_size(two[0], HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(fs))).x,
 				f.get_string_size(two[1], HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(fs))).x) > room:
 			fs -= 0.5
 	var ifs := maxi(1, int(round(fs)))
@@ -607,7 +507,7 @@ func _draw_text(e: Dictionary, st: String, bd: Dictionary, font_floor: float) ->
 	var sz := f.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, ifs)
 	var x := p.x - sz.x / 2.0 if str(e["anchor"]).begins_with("m") else p.x
 	if e["id"] == "e071":
-		x = maxf(x, _ult_end + 40.0 * s)             # the charge after the ultimate's name, whatever its length at the floor
+		x = maxf(x, _ult_end + 40.0 * s)             # the charge after the ultimate's name, whatever its length
 	elif e["id"] == "e070":
 		_ult_end = x + sz.x
 	var y := p.y + (asc - desc) / 2.0

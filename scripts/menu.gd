@@ -2570,9 +2570,7 @@ func show_armies(f: String = "", back: Callable = Callable()) -> void:
 	content.add_child(st)
 	_stage = st
 	var a43 := Armies43.new()
-	# (down to the nav bar: on a 16:9 phone the free band over it lets the paged SKILLS cards grow - Armies43.paged)
-	var a_h := maxf(290.0 * st.u, area.end.y - 4.0 * st.u - st.P(16, 40).y)
-	a43.setup(self, Rect2(st.P(16, 40), Vector2(780.0 * st.u, a_h)), _army, _army_tab, _armies43_tap)
+	a43.setup(self, Rect2(st.P(16, 40), Vector2(780, 290) * st.u), _army, _army_tab, _armies43_tap)
 	content.add_child(a43)
 	_a43 = a43
 	if _army_tab == "customize":
@@ -2600,10 +2598,6 @@ func _armies43_tap(cid: String) -> void:
 		show_armies("solar" if n == "aegis" else n)
 	elif cid == "SKILLS" or cid == "CUSTOMIZE":
 		_army_tab = cid.to_lower()
-		show_armies()
-	elif cid.begins_with("PAGE-"):                     # 16:9: the ACTIVE SKILL / MAP SKILL section tabs (Armies43.paged)
-		_skill_tip = ""
-		_skills_slot = "map" if cid == "PAGE-MAP" else "active"
 		show_armies()
 	elif cid == "RESET":
 		ArmyPresets.reset(_army)
