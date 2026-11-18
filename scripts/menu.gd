@@ -855,7 +855,7 @@ func _home_column(_area: Rect2, hero: String) -> void:
 	var ready_n := Progression.claimable()
 	var ct := "CHALLENGES" + (" · %d TO CLAIM" % ready_n if ready_n > 0 else "")
 	st.key("KEY-SMALL", 650, 266, 147, 27, ct, show_challenges, ready_n > 0)
-	var tl := "TRAINING  →" if TutorialDirector.ENABLED else "TRAINING · SOON"
+	var tl := "TRAINING  →" if TutorialDirector.ENABLED else "TRAINING"   # Daniele 11-18: "just make it grayed" (DISABLED)
 	st.key("KEY-SMALL", 650, 300, 147, 27, tl, show_tutorial, false, not TutorialDirector.ENABLED)
 
 

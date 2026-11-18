@@ -973,7 +973,8 @@ const SKILLS := {
 	# monsters and falls hit it like any line.
 	# OFFENSIVE (Daniele, 2026-10-07: "emergency evac isn't a defensive power but an offensive one so that the defender has
 	# his troops force evac"): cast on a rival's node, its owner's garrison is forced out toward THEIR nearest safe node.
-	"evac": {"name": "Emergency Evac", "slot": "active", "cd": 32.0, "target": "enemy_node",
+	"evac": {"name": "Evac",   # (shown name: Daniele 11-18 "change emergency evac to evac so it fits in 1 line")
+				 "slot": "active", "cd": 32.0, "target": "enemy_node",
 			"desc": "Two thirds of an enemy node's garrison is forced out at once and runs for their nearest safe node.",
 			"share": 0.65, "burst": 8.0},
 	# ---- ultimates (one per faction; "cd" is the natural charge time, see ULT_CHARGE_TIME)

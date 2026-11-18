@@ -281,7 +281,9 @@ class Score extends Control:
 			var out: bool = hud.sim.factions.has(seat) and hud._seat_out(seat)
 			var f: String = str(hud.sim.factions.get(seat, "vex"))
 			Hud43.draw_ai_disc(ci, f, c, rad, Color(1, 1, 1, 0.45) if out else Color.WHITE)
-			# (Daniele 11-18, via designer 11: no seat ring or square around an AI, anywhere)
+			# the seat ring, thin (Daniele 11-18: "less thick ... same size of other neon stripes we use"): 1.0 pt, as the 45B
+			# SELECTED rims (639 ref px = 270 pt)
+			ci.draw_arc(c, rad, 0.0, TAU, 40, Color(Rules.seat_color(seat), 0.35 if out else 1.0), maxf(1.0, 639.0 / 270.0 * s), true)
 
 
 static func draw_ai_disc(ci: CanvasItem, f: String, c: Vector2, r: float, mod := Color.WHITE, blink := false) -> void:
