@@ -49,7 +49,7 @@ func _ready() -> void:
 	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(panel)
 	var bg := TextureRect.new()
-	bg.texture = load("res://assets/art/ui-main.png")
+	bg.texture = load(Armies43.DIR + "ARMIES-PLATE.jpg")   # 45B: the room plate (the old sky-city art is gone)
 	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)

@@ -931,10 +931,4 @@ static func save_campaign_view(v: String) -> bool:
 static func hero_art(f: String) -> Texture2D:
 	## The faction's full scene (assets/art/<faction>.png; VEX's is the old MAIN art minus its baked-in buttons) -
 	## FrameCard's default art.
-	if f == "vex":
-		var art: Texture2D = load("res://assets/art/ui-main.png")
-		var clean := AtlasTexture.new()
-		clean.atlas = art
-		clean.region = Rect2(Vector2(art.get_size()) * Vector2(0.36, 0.0), Vector2(art.get_size()) * Vector2(0.64, 1.0))
-		return clean
-	return load("res://assets/art/%s.png" % f)
+	return load("res://assets/art/%s.png" % f)   # (45B: VEX's own scene too; the old MAIN art is gone)

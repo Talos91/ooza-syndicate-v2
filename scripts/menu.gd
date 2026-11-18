@@ -1,7 +1,7 @@
 class_name Menu
 extends CanvasLayer
 ## Alpha 11's front menu, ported page for page (Daniele: "I want the damn menu as for Alpha 11"):
-## the same backdrop art (assets/art/ui-main.png), neon-cut frames (neon_panel.gd), ui-kit buttons
+## the same backdrop art (the 43B room plate, ARMIES-PLATE), neon-cut frames (neon_panel.gd), ui-kit buttons
 ## per faction (ui_skin.gd), stepper strip, wordmark, Russo One headings, and the same coordinates
 ## - Alpha 11 laid out on a 1672x941 canvas, ours is 1280x720, so everything is scaled by K.
 ## MAIN -> 01 FACTION (portrait / stats + trait / abilities / faction tabs) -> 02 BATTLEFIELD
@@ -159,12 +159,8 @@ func setup(m: Node3D) -> void:
 	_den = MenuDen.new()                              # (behind the backdrop: it draws the TV's picture into the painting's hole)
 	add_child(_den)
 	_backdrop = TextureRect.new()                     # full-screen art behind the scaled page
-	var art: Texture2D = load("res://assets/art/ui-main.png")
-	var clean := AtlasTexture.new()                   # the art's right part: its left edge has Alpha 11's
-	clean.atlas = art                                 # buttons baked in, which peeked out on wide screens
-	clean.region = Rect2(Vector2(art.get_size()) * Vector2(0.36, 0.0), Vector2(art.get_size()) * Vector2(0.64, 1.0))
-	_backdrop.texture = clean
-	_backdrop_art = clean
+	_backdrop.texture = UiKit.tex(Armies43.DIR + "ARMIES-PLATE.jpg")   # 45B: the room plate (the old sky-city art is gone)
+	_backdrop_art = _backdrop.texture
 	_backdrop.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_backdrop.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	_backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -432,8 +428,6 @@ func portrait(f: String, pos: Vector2, dims: Vector2, neon := Color(0, 0, 0, 0))
 			(r.get_child(0) as TextureRect).modulate = Color(neon, 1.0)
 		content.add_child(r)
 		return r
-	if f == "vex":
-		return atlas_picture("res://assets/art/ui-faction.png", Rect2(0.02, 0.092, 0.333, 0.54), pos, dims)
 	return atlas_picture("res://assets/art/%s.png" % f, Rect2(0.43, 0.035, 0.54, 0.86), pos, dims)
 
 
