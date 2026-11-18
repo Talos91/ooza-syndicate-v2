@@ -20,6 +20,8 @@ var currency := "soft"
 var duration := 0.9                                # seconds of counting; the pop after it is 0.25 s
 var pt: Callable
 var sign := true                                   # false: a balance ("1 260 SCRAP"), not a gain
+var _chip_sb: StyleBox
+var _chip_icon: Texture2D
 const CHIP_W := 88.0
 const CHIP_H := 30.0
 var chip := false                                  # 40B2 M-J chip: an ivory plate, the icon well and a fixed 5-digit number box (top bar balances)
@@ -108,8 +110,11 @@ func _draw() -> void:
 	var h := _p(CHIP_H) if chip else _p(H)
 	var col: Color = COLOURS.get(currency, Color.WHITE)
 	if chip:                                          # the cream chip with its dark icon well (43B GEO-M-J), the 43B coin glyph
-		draw_style_box(MenuSkin.box(MenuSkin.tex("GEO-M-J"), Vector4(60, 0, 24, 0), Color.WHITE, Vector2(0, 0)), Rect2(Vector2.ZERO, size))
-		var g := MenuSkin.icon("CUR-2" if currency == "premium" else "CUR-1")
+		if _chip_sb == null:
+			_chip_sb = MenuSkin.box(MenuSkin.tex("GEO-M-J"), Vector4(60, 0, 24, 0), Color.WHITE, Vector2(0, 0))
+			_chip_icon = MenuSkin.icon("CUR-2" if currency == "premium" else "CUR-1")
+		draw_style_box(_chip_sb, Rect2(Vector2.ZERO, size))
+		var g := _chip_icon
 		var gs := h * 0.62 * (1.0 + sin(_pop * PI) * 0.18)
 		if g != null:
 			draw_texture_rect(g, Rect2(Vector2(h * 0.53, h * 0.5) - Vector2(gs, gs) * 0.5, Vector2(gs, gs)), false, col)

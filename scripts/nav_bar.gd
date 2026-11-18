@@ -47,7 +47,7 @@ func _build(f: String) -> void:
 	var longest := 0.0                               # every tab as wide as the longest label needs (phones grow the text)
 	for t in TABS:
 		longest = maxf(longest, UiKit.text_w(menu, t[1], 15, true))
-	var tw := minf(maxf(150.0, longest + 48.0), (w - 40.0) / TABS.size())
+	var tw := minf(maxf(150.0, longest + 48.0 + th * 0.66), (w - 40.0) / TABS.size())   # + the 43B glyph and its gap
 	var x0 := (w - tw * TABS.size()) / 2.0
 	for i in range(TABS.size()):
 		var id: String = TABS[i][0]
