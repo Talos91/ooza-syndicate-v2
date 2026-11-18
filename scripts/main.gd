@@ -580,6 +580,8 @@ func _start_map(path: String) -> void:
 	hud = Hud.new()
 	add_child(hud)
 	hud.setup(self)
+	if scenery and scenery.pit:
+		scenery.pit.build_mounts(hud)                 # ROUND 44 B4: the HUD sits on the painted mounts
 	if director:
 		_tutorial_setup()
 	_apply_quality()
@@ -1094,7 +1096,8 @@ func _fit_camera() -> void:
 		_base_pitch = cam_pitch                       # (a probe may have set it after _start_map)
 	cam_pitch = _base_pitch                           # the start view stays exactly as it was
 	_start_fit = _fit_nodes(sim.nodes)
-	_start_fit[1] *= MapCamera.zoom_for(str(map.get("code", "")))   # Daniele 2026-11-13: "zoom in a bit" (per map, phone_fit)
+	if not (scenery and scenery.pit):                 # ROUND 44 B4: the map fits the painted lake as it is (no per-map zoom past it)
+		_start_fit[1] *= MapCamera.zoom_for(str(map.get("code", "")))   # Daniele 2026-11-13: "zoom in a bit" (per map, phone_fit)
 	cam_target = _start_fit[0]
 	cam_dist = _start_fit[1]
 	if _fit_gone > 0 and scenario_focus == Vector3.INF:   # resized after a Last Stand zoom: keep the survivors framed
@@ -1169,6 +1172,10 @@ func _fit_nodes(nodes: Array) -> Array:
 	var bottom: float = vp.y - (hud.bottom_used() if use_hud else 8.0)
 	var right: float = vp.x - (hud.right_used() if use_hud else 8.0)   # PAUSE's column and the skill column (Alpha 24)
 	var free := Rect2(left, top, maxf(right - left, 100.0), maxf(bottom - top, 100.0))
+	if use_hud and scenery and scenery.pit:            # ROUND 44 B4: the map sits in the painted lake (clear of the HUD too)
+		var pr := scenery.pit.pit_rect(vp).intersection(free)
+		if pr.size.x > 100.0 and pr.size.y > 100.0:
+			free = pr
 	var pts := []
 	for n in nodes:
 		var p: Vector3 = n["pos"]
@@ -1968,6 +1975,8 @@ func _process(delta: float) -> void:
 	fx.sync(dt)
 	if world_layer:
 		world_layer.sync(dt)
+	if scenery and scenery.pit:
+		scenery.pit.sync()                            # ROUND 44 B4: the mounts follow the HUD
 	if _world_probe >= 0.0:
 		_world_probe_step()
 	if proto_view:

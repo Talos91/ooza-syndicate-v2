@@ -1,0 +1,148 @@
+{
+ "schema": "ooze-bg44b4-game-1",
+ "source": "44-background-B4",
+ "ref_pt": [
+  812,
+  375
+ ],
+ "px_per_pt": 2,
+ "elements": {
+  "crust": {
+   "file": "crust.png",
+   "pt": [
+    0,
+    0,
+    812,
+    375
+   ]
+  },
+  "rim": {
+   "file": "rim.png",
+   "pt": [
+    120.0,
+    61.5,
+    604.5,
+    304.0
+   ]
+  },
+  "goo_tile": {
+   "file": "goo_tile.png",
+   "period_pt": [
+    395,
+    258
+   ],
+   "anchor_pt": [
+    422.24,
+    213.54167
+   ]
+  },
+  "NEAR-L": {
+   "file": "near_l.png",
+   "pt": [
+    33.5,
+    60.25,
+    86.75,
+    254.5
+   ],
+   "anchor": "left-safe-edge"
+  },
+  "NEAR-R": {
+   "file": "near_r.png",
+   "pt": [
+    721.75,
+    60.25,
+    90.25,
+    254.5
+   ],
+   "anchor": "right-safe-edge"
+  },
+  "MOUNT-SCORE-LEDGE": {
+   "file": "mount_score_ledge.png",
+   "pt": [
+    291.25,
+    0.0,
+    262.0,
+    41.25
+   ],
+   "anchor": "score-box"
+  },
+  "MOUNT-UTILITY-SOUND": {
+   "file": "mount_utility_sound.png",
+   "pt": [
+    753.25,
+    9.5,
+    32.0,
+    32.0
+   ],
+   "anchor": "right-safe-edge"
+  },
+  "MOUNT-UTILITY-PAUSE": {
+   "file": "mount_utility_pause.png",
+   "pt": [
+    782.0,
+    9.5,
+    30.0,
+    32.0
+   ],
+   "anchor": "right-safe-edge"
+  },
+  "MOUNT-UTILITY-CHAT": {
+   "file": "mount_utility_chat.png",
+   "pt": [
+    724.5,
+    9.5,
+    32.25,
+    32.0
+   ],
+   "anchor": "right-safe-edge"
+  }
+ },
+ "tile_seam": {
+  "source_col0_eq_last": true,
+  "source_row0_eq_last": true,
+  "fix": "dropped last col + last row (1023x1023 period), wrap resample",
+  "derivative_wrap_step_col": 0.269,
+  "derivative_mean_step_col": 0.454,
+  "derivative_wrap_step_row": 0.287,
+  "derivative_mean_step_row": 0.592
+ },
+ "pit_stadium_pt": {
+  "center_pt": [
+   422.24,
+   213.54167
+  ],
+  "center_4x_px": [
+   1688.96,
+   854.16667
+  ],
+  "center_safe_pct": [
+   50.0,
+   56.94444
+  ],
+  "half_width_pt": 298.09333,
+  "half_width_4x_px": 1192.37333,
+  "end_radius_pt": 144.79167,
+  "end_radius_4x_px": 579.16667,
+  "half_straight_span_pt": 153.30167,
+  "left_end_center_pt": [
+   268.93833,
+   213.54167
+  ],
+  "right_end_center_pt": [
+   575.54167,
+   213.54167
+  ],
+  "end_radius_pct_safe_height": 38.61111,
+  "end_radius_pct_aperture_height": 50,
+  "far_wall_top_depth_pt": 11.45833,
+  "near_wall_visible": false,
+  "horizontal_3_slice_caps_pt": [
+   144.79167,
+   144.79167
+  ],
+  "horizontal_3_slice_caps_4x_px": [
+   579.16667,
+   579.16667
+  ]
+ }
+}

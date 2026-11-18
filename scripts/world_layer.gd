@@ -207,7 +207,7 @@ func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
 		Look.add_surround(self, minf(lo.y, 0.0))     # LAB LOOK TEST: the screen-pinned surround (null without --look=lab)
 	if floor_lab5 and not rv:
 		_lab_backdrop(_main)
-	if not "--floor-clear" in OS.get_cmdline_user_args() and not Look.lab:   # dev: --floor-clear = no floor fog sheet, no floor haze
+	if not "--floor-clear" in OS.get_cmdline_user_args() and not Look.lab and not PitBackdrop.on:   # ROUND 44 B4: the painted pit, no mist   # dev: --floor-clear = no floor fog sheet, no floor haze
 		_build_mist(centre, radius)
 	for n in sim.nodes:
 		_build_tube(n)
