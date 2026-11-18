@@ -1054,110 +1054,90 @@ COMING SOON", 260.0, 16.0, 40.0), Vector2(content.size.x - x - 260.0, by), Vecto
 
 static var _opt_tab := "display"                   # SETTINGS: the open tab (kept while the game runs)
 static var _opt_arg_read := false
-const OPT_TABS := [["display", "DISPLAY"], ["privacy", "PRIVACY"], ["debug", "TESTING"]]   # Daniele 2026-09-28: match options
+const OPT_TABS := [["display", "GAME"], ["audio", "AUDIO"], ["privacy", "PRIVACY"], ["debug", "TESTING"]]   # 45B: tabs, never a scroll
 # (Last Stand, enemy counts) live in SETUP, not here; the test tools sit apart in TESTING (id "debug"); PROGRESSION:
 # PRIVACY (Alpha 21) between them
 
 
 func show_options() -> void:
-	## SETTINGS (screen system 23; the top bar's gear): tabs of rows, each row its name, what it does and its choices
-	## (the current one lit, the words carrying the state). DISPLAY: GRAPHICS AUTO / LOW RES / FULL and FRAME RATE AUTO /
-	## 30 / 60 (Alpha 21 OPT-RENDER, perf_profile.gd, user://settings.cfg), DETAIL. TESTING (id "debug"): DEBUG TOOLS (the
-	## Debug button and live sliders in matches), the progression TEST SWITCH. Match options (LAST STAND, ENEMY COUNTS) are
-	## SETUP's (Daniele 2026-09-28: they make no sense here), TERRITORY the wardrobe's. The rows scroll
-	## (phones grow them to 44 pt). DISPLAY ends with an AUDIO group: SOUND ON / OFF and VOLUME (sfx.gd), MUSIC ON / OFF and
-## MUSIC VOLUME (music.gd), all live, then a small CREDITS line (the soundtrack's). TERRITORY lives
-	## in ARMIES > COSMETICS > CORE (0.19.2). DONE / BACK return to the page the gear was pressed on.
 	_last_show = show_options                  # a resize that changes the phone sizing rebuilds it (_fit)
-	if not _opt_arg_read:                              # UI: screenshots open a tab (--options-tab=display)
+	## SETTINGS = the remake (45B sizes.json SETTINGS): four SUB-TABs (GAME, AUDIO, PRIVACY, TESTING; Daniele 11-04: tabs,
+	## no scrolling), two HERO-CABINETs of rows (label + option keys, the picked one SELECTED; volumes = a bar in the seat
+	## colour with - / +), DONE. Every switch applies at once (no APPLY step: nothing waits to be saved).
+	if not _opt_arg_read:                              # UI: screenshots open a tab (--options-tab=audio)
 		_opt_arg_read = true
 		for arg in OS.get_cmdline_user_args():
 			if arg.begins_with("--options-tab="):
 				_opt_tab = arg.substr(14)
-	var tab := _meta_open("options", show_main)
+	_meta_open("options", show_main)
 	var back := func(): _meta_back("options", show_main)
-	var area := shell_open("OOZE / SETTINGS", tab, back, faction)
+	var st := _stage_page("OOZE / SETTINGS", "home", "SETTINGS", "GAME OPTIONS", back, faction)
 	_page = "options"
-	var x := shell_x()
-	var top := page_title(area, "SETTINGS", "TUNE YOUR EXPERIENCE.")
-	var cx := x
-	var chip_h := 0.0
-	for t in OPT_TABS:
-		var id: String = t[0]
-		var c := UiKit.chip(self, t[1], Vector2(cx, top), func():
+	if not OPT_TABS.any(func(t): return t[0] == _opt_tab):
+		_opt_tab = "display"
+	for i in range(4):
+		var id: String = OPT_TABS[i][0]
+		var b := st.key("SUB-TAB", 15 + 197 * i, 74, 191, 34, str(OPT_TABS[i][1]), func():
 			_opt_tab = id
-			show_options(), shell_f, _opt_tab == id)
-		cx += c.size.x + 8.0
-		chip_h = c.size.y
-	var bh := UiKit.tap_h(self, 56.0)
-	var fy := area.end.y - bh - 10.0
-	var dn := UiKit.btn(self, "DONE  →", Vector2(content.size.x - x - 220.0, fy), Vector2(220, 56), back, "primary", shell_f, 18)
-	var y0 := top + chip_h + 12.0
-	var col := _column(Vector2(x, y0), Vector2(content.size.x - x * 2.0, fy - 10.0 - y0))
-	(col["scroll"] as TouchScroll).pager_dock = Rect2(Vector2(x, fy), Vector2(dn.position.x - 12.0 - x, bh))   # ROUND 4: ‹ n / N › beside DONE
-	var w: float = col["w"]
-	var n0 := content.get_child_count()
-	var y := 0.0
+			show_options(), id == _opt_tab, false, "191x34pt")
+		b.size_pt = 13.0
+	st.piece("HERO-CABINET", 15, 114, 385, 180, "STATIC", "385x211pt")
+	st.piece("HERO-CABINET", 412, 114, 385, 180, "STATIC", "385x211pt")
+	var L := [29.0, 124.0]                            # [x, y] of the left cabinet's first row
+	var R := [426.0, 124.0]
+	_audio_readout = null
 	match _opt_tab:
-		"debug":
-			y += _opt_row(y, w, "DEBUG TOOLS", "The Debug button and live sliders in matches.",
-					[["ON", Rules.debug_tools, func(): Rules.debug_tools = true], ["OFF", not Rules.debug_tools, func(): Rules.debug_tools = false]])
-			y += _opt_row(y, w, "TEST SWITCH  ·  LOCKS", "OFF: everything unlocked (the testing default). ON: a preview of the game as players will see it once the locks go live - skills and looks earned or bought (until the page closes).",   # PROGRESSION
-					[["OFF", Progression.unlock_all, func(): Progression.unlock_all = true], ["ON", not Progression.unlock_all, func(): Progression.unlock_all = false]])
+		"audio":
+			_opt45(st, L, "Sound", [["ON", Sfx.sound_on(), func(): Sfx.set_on(true)], ["OFF", not Sfx.sound_on(), func(): Sfx.set_on(false)]])
+			_vol45(st, L, "Volume", Rules.SOUND_VOLUME_STEPS, Sfx.volume(), Sfx.volume_label(Sfx.volume()), func(v): Sfx.set_volume(v), not Sfx.sound_on())
+			_opt45(st, L, "Test", [["TEST SOUND", false, func(): AudioDiag.run_test(_audio_refresh)]], false, false)
+			var ro := AudioDiag.readout()
+			if ro != "":
+				_audio_readout = Label.new()                 # (AudioDiag refreshes it after a TEST SOUND)
+				_audio_readout.text = ro
+				_audio_readout.visible = false
+				st.add_child(_audio_readout)
+				st.txt(ro, L[0], L[1], 355, 30, 12.5, UiKit.MUTED, false, 0, 2)
+			_opt45(st, R, "Music", [["ON", Music.music_on(), func(): Music.set_on(true)], ["OFF", not Music.music_on(), func(): Music.set_on(false)]])
+			_vol45(st, R, "Menus", Rules.MUSIC_VOLUME_STEPS, Music.volume("menu"), Music.volume_label(Music.volume("menu"), "menu"),
+					func(v): Music.set_volume(v, "menu"), not Music.music_on())
+			_vol45(st, R, "Match", Rules.MUSIC_VOLUME_STEPS, Music.volume("match"), Music.volume_label(Music.volume("match"), "match"),
+					func(v): Music.set_volume(v, "match"), not Music.music_on())
+			st.txt(Rules.MUSIC_CREDIT, R[0], R[1], 355, 30, 12.5, UiKit.MUTED, false, 0, 2)
 		"privacy":
-			y = _privacy_rows_options(y, w)            # PROGRESSION (Alpha 21): SHARE PLAY & CRASH DATA + the PRIVACY page
-		_:                                            # DISPLAY
+			st.txt("SHARE PLAY & CRASH DATA", L[0], L[1], 355, 16, 12.5, Kit45.KICK, true)
+			st.txt("Gameplay and performance numbers and crash reports, tied only to your game account id. OFF: nothing leaves this device.",
+					L[0], L[1] + 18.0, 355, 62, 12.5, UiKit.MUTED, false, 0, 4)
+			L[1] += 84.0
+			_opt45(st, L, "Sharing", [["ON", Telemetry.sharing(), func(): _set_share(true)], ["OFF", not Telemetry.sharing(), func(): _set_share(false)]])
+			st.txt("WHAT THE GAME KEEPS", R[0], R[1], 355, 16, 12.5, Kit45.KICK, true)
+			st.key("KEY-SMALL", R[0], R[1] + 24.0, 155, 34, "PRIVACY  →", func(): show_privacy(show_options))
+			st.key("KEY-SMALL", R[0], R[1] + 66.0, 155, 34, "ACCOUNT  →", show_account)
+		"debug":
+			_opt45(st, L, "Debug tools", [["ON", Rules.debug_tools, func(): Rules.debug_tools = true], ["OFF", not Rules.debug_tools, func(): Rules.debug_tools = false]])
+			st.txt("The Debug button and live sliders in matches.", L[0], L[1], 355, 30, 12.5, UiKit.MUTED, false, 0, 2)
+			_opt45(st, R, "Locks", [["OFF", Progression.unlock_all, func(): Progression.unlock_all = true], ["ON", not Progression.unlock_all, func(): Progression.unlock_all = false]])
+			st.txt("OFF: everything unlocked (the testing default). ON: the game as players will see it.", R[0], R[1], 355, 46, 12.5, UiKit.MUTED, false, 0, 3)
+		_:                                            # GAME
 			var modes := []
 			for m in PerfProfile.MODES:
 				var md: String = m
-				modes.append([("AUTO (%s)" % ("PHONE" if PerfProfile.is_phone() else "FULL")) if md == "auto" else str(PerfProfile.MODE_NAMES[md]),
-						PerfProfile.mode() == md, func(): PerfProfile.set_mode(md)])
-			y += _opt_row(y, w, "GRAPHICS", "AUTO: PHONE on phones and tablets, FULL on computers. LOW RES: 30 fps, no glow or shadows, fewer effects and lighter models - only for weak phones. From the next match.", modes)
+				modes.append([str(PerfProfile.MODE_NAMES[md]), PerfProfile.mode() == md, func(): PerfProfile.set_mode(md)])
+			_opt45(st, L, "Graphics", modes)
 			var low := PerfProfile.level() == "low"
 			var fps := []
 			for fm in PerfProfile.FPS_MODES:
 				var fv: String = fm
-				fps.append([("AUTO (%d)" % int(PerfProfile.PROFILES[PerfProfile.level()]["fps"])) if fv == "auto" else fv,
-						PerfProfile.fps_mode() == fv, func(): PerfProfile.set_fps(fv)])
-			y += _opt_row(y, w, "FRAME RATE", PerfProfile.fps_label() + ("  -  LOW RES stays at 30." if low else "  -  the cap while a match runs."), fps, low)
-			y += _opt_row(y, w, "DETAIL", "LOW trims the river patches and vat residents - use it if the game makes your machine run hot.",
-					[["FULL", not Rules.low_detail, func(): Rules.low_detail = false], ["LOW", Rules.low_detail, func(): Rules.low_detail = true]])
-			y += _opt_row(y, w, "COLOUR-BLIND", "Player colours anyone can tell apart, with red-green or blue-yellow colour blindness. It picks every seat's colour in the match (your screen only). From the next match.",
-					[["OFF", not Rules.colour_blind(), func(): Rules.set_colour_blind(false)], ["ON", Rules.colour_blind(), func(): Rules.set_colour_blind(true)]])
-			# SOUND: the AUDIO group (sfx.gd, user://settings.cfg [audio]) - both heard at once, the tap itself included
-			y += _say("AUDIO", Vector2(0, y + 18.0), 12, UiKit.accent(shell_f), 0.0, true) + 18.0
-			y += _opt_row(y, w, "SOUND", "The match and the menus. OFF: silent (the VOLUME is kept for ON).",
-					[["ON", Sfx.sound_on(), func(): Sfx.set_on(true)], ["OFF", not Sfx.sound_on(), func(): Sfx.set_on(false)]])
-			var vols := []
-			for v in Rules.SOUND_VOLUME_STEPS:
-				var pct: int = v
-				vols.append([Sfx.volume_label(pct), Sfx.volume() == pct, func(): Sfx.set_volume(pct)])
-			y += _opt_row(y, w, "VOLUME", "How loud the sounds are - heard at once.", vols, not Sfx.sound_on())
-			y += _opt_row(y, w, "MUSIC", "The soundtrack, in the menus and the match. OFF: no music (the MUSIC VOLUME is kept for ON).",
-					[["ON", Music.music_on(), func(): Music.set_on(true)], ["OFF", not Music.music_on(), func(): Music.set_on(false)]])
-			var mvols_menu := []
-			for v in Rules.MUSIC_VOLUME_STEPS:
-				var pct: int = v
-				mvols_menu.append([Music.volume_label(pct, "menu"), Music.volume("menu") == pct, func(): Music.set_volume(pct, "menu")])
-			y += _opt_row(y, w, "MENU MUSIC", "How loud the music is in the menus - heard at once.", mvols_menu, not Music.music_on())
-			var mvols_match := []
-			for v in Rules.MUSIC_VOLUME_STEPS:
-				var pct: int = v
-				mvols_match.append([Music.volume_label(pct, "match"), Music.volume("match") == pct, func(): Music.set_volume(pct, "match")])
-			y += _opt_row(y, w, "MATCH MUSIC", "How loud the music is in a match, apart from the sounds - heard at once.", mvols_match, not Music.music_on())
-			# AUDIO DIAG (audio_diag.gd): three sounds ~0.6 s apart, then the readout under it (web) refreshes in place
-			y += _opt_row(y, w, "TEST SOUND", "Plays 3 sounds about half a second apart: 1 the game's capture chime, 2 a plain beep through the game's audio, 3 a plain beep on a fresh audio channel. Tell us which ones you hear.",
-					[["TEST", false, func(): AudioDiag.run_test(_audio_refresh)]], false, false)
-			var ro := AudioDiag.readout()
-			_audio_readout = null
-			if ro != "":
-				var n_ro := content.get_child_count()
-				y += _say(ro, Vector2(0, y + 10.0), 11, UiKit.MUTED, w) + UiKit.line_h(self, 11) + 14.0   # a spare line: the refresh may wrap longer
-				_audio_readout = content.get_child(n_ro) as Label
-			# MUSIC: the soundtrack's credit (the game has no credits page: a small CREDITS line under AUDIO)
-			y += _say("CREDITS", Vector2(0, y + 18.0), 12, UiKit.accent(shell_f), 0.0, true) + 18.0
-			y += _say(Rules.MUSIC_CREDIT, Vector2(0, y + 8.0), 13, UiKit.MUTED, w) + 16.0
-	_column_end(col, n0, y, true)
+				fps.append(["AUTO" if fv == "auto" else fv, PerfProfile.fps_mode() == fv, func(): PerfProfile.set_fps(fv)])
+			_opt45(st, L, "Frame rate", fps, low)
+			st.txt(("AUTO = %s on this device. " % ("PHONE" if PerfProfile.is_phone() else "FULL")) + PerfProfile.fps_label(), L[0], L[1], 355, 46, 12.5, UiKit.MUTED, false, 0, 3)
+			_opt45(st, R, "Detail", [["FULL", not Rules.low_detail, func(): Rules.low_detail = false], ["LOW", Rules.low_detail, func(): Rules.low_detail = true]])
+			_opt45(st, R, "Colour-blind", [["OFF", not Rules.colour_blind(), func(): Rules.set_colour_blind(false)], ["ON", Rules.colour_blind(), func(): Rules.set_colour_blind(true)]])
+			st.txt("LOW detail trims the river patches and vat residents. Colour-blind picks seat colours anyone can tell apart.", R[0], R[1], 355, 46, 12.5, UiKit.MUTED, false, 0, 3)
+	st.txt(Rules.version_label() + " · settings apply at once", 15, 307, 560, 16, 12.5, UiKit.MUTED)
+	var dn := st.key("PRIMARY-WIDE", 610, 299, 187, 33, "DONE  →", back, true)
+	dn.size_pt = 14.0
+	shell_raise()
 
 
 var _audio_readout: Label = null                  # AUDIO DIAG: SETTINGS' audio readout (refreshed after a TEST SOUND)
@@ -1166,35 +1146,6 @@ var _audio_readout: Label = null                  # AUDIO DIAG: SETTINGS' audio 
 func _audio_refresh() -> void:
 	if is_instance_valid(_audio_readout):
 		_audio_readout.text = AudioDiag.readout()
-
-
-func _opt_row(y: float, w: float, title_text: String, desc: String, opts: Array, off := false, redraw := true) -> float:
-	## A SETTINGS row: its name over what it does (left), its choices [text, current, apply] as chips at the right, the
-	## current one lit; `off` greys them out. A pick applies and redraws the page (not with `redraw` false: AUDIO DIAG's
-	## TEST SOUND, whose readout refreshes in place). Returns the row's height.
-	var ch := UiKit.tap_h(self, 40.0)
-	var widths := []
-	var cw := 0.0
-	for o in opts:
-		var bw := maxf(maxf(64.0, UiKit.tap_h(self, 46.0)), UiKit.text_w(self, str(o[0]), 14, true) + 32.0)   # >= 44 pt wide too
-		widths.append(bw)
-		cw += bw + 8.0
-	var tw := maxf(160.0, w - cw - 16.0)
-	var l1 := UiKit.line_h(self, 16, true)
-	var h := maxf(ch, l1 + 4.0 + UiKit.text_h(self, desc, 13, tw)) + 24.0
-	_say(title_text, Vector2(0, y + 12.0), 16, UiKit.INK, 0.0, true)
-	_say(desc, Vector2(0, y + 16.0 + l1), 13, UiKit.MUTED, tw)
-	var bx := w - cw + 8.0
-	for i in range(opts.size()):
-		var apply: Callable = opts[i][2]
-		var b := UiKit.btn(self, str(opts[i][0]), Vector2(bx, y + (h - ch) / 2.0), Vector2(widths[i], 40), func():
-			apply.call()
-			if redraw:
-				show_options(), "selected" if opts[i][1] else "secondary", shell_f, 14)
-		b.disabled = off
-		bx += float(widths[i]) + 8.0
-	content.add_child(UiKit.rect(Vector2(0, y + h - 1.0), Vector2(w, 1.0), Color(UiKit.FRAME, 0.7)))
-	return h
 
 
 func show_factions() -> void:
@@ -1857,17 +1808,6 @@ func show_account() -> void:
 
 
 # ------------------------------------------------------------------ PROGRESSION: PRIVACY (Alpha 21)
-func _privacy_rows_options(y: float, w: float) -> float:
-	## SETTINGS > PRIVACY (TELEMETRY-PRIVACY-DESIGN §6): the switch as a settings row, then the PRIVACY page. UiKit canvas
-	## units, rows at (0, y) in the tab's column; returns the next row's y.
-	y += _opt_row(y, w, "SHARE PLAY & CRASH DATA",
-			"Gameplay and performance numbers and crash reports, tied only to your game account id. OFF: nothing leaves this device.",
-			[["ON", Telemetry.sharing(), func(): _set_share(true)], ["OFF", not Telemetry.sharing(), func(): _set_share(false)]])
-	var pw := UiKit.text_w(self, "PRIVACY  →", 15, true) + 44.0
-	var b := UiKit.btn(self, "PRIVACY  →", Vector2(0, y + 12.0), Vector2(pw, 44), func(): show_privacy(show_options),
-			"secondary", shell_f, 15)
-	return y + 12.0 + b.size.y + 12.0
-
 
 func _share_label() -> String:
 	return "SHARE PLAY & CRASH DATA: " + ("ON" if Telemetry.sharing() else "OFF")
@@ -5610,3 +5550,48 @@ func show_join_demo() -> void:
 	_join_open = true
 	_code_value = "TS"
 	show_main()
+
+
+
+func _opt45(st: Kit45.Stage, at: Array, label: String, opts: Array, off := false, redraw := true) -> void:
+	## A settings row at at = [x, y] (advanced by 41 pt): the label, then the option keys (KEY-SMALL, the picked one SELECTED).
+	var x: float = at[0]
+	var y: float = at[1]
+	st.txt(label, x, y + 9, 96, 16, 12.5, UiKit.INK, true)
+	var room := 355.0 - 100.0
+	var gap := 6.0
+	var kw := minf(76.0, (room - gap * (opts.size() - 1)) / opts.size())
+	if opts.size() == 1:
+		kw = 155.0
+	var kx := x + 100.0
+	for o in opts:
+		var apply: Callable = o[2]
+		var b := st.key("KEY-SMALL", kx, y, kw, 34, str(o[0]), func():
+			apply.call()
+			if redraw:
+				show_options(), bool(o[1]), off)
+		b.size_pt = 12.5
+		kx += kw + gap
+	at[1] = y + 41.0
+
+
+
+func _vol45(st: Kit45.Stage, at: Array, label: String, steps: Array, now: int, shown: String, set_v: Callable, off := false) -> void:
+	## A volume row: the label, - , the bar (XP-BAR, seat colour) with its value, + ; the steps of Rules.
+	var x: float = at[0]
+	var y: float = at[1]
+	st.txt(label, x, y + 9, 96, 16, 12.5, UiKit.INK, true)
+	var i := steps.find(now)
+	var mb := st.key("KEY-SMALL", x + 100, y, 36, 34, "−", func():
+		set_v.call(int(steps[maxi(0, i - 1)]))
+		show_options(), false, off or i <= 0)
+	mb.size_pt = 16.0
+	var bar := st.piece("XP-BAR", x + 142, y + 13, 120, 8)
+	bar.fill = float(i + 1) / float(steps.size()) if not off else 0.0
+	bar.tints = {"fill": Kit45.seat()}
+	st.txt(shown, x + 266, y + 9, 46, 16, 12.5, UiKit.INK if not off else UiKit.MUTED, true, 1)
+	var pb := st.key("KEY-SMALL", x + 316, y, 36, 34, "+", func():
+		set_v.call(int(steps[mini(steps.size() - 1, i + 1)]))
+		show_options(), false, off or i >= steps.size() - 1)
+	pb.size_pt = 16.0
+	at[1] = y + 41.0
