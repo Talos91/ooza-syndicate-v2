@@ -77,6 +77,9 @@ var _frames := 0
 
 
 func _process(_dt: float) -> void:
+	var hud = main.get("hud")                        # round 2 (Daniele 11-21): no garrison / unit-count plates on the nodes
+	if hud != null and hud.get("badge_layer") != null and hud.badge_layer.visible:   # (the HUD is built after apply())
+		hud.badge_layer.visible = false
 	if _shot_dir == "":
 		return
 	_frames += 1

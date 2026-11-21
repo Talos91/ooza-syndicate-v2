@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://br3gfxxb57vbx"
-path="res://.godot/imported/g05_pit_v4_bridge8_tread_deck_slabs.jpg-762d19e8a14523b531765806ff91f063.ctex"
+uid="uid://c6l84svscowee"
+path="res://.godot/imported/g05_pit_v4_bridge_tread_dark_x0.jpg-bfd302c259577f8f0f3858f7aec06be9.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "8865f1b414385f5b2a8b69a98794885b"
+"md5": "a55623081a40eef3146e8dc20751368e"
 }
 
 [deps]
 
-source_file="res://assets/demo3/g05_pit_v4_bridge8_tread_deck_slabs.jpg"
-dest_files=["res://.godot/imported/g05_pit_v4_bridge8_tread_deck_slabs.jpg-762d19e8a14523b531765806ff91f063.ctex"]
+source_file="res://assets/demo3/g05_pit_v4_bridge_tread_dark_x0.jpg"
+dest_files=["res://.godot/imported/g05_pit_v4_bridge_tread_dark_x0.jpg-bfd302c259577f8f0f3858f7aec06be9.ctex"]
 
 [params]
 
