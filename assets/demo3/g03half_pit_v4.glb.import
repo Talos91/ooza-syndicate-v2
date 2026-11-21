@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://raohnum0s8m4"
-path="res://.godot/imported/g05_pit_v4.glb-02cd51c3ef6325557a8d11f05184e99a.scn"
+uid="uid://8ofuw52bels6"
+path="res://.godot/imported/g03half_pit_v4.glb-045d63076fb17ddaed56d68445df7a1d.scn"
 
 [deps]
 
-source_file="res://assets/demo3/g05_pit_v4.glb"
-dest_files=["res://.godot/imported/g05_pit_v4.glb-02cd51c3ef6325557a8d11f05184e99a.scn"]
+source_file="res://assets/demo3/g03half_pit_v4.glb"
+dest_files=["res://.godot/imported/g03half_pit_v4.glb-045d63076fb17ddaed56d68445df7a1d.scn"]
 
 [params]
 

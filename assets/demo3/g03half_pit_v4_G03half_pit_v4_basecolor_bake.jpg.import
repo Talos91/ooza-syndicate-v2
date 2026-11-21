@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://df70ot1dah387"
-path="res://.godot/imported/g05_pit_v4_texture_0_metallic_roughness_17.jpg-6c16d6b69816bc8bf90c65f8699b0695.ctex"
+uid="uid://b2rw8pse6mv07"
+path="res://.godot/imported/g03half_pit_v4_G03half_pit_v4_basecolor_bake.jpg-63ce28274025c079dd524ceddd689c31.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "291f77b3cf154c2dcb7622db11fea6f0"
+"md5": "de485ddb5fa0c082fbe90fcd87ff94b3"
 }
 
 [deps]
 
-source_file="res://assets/demo3/g05_pit_v4_texture_0_metallic_roughness_17.jpg"
-dest_files=["res://.godot/imported/g05_pit_v4_texture_0_metallic_roughness_17.jpg-6c16d6b69816bc8bf90c65f8699b0695.ctex"]
+source_file="res://assets/demo3/g03half_pit_v4_G03half_pit_v4_basecolor_bake.jpg"
+dest_files=["res://.godot/imported/g03half_pit_v4_G03half_pit_v4_basecolor_bake.jpg-63ce28274025c079dd524ceddd689c31.ctex"]
 
 [params]
 
@@ -39,5 +39,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=1024
+process/size_limit=2048
 detect_3d/compress_to=1

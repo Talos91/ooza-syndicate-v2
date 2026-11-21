@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://blabyu6akjy1g"
-path="res://.godot/imported/g05_pit_v4_rim2_normal.jpg-617c0824c601476e43440a6571a17b35.ctex"
+uid="uid://pik4hqt22g2p"
+path="res://.godot/imported/g03half_pit_v4_leg_basecolor_gunmetal.jpg-9088dbfb26356d7e164e20d1befc8efc.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "d87190462b26db5519b38e7a7a7d24fb"
+"md5": "9cef69af5fba85eb108bf62ac4abd6fb"
 }
 
 [deps]
 
-source_file="res://assets/demo3/g05_pit_v4_rim2_normal.jpg"
-dest_files=["res://.godot/imported/g05_pit_v4_rim2_normal.jpg-617c0824c601476e43440a6571a17b35.ctex"]
+source_file="res://assets/demo3/g03half_pit_v4_leg_basecolor_gunmetal.jpg"
+dest_files=["res://.godot/imported/g03half_pit_v4_leg_basecolor_gunmetal.jpg-9088dbfb26356d7e164e20d1befc8efc.ctex"]
 
 [params]
 

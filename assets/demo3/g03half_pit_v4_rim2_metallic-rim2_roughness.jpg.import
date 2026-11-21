@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://boru6e1mx0ao7"
-path="res://.godot/imported/g05_pit_v4_texture_0.jpg-c368d79e02e04702d878ca09e4e1ac97.ctex"
+uid="uid://b7dakdwhswo3j"
+path="res://.godot/imported/g03half_pit_v4_rim2_metallic-rim2_roughness.jpg-7d8f0a6d82e1bfb2a86068daaa4dd525.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "8a50bf8ebc6b1038f8b828d3e147a82f"
+"md5": "11b89d22c5a925fddc9c7f06981c020f"
 }
 
 [deps]
 
-source_file="res://assets/demo3/g05_pit_v4_texture_0.jpg"
-dest_files=["res://.godot/imported/g05_pit_v4_texture_0.jpg-c368d79e02e04702d878ca09e4e1ac97.ctex"]
+source_file="res://assets/demo3/g03half_pit_v4_rim2_metallic-rim2_roughness.jpg"
+dest_files=["res://.godot/imported/g03half_pit_v4_rim2_metallic-rim2_roughness.jpg-7d8f0a6d82e1bfb2a86068daaa4dd525.ctex"]
 
 [params]
 

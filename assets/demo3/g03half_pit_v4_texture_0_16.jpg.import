@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cn0bpy43l6u0i"
-path="res://.godot/imported/g05_pit_v4_column_basecolor_gunmetal.jpg-2b203b6389bc04bcb918f413e869ed50.ctex"
+uid="uid://brlydamigexys"
+path="res://.godot/imported/g03half_pit_v4_texture_0_16.jpg-8c8779ed2c6794af6945f58d23c31c34.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "13c62a7b14a8a466911559e6ac89b366"
+"md5": "54a3f8e21f3a800fbae14a5a20338066"
 }
 
 [deps]
 
-source_file="res://assets/demo3/g05_pit_v4_column_basecolor_gunmetal.jpg"
-dest_files=["res://.godot/imported/g05_pit_v4_column_basecolor_gunmetal.jpg-2b203b6389bc04bcb918f413e869ed50.ctex"]
+source_file="res://assets/demo3/g03half_pit_v4_texture_0_16.jpg"
+dest_files=["res://.godot/imported/g03half_pit_v4_texture_0_16.jpg-8c8779ed2c6794af6945f58d23c31c34.ctex"]
 
 [params]
 

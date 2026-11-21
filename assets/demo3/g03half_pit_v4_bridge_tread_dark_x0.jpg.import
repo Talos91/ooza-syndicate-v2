@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c512ot63nobbi"
-path="res://.godot/imported/g05_pit_v4_leg_basecolor_gunmetal.jpg-88d34a02db85c49afe50aab12c90e1f4.ctex"
+uid="uid://btml5cqcpwau"
+path="res://.godot/imported/g03half_pit_v4_bridge_tread_dark_x0.jpg-a96fdc00b4c203d6af7212a0bd06fa7e.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "9cef69af5fba85eb108bf62ac4abd6fb"
+"md5": "a55623081a40eef3146e8dc20751368e"
 }
 
 [deps]
 
-source_file="res://assets/demo3/g05_pit_v4_leg_basecolor_gunmetal.jpg"
-dest_files=["res://.godot/imported/g05_pit_v4_leg_basecolor_gunmetal.jpg-88d34a02db85c49afe50aab12c90e1f4.ctex"]
+source_file="res://assets/demo3/g03half_pit_v4_bridge_tread_dark_x0.jpg"
+dest_files=["res://.godot/imported/g03half_pit_v4_bridge_tread_dark_x0.jpg-a96fdc00b4c203d6af7212a0bd06fa7e.ctex"]
 
 [params]
 

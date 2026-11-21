@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bukwk3sitjet8"
-path="res://.godot/imported/g05_pit_v4_bridge8_belly_from_underside.jpg-987f7c18924be037ca4516f6c8b1632b.ctex"
+uid="uid://ta26w8q3xctt"
+path="res://.godot/imported/g03half_pit_v4_normal_15.jpg-6f5c9ab9d9086c5625bc7238e9a28eb6.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "be0b9f8146ddaa88dc997a1e1469d6aa"
+"md5": "040517124f03c5636de7ac318beda236"
 }
 
 [deps]
 
-source_file="res://assets/demo3/g05_pit_v4_bridge8_belly_from_underside.jpg"
-dest_files=["res://.godot/imported/g05_pit_v4_bridge8_belly_from_underside.jpg-987f7c18924be037ca4516f6c8b1632b.ctex"]
+source_file="res://assets/demo3/g03half_pit_v4_normal_15.jpg"
+dest_files=["res://.godot/imported/g03half_pit_v4_normal_15.jpg-6f5c9ab9d9086c5625bc7238e9a28eb6.ctex"]
 
 [params]
 

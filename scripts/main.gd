@@ -309,7 +309,7 @@ func _ready() -> void:
 		elif arg.begins_with("--end-shot="):          # UI: screenshot an in-match screen (_end_shot)
 			end_shot = arg.substr(11)
 			map_explicit = true
-	if Demo3.on():                                     # DEMO 3 (throwaway): straight into G-05 with the pit v4 scene
+	if Demo3.on():                                     # DEMO 3 (throwaway): straight into G-03 half-bridge with the pit v4 scene
 		map_path = Demo3.MAP
 		map_explicit = true
 	MapPool.phone = MapPool.phone_screen(mobile)       # Alpha 18: phones get the phone-fit maps only
@@ -399,6 +399,8 @@ func _start_map(path: String) -> void:
 	map_path = path
 	last_map_path = path                               # MAIN MENU remembers it (0.19.0)
 	map = MapBuilder.load_map(path)
+	if Demo3.on() and path == Demo3.MAP:               # DEMO 3 round 3: G-03 on the half-bridge layout
+		Demo3.patch_map(map)
 	LookTheme.pick(str(map.get("code", "")), mission == null)   # THEMES / SETTING PICK: the match's setting before the world is built
 	_lm("map_json")
 	if not pitch_forced:                               # Alpha 18: each map's own camera angle (phone-fit probe)

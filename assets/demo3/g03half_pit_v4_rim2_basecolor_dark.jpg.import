@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://k8fcl3e43ski"
-path="res://.godot/imported/g05_pit_v4_bolt_from_body.jpg-4aa669f0c600950755d5c539dd234abb.ctex"
+uid="uid://dduv7sf8gjaa2"
+path="res://.godot/imported/g03half_pit_v4_rim2_basecolor_dark.jpg-95ce1fd04638f59683849749fc6d051e.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "50eeb755cf87b0a2718766c86dbda5b1"
+"md5": "cb600517f30d57f0148b4857798425c9"
 }
 
 [deps]
 
-source_file="res://assets/demo3/g05_pit_v4_bolt_from_body.jpg"
-dest_files=["res://.godot/imported/g05_pit_v4_bolt_from_body.jpg-4aa669f0c600950755d5c539dd234abb.ctex"]
+source_file="res://assets/demo3/g03half_pit_v4_rim2_basecolor_dark.jpg"
+dest_files=["res://.godot/imported/g03half_pit_v4_rim2_basecolor_dark.jpg-95ce1fd04638f59683849749fc6d051e.ctex"]
 
 [params]
 
