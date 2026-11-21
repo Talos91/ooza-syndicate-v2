@@ -12,7 +12,7 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.25.1"   # STAGING 0.25.1: 45B menus (16:9 SKILLS) + AI reactions (17 x 5 AIs) + B4 flat background + static size-D drill node (2026-11-18); STAGING 0.25.0: copper punk menus + HUD zones (on-board notifications, AI moods on the AI screens) + map pass (17/19 maps refit to the pit) + max 4 seats (2026-11-18); STAGING 0.24.6.1: AI screens centred in the glass, sized by the largest; STAGING 0.24.6: five new ooze models + ooze heroes in unit pictures + AI screens in the new frame + VEX neon fix (2026-11-17); STAGING 0.24.5.1 hotfix: M-15 / N-06 offered for 2v2 + FFA (MapPool.MULTI_FILL); STAGING 0.24.5: map pool G (19 shrunk maps), readability D, demolish tap, new menus, HUD 40B6 + 40B5 skill keys (2026-11-15)
+const VERSION := "0.25.1-demo3-pit4"   # DEMO 3 (throwaway, branch demo3-pit-v4): G-05 + pit v4 GLB at phone size; STAGING 0.25.1: 45B menus (16:9 SKILLS) + AI reactions (17 x 5 AIs) + B4 flat background + static size-D drill node (2026-11-18); STAGING 0.25.0: copper punk menus + HUD zones (on-board notifications, AI moods on the AI screens) + map pass (17/19 maps refit to the pit) + max 4 seats (2026-11-18); STAGING 0.24.6.1: AI screens centred in the glass, sized by the largest; STAGING 0.24.6: five new ooze models + ooze heroes in unit pictures + AI screens in the new frame + VEX neon fix (2026-11-17); STAGING 0.24.5.1 hotfix: M-15 / N-06 offered for 2v2 + FFA (MapPool.MULTI_FILL); STAGING 0.24.5: map pool G (19 shrunk maps), readability D, demolish tap, new menus, HUD 40B6 + 40B5 skill keys (2026-11-15)
 const WORLD_LAB_FLOOR := true   # the demo's lab5 floor on every map (the fog / tube work was tuned on it); was Rules.demo only
 const LOOK_LAB2 := true   # the lab2 world look (cream decks, owner rim band, lab floor + surround) is the default (Daniele 2026-11-12: "the new status quo"); dev --look-old = the 0.24.1 look, --look=lab = test v1
 const HUD_LAB := true    # hud-lab (2026-11-13): the round-29/30 lab HUD pack (HudLab) is THE in-match HUD; dev --hud-old = the pre-lab HUD
@@ -186,7 +186,7 @@ static var debug_tools: bool = false
 # I can test fast"): GAME SPEED and MY PRODUCTION in the Debug panel, plus refill / +100 / Last Stand now. On only in a
 # proto build (VERSION "...-proto<n>"), so the real game never reaches it; offline matches only (online the host's sim
 # must stay in sync). The panel sets the two values below; Sim.debug_prod holds the production multiplier per seat.
-static var proto_debug: bool = VERSION.contains("-proto") or VERSION.contains("-demo")   # the demo is a test line too
+static var proto_debug: bool = (VERSION.contains("-proto") or VERSION.contains("-demo")) and not VERSION.contains("-demo3")   # (demo3: the staging HUD, no Debug button) the demo is a test line too
 # DEMO BUILD (Daniele 2026-11-07: "put somewhere else where there's just a playable demo of this"): VERSION "...-demo<n>" =
 # the picker offers MapPool.DEMO only (R-01 STRAIT) and the world layer starts with the lab picture floor (no URL flags).
 static var demo: bool = VERSION.contains("-demo")

@@ -309,6 +309,9 @@ func _ready() -> void:
 		elif arg.begins_with("--end-shot="):          # UI: screenshot an in-match screen (_end_shot)
 			end_shot = arg.substr(11)
 			map_explicit = true
+	if Demo3.on():                                     # DEMO 3 (throwaway): straight into G-05 with the pit v4 scene
+		map_path = Demo3.MAP
+		map_explicit = true
 	MapPool.phone = MapPool.phone_screen(mobile)       # Alpha 18: phones get the phone-fit maps only
 	_start_telemetry()                                 # PROGRESSION (Alpha 21): consent, crash hooks, the privacy notice
 	if window_size != Vector2i.ZERO:
@@ -523,6 +526,8 @@ func _start_map(path: String) -> void:
 	skill_fx = SkillFx.new()
 	add_child(skill_fx)
 	skill_fx.setup(sim, vis, HUMAN)
+	if Demo3.on():                                     # DEMO 3: the designer's GLB replaces platforms / bridges / background
+		Demo3.apply(self)
 	drag_line = MeshInstance3D.new()
 	drag_line.mesh = drag_mesh
 	drag_line.visible = false                       # ui-node: the HUD overlay draws the send ribbon / rings (Neon Noir)
@@ -1816,7 +1821,7 @@ func _process(delta: float) -> void:
 			for ai in ais:
 				ai.think(sim, dt)
 			sim.step(dt)
-	elif not paused:
+	elif not paused and not Demo3.on():                # DEMO 3: the board stays still
 		var sdt := dt
 		if director:                                   # TUTORIAL: the director first, then the Sim at its scale
 			sdt = _tutorial_step(dt)
