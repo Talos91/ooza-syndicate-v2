@@ -208,6 +208,13 @@ const _LAB_OFF := {"joints": false, "gat_own_platform": false, "gat_start": fals
 		"count_on_screen": false, "count_scale": 1.0, "hud_badge": true}   # what the real game does (lab off)
 
 
+# LAB RELAY SET (option relay_set; Daniele 2026-11-23: "keep rotate, retract, switch and launcher; turn ferry and conveyor to hazard
+# only; replace laser relay with simply nodes starting at googatling T3 and archive the rest"): the relay kinds a lab match never
+# creates nor offers (Sim.setup turns such a node into a plain one; tests/test_lab_rules.gd checks no lab map uses them). Their
+# code stays (options, not deletions).
+const LAB_RELAY_ARCHIVED := ["lift", "tilt", "remote", "laser_relay"]
+
+
 static func lab_opt(key: String) -> Variant:
 	## A lab option: its lab_opts value in a lab build, else the real game's behaviour (_LAB_OFF).
 	return lab_opts.get(key) if lab else _LAB_OFF.get(key)

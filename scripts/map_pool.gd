@@ -167,7 +167,7 @@ const DEMO: Array[String] = ["G-01", "G-02", "G-03", "G-04", "G-05", "G-06", "G-
 # LAB BUILD (Rules.lab, 05 Handoff/handoffs/LAB-BUILD-PLAN 2026-11-23.md): the lab test-card maps, group "L", codes of exactly 4
 # characters (all() / every filter here match on the first four characters of the file name). While the list is
 # empty a lab build offers the G pool (proto_debug) so it stays playable.
-const LAB: Array[String] = ["L09P", "L11P", "L13P", "L09C", "L11C", "L13C"]   # WP 1: the plain reading ladder (generator References/Ooze Syndicate maps - lab 2026-11/generator/labmaps.py); WP 3: the cluster variants
+const LAB: Array[String] = ["L09P", "L11P", "L13P", "L09C", "L11C", "L13C", "L09R"]   # WP 1: the plain reading ladder (generator References/Ooze Syndicate maps - lab 2026-11/generator/labmaps.py); WP 3: the cluster variants; WP 4: L09R (relay kill: retract + switch, neutral Googatling T3 centre)
 # LAB JOINT maps (WP3: clusters of touching platforms joined by joint edges): offered only while Rules.lab_opt("joints") is on.
 const LAB_JOINT: Array[String] = ["L09C", "L11C", "L13C"]
 # HX SIZE LADDER (map-size study 2026-11-15; Daniele: "lets do it in the demo staging, simply make lets say 4/8 maps with just a

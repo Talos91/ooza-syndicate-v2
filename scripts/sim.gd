@@ -106,6 +106,9 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 		if owner != "":
 			homes[owner] = id
 		var relay: String = n["relay"] if n.get("relay") != null else ""
+		if relay in Rules.LAB_RELAY_ARCHIVED and bool(Rules.lab_opt("relay_set")):   # LAB RELAY SET: archived kinds never play
+			push_warning("lab relay_set: node %d's %s relay is archived; it plays as a plain node" % [id, relay])
+			relay = ""
 		# a relay node has no vat (GAME-RULES sec6, centreHasNoVat): it is a modest neutral
 		# waypoint that must be fed from elsewhere, never a fortress at the map's centre
 		var neutral = n.get("neutral") if v3 else null

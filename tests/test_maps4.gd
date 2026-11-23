@@ -34,6 +34,8 @@ func check(cond: bool, what: String) -> void:
 
 
 func _initialize() -> void:
+	for k in ["gat_own_platform", "gat_start", "quota_tier", "relay_set"]:   # LAB WP4 rule options: the map checks run on the
+		Rules.lab_opts[k] = false                     # real game's rules (tests/test_lab_rules.gd tests the options)
 	_run.call_deferred()
 
 

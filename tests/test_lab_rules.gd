@@ -9,6 +9,7 @@ extends SceneTree
 ##   Godot --headless --path . --script res://tests/test_lab_rules.gd        Exit code 0 = all passed.
 
 const LabOverlay := preload("res://scripts/lab_overlay.gd")
+const LabCards := preload("res://scripts/lab_cards.gd")
 const L09C := "res://maps4/L09C-clusters-9.json"
 const L11P := "res://maps4/L11P-grid-11.json"
 # L11P, AI vs AI, seed 5 (A Standard null / B Veteran ember), all three WP4 options off: recorded on the untouched lab tip
@@ -65,6 +66,7 @@ func _line_at(sim: Sim, seat: String, route: Array, target: int, head_d: float) 
 	h["units"] = 2.0
 	h["ordered"] = 2.0
 	h["streaming"] = false
+	h["speed"] = 0.0                                  # it stands where it is put (the relay checks step the sim)
 	var total: float = (h["cum"] as Array)[-1] if h.has("cum") else 100.0
 	var c: Vector3 = sim.nodes[target]["pos"]
 	var best_s := 0.0
@@ -123,6 +125,66 @@ func _part_a() -> void:
 	check(is_equal_approx(Sim.gat_reach(), Rules.MACHINEGOON_RANGE), "option off: reach back to MACHINEGOON_RANGE")
 
 
+func _relay_kill(sim: Sim, relay: int, route: Array, what: String) -> void:
+	## A owns `relay`; a B line stands mid-deck on `route` (11 m from the relay centre); A fires: the line falls.
+	sim.hordes.clear()
+	sim.nodes[relay]["owner"] = "A"
+	var h := _line_at(sim, "B", route, relay, 11.0)
+	var before: float = sim.fall_losses.get("B", 0.0)
+	check(sim.fire_relay(relay), "%s: A fires its relay %d" % [what, relay])
+	for i in range(int((Rules.RELAY_WARNING + Rules.RELAY_MOVE + 0.5) / 0.1)):
+		sim.step(0.1)
+	var fell: float = sim.fall_losses.get("B", 0.0) - before
+	check(fell > 0.0 and (not (h in sim.hordes) or float(h["units"]) < 2.0 - 0.0001),
+			"%s: the B line on the deck falls (%.2f units fell)" % [what, fell])
+
+
+func _part_c() -> void:
+	# ------------------------------------------------------------ C: relay set, map L09R
+	_opts({"relay_set": true, "gat_own_platform": true})
+	var path := LabCards.map_path("L09R")
+	check(path != "" and path in MapPool.battlefield(), "L09R baked and offered (%s)" % path)
+	var sim := _sim(path)
+	var plats := sim.nodes.filter(func(n): return n["node_kind"] != "relay")
+	check(plats.size() == 9, "L09R: 9 platforms + %d relay nodes (got %d platforms)" % [sim.nodes.size() - plats.size(), plats.size()])
+	var c: Dictionary = sim.nodes[2]
+	check(c["structure"] == "machinegoon" and int(c["tier"]) == 3 and c["owner"] == "",
+			"L09R centre: a neutral Googatling T3 (%s T%d owner '%s')" % [c["structure"], int(c["tier"]), c["owner"]])
+	check(sim.nodes[9]["relay"] == "retract" and sim.nodes[10]["relay"] == "switch", "L09R relays: 9 retract, 10 switch")
+	var long_relay := 0
+	for ei in sim.edge_controller:
+		var g: Dictionary = sim.edges[ei]["geo"]
+		if float(g.get("L", 0.0)) - float(g.get("p0", 0.0)) - float(g.get("p1", 0.0)) >= 8.0:
+			long_relay += 1
+	check(long_relay == 4, "L09R: both lanes cross on long relay decks >= 8 m (4 decks, got %d)" % long_relay)
+	_relay_kill(sim, 9, [6, 9], "RETRACT")
+	_relay_kill(sim, 10, [8, 10], "SWITCH")
+	# no archived relay kind on any lab map; the guard turns one into a plain node
+	var bad := []
+	for p in MapPool.all():
+		if not p.get_file().substr(0, 4) in MapPool.LAB:
+			continue
+		var m := MapBuilder.load_map(p)
+		for n in m["nodes"]:
+			if str(n.get("relay")) in Rules.LAB_RELAY_ARCHIVED:
+				bad.append("%s node %d %s" % [p.get_file(), n["id"], n["relay"]])
+		for e in m["edges"]:
+			if str(e.get("proto")) in Rules.LAB_RELAY_ARCHIVED:
+				bad.append("%s deck %d-%d %s" % [p.get_file(), e["from"], e["to"], e["proto"]])
+	check(bad.is_empty(), "no lab map uses lift / tilt / remote / laser_relay %s" % str(bad))
+	var m2 := MapBuilder.load_map(path)
+	m2["nodes"][9]["relay"] = "laser_relay"
+	var seats := {0: "A", 4: "B"}
+	var s2 := Sim.new()
+	s2.setup(m2, MapBuilder.layout(m2), seats, {"A": "null", "B": "ember"}, 5)
+	check(s2.nodes[9]["relay"] == "", "relay_set guard: an archived kind plays as a plain node")
+	var s3 := _sim(path)
+	_ai_match(s3)
+	print("L09R AI vs AI (relay_set on): winner %s at %.1f s, %d events, relay fires %d, falls %d" % [s3.winner, s3.time, s3.events.size(),
+			s3.events.filter(func(e): return e["type"] == "relay_fired").size(), s3.events.filter(func(e): return e["type"] == "fall").size()])
+	check(s3.over, "L09R: an AI vs AI match ends")
+
+
 func _identity() -> void:
 	# ------------------------------------------------------------ options off: L11P unchanged
 	_opts({})
@@ -138,6 +200,7 @@ func _identity() -> void:
 func _init() -> void:
 	check(Rules.lab, "a lab build (VERSION %s)" % Rules.VERSION)
 	_part_a()
+	_part_c()
 	_identity()
 	_opts({"gat_own_platform": true, "relay_set": true})
 	print("test_lab_rules: %s" % ("ALL PASSED" if failures == 0 else "%d FAILED" % failures))
