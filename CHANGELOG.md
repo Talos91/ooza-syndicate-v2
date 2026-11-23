@@ -1,5 +1,14 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.25.2 "cleanup" - 2026-11-23 (branch main-cleanup; not on staging or live)
+
+- Daniele, Hub Desk dec-pack-clean-old-stuff = a; everything deleted is back from tag archive-2026-11-23 (= main 0.25.1 1a716645).
+  - pack-clean: the Web pack ships only pooled + code-referenced maps; export templates off H:.
+  - Deleted 65 archived maps4 maps + thumbnails (tests still load the other 37 archived maps).
+  - Deleted SIEGE (locked off since 0.18.7) and the 5-6 seat modes (FFA5, 3v3, 2v2v2) from the code; wire format unchanged.
+  - Deleted the round-19 HUD, the dev HUD fallback flags (--hud-old, --hud-lab29, --hud-40b6), the light round-3 sheets.
+  - Deleted the --no-kit2 fallback vats and the lab-kit review sheets. The live HUD / menu art (lab29, lab37, hud40, hud43, menu43, menu45, armies43, round3 dark) and the live lab kit stay.
+
 ## 0.25.1 "45B menus, AI reactions, B4 background, drill node" - 2026-11-18 (STAGING only; live is 0.23.21)
 
 - Release release-0.25.1 = main a809439f + ui-remake-45b 3a6c8607 + ai-reactions 9f1f8bb9 + b4-staging 0a9a9abf + kit2-staging 5584a520 (merge.renormalize, 0 conflicts). net.gd unchanged; protocol tag stays ooze20-net-8; staging room pack moves with the build.
