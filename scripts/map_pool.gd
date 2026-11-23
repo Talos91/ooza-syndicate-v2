@@ -73,8 +73,8 @@ static func battlefield() -> Array:
 		return _battlefield_cache
 	var offered := all().filter(func(p): return not p.get_file().substr(0, 4) in TUTORIAL_ONLY and not archived(p) and (not rework(p) or p.get_file().substr(0, 4) in MULTI_FILL))
 	if Rules.lab and not LAB.is_empty():              # LAB BUILD: the lab maps only (empty LAB = the G pool below, via proto_debug)
-		_battlefield_cache = offered.filter(func(p): return p.get_file().substr(0, 4) in LAB)
-		return _battlefield_cache
+		var joints: bool = Rules.lab_opt("joints") == true
+		return offered.filter(func(p): return p.get_file().substr(0, 4) in LAB and (joints or not p.get_file().substr(0, 4) in LAB_JOINT))   # (not cached: a card may switch joints)
 	if Rules.demo:                                    # DEMO BUILD: R-01 STRAIT only
 		_battlefield_cache = offered.filter(func(p): return p.get_file().substr(0, 4) in DEMO)
 		return _battlefield_cache
@@ -125,7 +125,10 @@ static func test_scope() -> Array[String]:
 	## The maps the per-map suites verify (test_maps4, test_map_pool, phone_fit): the G pool (Daniele 2026-11-15; before: PROTO + KEEP_OLD).
 	## REWORK maps are not checked and their failures are no blockers (TEST RULE 2026-11-06).
 	var out: Array[String] = []
-	out.append_array(LAB if Rules.lab and not LAB.is_empty() else PROTO)   # a lab build checks what its picker offers
+	if Rules.lab and not LAB.is_empty():              # a lab build checks what its picker offers
+		out.append_array(LAB.filter(func(c): return Rules.lab_opt("joints") == true or not c in LAB_JOINT))
+	else:
+		out.append_array(PROTO)
 	return out
 
 
@@ -164,7 +167,9 @@ const DEMO: Array[String] = ["G-01", "G-02", "G-03", "G-04", "G-05", "G-06", "G-
 # LAB BUILD (Rules.lab, 05 Handoff/handoffs/LAB-BUILD-PLAN 2026-11-23.md): the lab test-card maps, group "L", codes of exactly 4
 # characters (all() / every filter here match on the first four characters of the file name). While the list is
 # empty a lab build offers the G pool (proto_debug) so it stays playable.
-const LAB: Array[String] = ["L09P", "L11P", "L13P"]   # WP 1: the plain reading ladder (generator References/Ooze Syndicate maps - lab 2026-11/generator/labmaps.py); cluster variants L09C.. come with WP 3
+const LAB: Array[String] = ["L09P", "L11P", "L13P", "L09C", "L11C", "L13C"]   # WP 1: the plain reading ladder (generator References/Ooze Syndicate maps - lab 2026-11/generator/labmaps.py); WP 3: the cluster variants
+# LAB JOINT maps (WP3: clusters of touching platforms joined by joint edges): offered only while Rules.lab_opt("joints") is on.
+const LAB_JOINT: Array[String] = ["L09C", "L11C", "L13C"]
 # HX SIZE LADDER (map-size study 2026-11-15; Daniele: "lets do it in the demo staging, simply make lets say 4/8 maps with just a
 # honeycomb of nodes so we get the general idea of max limits"): HX-1..HX-8, generator References/Ooze Syndicate maps - size ladder
 # HX 2026-11/generator/honeycomb.py. DEMO ONLY: group "H" is not in POOL_GROUPS and the codes are not in PROTO.
