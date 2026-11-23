@@ -158,6 +158,8 @@ var _swallow_release := false
 var mode := "1v1"                             # 1v1 / 2v2 / FFA3-4 (the map's seats key; max 4 seats since 2026-11-18)
 var color_choice := "A"                       # your ownership colour: palette key or "faction"
 var menu_layer: CanvasLayer
+const LabMenu := preload("res://scripts/lab_menu.gd")         # LAB BUILD (Rules.lab): the test-card screen
+const LabOverlay := preload("res://scripts/lab_overlay.gd")   # LAB BUILD: the in-match debug readout
 static var relaunch := {}                     # survives a scene reload: Play again / Main menu
 static var last_map_path := ""                 # MAIN MENU remembers the last map played (0.19.0)
 # --- TUTORIAL (TUTORIAL-DESIGN.md §8): the lesson director, its coach overlay, the half-speed clock ---
@@ -330,7 +332,7 @@ func _ready() -> void:
 		start_tutorial(tut_id, tut_first)
 	elif map_explicit or demo or scenario != "" or not shots.is_empty():
 		_start_map(map_path)
-	elif TutorialDirector.first_launch_due(OS.get_cmdline_user_args(), Net.online() or Net.in_room() or Net.status != "" \
+	elif not LabMenu.wanted() and TutorialDirector.first_launch_due(OS.get_cmdline_user_args(), Net.online() or Net.in_room() or Net.status != "" \
 			or not Net.rejoin.is_empty()):
 		start_tutorial(TutorialDirector.FIRST_ID, true)   # TUTORIAL §7: the first launch opens the quick start (skippable)
 	else:
@@ -338,6 +340,12 @@ func _ready() -> void:
 			map_path = last_map_path
 		if not Net.in_room():                          # the menu, no room: a new build may reload the page
 			Net.set_busy(false)
+		if LabMenu.wanted() and not Net.in_room() and Net.status == "" and menu_open in ["", "lab"]:
+			var lab_menu := LabMenu.new()                # LAB BUILD: the test cards in front of HOME (lab_menu.gd; NORMAL MENU = HOME)
+			add_child(lab_menu)
+			lab_menu.setup(self)
+			menu_open = ""
+			return
 		menu_layer = Menu.new()
 		add_child(menu_layer)
 		(menu_layer as Menu).setup(self)
@@ -587,6 +595,10 @@ func _start_map(path: String) -> void:
 		await _staged_frame("hud", 5)
 		_release_held()                                # the world is whole: every view runs from here
 	get_viewport().size_changed.connect(_on_resized)
+	if Rules.lab and thumb_path == "" and not Net.dedicated:   # LAB BUILD: the debug readout (lab_overlay.gd)
+		var lab_overlay := LabOverlay.new()
+		add_child(lab_overlay)
+		lab_overlay.setup(self)
 	started = true
 	paused = false
 	_lm("started")
@@ -1014,6 +1026,8 @@ func to_menu(page := "") -> void:
 			"loadout": LOADOUTS.get(HUMAN, {})}
 	if page != "" and not online:                      # UI: "play" (CONTINUE) / "armies" (CHANGE LOADOUT)
 		relaunch["menu"] = page
+	if LabMenu.wanted() and LabMenu.card_id != "" and not online:   # LAB BUILD: a test card's match goes back to the LAB screen
+		relaunch["menu"] = "lab"
 	get_tree().reload_current_scene()
 
 
