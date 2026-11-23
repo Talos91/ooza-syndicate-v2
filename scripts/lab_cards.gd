@@ -29,7 +29,8 @@ const CARDS: Array[Dictionary] = [
 			"map": "L09C", "mode": "1v1", "ai": "Standard", "faction": "vex", "rival": "null",
 			"lab_opts": {"joints": true, "gat_own_platform": true, "gat_start": true}, "live": true},
 	{"id": "quota", "title": "QUOTA BY TIER", "question": "1 point per tier, relays do not launch: does the score read and matter?",
-			"map": "", "mode": "1v1", "ai": "Standard", "lab_opts": {}, "live": false, "coming": "lab3"},
+			"map": "L11P", "mode": "1v1", "ai": "Standard", "faction": "vex", "rival": "null",
+			"lab_opts": {"quota_tier": true, "gat_own_platform": true, "relay_set": true}, "live": true},
 ]
 
 

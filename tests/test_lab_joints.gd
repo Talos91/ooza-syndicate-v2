@@ -46,6 +46,8 @@ func _joint(sim: Sim, a: int, b: int) -> int:
 
 func _init() -> void:
 	check(Rules.lab, "a lab build (VERSION %s)" % Rules.VERSION)
+	for k in ["gat_own_platform", "gat_start", "quota_tier", "relay_set"]:   # WP4 rule options off: this suite checks joints
+		Rules.lab_opts[k] = false                     # against the pre-WP3 run (tests/test_lab_rules.gd checks the options)
 	Rules.lab_opts["joints"] = true
 
 	# ------------------------------------------------------------ the maps
@@ -160,7 +162,7 @@ func _init() -> void:
 				"L11P (joints %s) plays exactly as before WP3: winner %s at %.1f s, %d events" % [opt, L11P_BEFORE["winner"], L11P_BEFORE["time"], L11P_BEFORE["events"]])
 	Rules.lab_opts["joints"] = false
 	var bf := MapPool.battlefield()
-	check(not bf.any(func(p): return p.get_file().substr(0, 4) in MapPool.LAB_JOINT) and bf.size() == 3,
+	check(not bf.any(func(p): return p.get_file().substr(0, 4) in MapPool.LAB_JOINT) and bf.size() == MapPool.LAB.size() - MapPool.LAB_JOINT.size(),
 			"joints off: the cluster maps are not offered (%d maps)" % bf.size())
 	var off := _sim(CLUSTER_MAPS[0])
 	check(not off.edges.any(func(e): return e.get("joint", false)), "joints off: the sim makes no joint edge")

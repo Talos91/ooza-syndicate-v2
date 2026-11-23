@@ -215,6 +215,24 @@ const _LAB_OFF := {"joints": false, "gat_own_platform": false, "gat_start": fals
 const LAB_RELAY_ARCHIVED := ["lift", "tilt", "remote", "laser_relay"]
 
 
+# LAST STAND = QUOTA (Daniele 2026-11-15, the demo prototype bd016a0d in ooze-wt/demo-river-quota; ported to the lab by WP4 with
+# Daniele's 2026-11-23 changes: "launch i agree should be 1 point per tier" and "relays shouldn t launch (as some pas break if
+# they do)"). A platform's Last Stand drop is a LAUNCH: it pays its NODE TIER (T1 1 ... T4 4; a tower / forge node its node tier)
+# to its owner's side at liftoff (neutral: nobody). Relay nodes never launch (nor fall) and junctions never score. The Very
+# Last Stand runs down to the last platform. The match ends on elimination, on a lead nobody can catch (lead > the points still
+# on the board; FFA: against the leader) or after the last launch: most quota wins, a tie goes to the side that held the last
+# platform (neutral: DRAW). On only in a lab build with lab_opt("quota_tier") (its card); a map's lastStand.quota block (rings
+# + orders) is its launch order. Main play is untouched.
+static var quota: bool:
+	get: return lab and lab_opt("quota_tier") == true
+const QUOTA_END_SPARE := 1.0         # s: the Very Last Stand's last launch lands this long before the hard end (Sim._vls_queue_next)
+const QUOTA_LAUNCH_TIME := 1.5       # s: the platform's flight to orbit (Fx._launch; Daniele 11-15 "straight up, leaves the screen")
+const QUOTA_LAUNCH_RISE := 70.0      # m it climbs in that time (past the top edge at the phone camera)
+const QUOTA_AI_BONUS := 30.0         # AI target-score bonus for a doomed (warned) T2 platform it can take before liftoff (x tier / 2)
+const QUOTA_AI_ARRIVE := 2.0         # s: the AI's line must land at least this long before the liftoff
+const QUOTA_AI_KEEP := 3.0           # shown units the AI leaves on its own doomed platform when it evacuates (to hold it)
+
+
 static func lab_opt(key: String) -> Variant:
 	## A lab option: its lab_opts value in a lab build, else the real game's behaviour (_LAB_OFF).
 	return lab_opts.get(key) if lab else _LAB_OFF.get(key)

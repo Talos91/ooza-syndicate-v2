@@ -1151,6 +1151,40 @@ func badge_at(p: Vector2) -> int:
 
 
 # ------------------------------------------------------------------ per frame
+var _quota_label: Label                     # LAST STAND = QUOTA (lab): the plain score line under the top bar
+
+
+func _quota_sync() -> void:
+	## LAST STAND = QUOTA (lab option quota_tier; the demo's QuotaBar wears the river look, so a bare label): top centre,
+	## under the clock, text >= 12.5 pt (UiKit.pt_per_px), only in a quota match.
+	if not Rules.quota:
+		if _quota_label:
+			_quota_label.visible = false
+		return
+	var vp: Vector2 = get_viewport().get_visible_rect().size
+	var u := 1.0 / maxf(UiKit.pt_per_px(vp), 0.0001)
+	if _quota_label == null:
+		_quota_label = Label.new()
+		_quota_label.add_theme_font_override("font", UiKit.BODY)
+		_quota_label.add_theme_color_override("font_color", UiKit.INK)
+		_quota_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+		_quota_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_quota_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		root.add_child(_quota_label)
+	_quota_label.add_theme_font_size_override("font_size", int(ceil(13.0 * u)))
+	_quota_label.add_theme_constant_override("outline_size", int(ceil(3.0 * u)))
+	_quota_label.text = sim.quota_readout()
+	_quota_label.visible = top_panel.visible
+	_quota_label.reset_size()
+	var ins := UiKit.safe_insets(vp)
+	_quota_label.position = Vector2((vp.x - _quota_label.size.x) * 0.5, ins.y + 52.0 * u)
+
+
+func _ls_word() -> String:
+	## LAST STAND = QUOTA: platforms launch instead of dropping.
+	return "NEXT LAUNCH" if Rules.quota else "NEXT DROP"
+
+
 func sync(dt: float, cam: Camera3D) -> void:
 	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
 	if main.online:
@@ -1172,6 +1206,7 @@ func sync(dt: float, cam: Camera3D) -> void:
 		lab_tube.sync()
 		if is_instance_valid(lab_feed) and dock.slots.size() > 0:
 			lab_feed.lay(dock.position + (dock.slots[0] as Control).position, HudLab.u_of(self))
+	_quota_sync()
 	top_left.visible = show_chips
 	top_right.visible = show_chips
 	if show_chips:
@@ -1187,19 +1222,19 @@ func sync(dt: float, cam: Camera3D) -> void:
 		status_label.text = ""
 	elif sim.very_last_stand_active:
 		# 0.23.23 (Daniele: "last stand message is too long"): the line says what drops when, nothing more
-		status_label.text = ("VERY LAST STAND · DROP EVERY %d s" % int(round(sim.very_last_stand_gap))
+		status_label.text = ((("VERY LAST STAND · LAUNCH EVERY %d s" if Rules.quota else "VERY LAST STAND · DROP EVERY %d s") % int(round(sim.very_last_stand_gap)))
 				if sim.very_last_stand_gap > 0.0 else "VERY LAST STAND · CONQUEST DECIDES")
 	elif sim.last_stand_active:
 		var next := ""
 		var pending: int = sim.last_stand_waves.size() if sim.v3 else sim.last_stand_order.size()
 		if sim.v3 and not sim.last_stand_warn.is_empty():
-			next = "NEXT DROP %d s · %d LEFT" % [int(ceil(sim.last_stand_warn_t)), sim.last_stand_queue.size()]
+			next = _ls_word() + " %d s · %d LEFT" % [int(ceil(sim.last_stand_warn_t)), sim.last_stand_queue.size()]
 		elif sim.last_stand_warn_node >= 0:
-			next = "NEXT DROP %d s" % int(ceil(sim.last_stand_warn_t))
+			next = _ls_word() + " %d s" % int(ceil(sim.last_stand_warn_t))
 		elif sim.last_stand_next < pending:
-			next = "NEXT DROP %d s" % int(ceil(maxf(sim._next_wave_at - sim.time, 0.0)))
+			next = _ls_word() + " %d s" % int(ceil(maxf(sim._next_wave_at - sim.time, 0.0)))
 		else:
-			next = "CONQUEST DECIDES"
+			next = "QUOTA DECIDES" if Rules.quota else "CONQUEST DECIDES"
 		# the method and how it falls only while the announcement pulses (HUD_LS_PULSE s); then just the next drop
 		status_label.text = ("LAST STAND · %s · %s" % [sim.last_stand_method.to_upper(), _ls_how]) if _ls_pulse > 0.0 and _ls_how != "" 				else "LAST STAND · %s" % next
 	elif Rules.last_stand and not sim.over and sim.time > Rules.LAST_STAND_TIME - 15.0 and sim.time < Rules.LAST_STAND_TIME and not (sim.v3 and (sim._map_last_stand.get("methods", []) as Array).is_empty()):
@@ -3534,6 +3569,9 @@ func _build_end() -> void:
 	sub = _versus_line(seats) + "\n" + sub           # HUD pass: who played - a human by name, an AI by faction and level
 	if draw and sim.draw_line != "":                   # 7:00, a neutral last platform: the funny call-out (0.19.0)
 		sub = str(sim.draw_line) + "\n" + sub
+	if Rules.quota and sim.last_stand_active:          # LAST STAND = QUOTA (lab): the score and how it was decided
+		var why: String = {"unreachable": "QUOTA LEAD NOBODY COULD CATCH", "final": "QUOTA AFTER THE LAST LAUNCH"}.get(sim.quota_reason, "ELIMINATION")
+		sub = "QUOTA  A %d · B %d  ·  %s" % [sim.quota_of("A"), sim.quota_of("B"), why] + "\n" + sub
 	var st := Progression.seat_stats(sim, human)
 	var third := [str(st["captures"]), "Captures"]
 	if ffa:

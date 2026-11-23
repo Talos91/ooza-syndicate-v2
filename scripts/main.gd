@@ -234,6 +234,10 @@ func _ready() -> void:
 			map_explicit = true
 		elif arg == "--demo":
 			demo = true
+		elif arg.begins_with("--lab-card=") and Rules.lab:   # LAB (dev / headless runs): a test card's lab_opts, as its tap sets them
+			var lab_card: Dictionary = preload("res://scripts/lab_cards.gd").find(arg.substr(11))
+			if not lab_card.is_empty():
+				preload("res://scripts/lab_menu.gd").apply_card(lab_card)
 		elif arg == "--kit2" or arg == "--no-kit2":    # KIT2 size-D look (Rules.kit2, on by default; --no-kit2 = the 0.25.0 lab kit)
 			Rules.kit2 = arg == "--kit2"
 		elif arg.begins_with("--ai="):
@@ -558,6 +562,8 @@ func _start_map(path: String) -> void:
 			sim.step(ff_dt)
 		sim.fx_events.clear()                           # the fast-forwarded bursts are stale by now
 		print("fast-forwarded to t=%.1f%s" % [sim.time, " (match already over)" if sim.over else ""])
+		if Rules.quota:                                 # QUOTA (lab dev helper): the score and the next launch
+			print("%s; next launch: node %d" % [sim.quota_readout(), sim.last_stand_warn_node])
 	if director:                                       # TUTORIAL: the lesson stages its board (tutorial.gd)
 		director.begin(sim, map, SEAT_FACTIONS[HUMAN])
 	if mission:                                        # CAMPAIGN: the mission stages its board (mission_director.gd)

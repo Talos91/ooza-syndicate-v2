@@ -99,7 +99,7 @@ func handle(ev: Dictionary) -> void:
 		"fling":
 			_fling_horde(ev)
 		"collapse":
-			_collapse(ev["node"], str(ev.get("from", "")))
+			_collapse(ev["node"], str(ev.get("from", "")), bool(ev.get("launch", false)))
 		"deck_break":
 			_deck_break(int(ev["edge"]), int(ev["node"]), float(ev["to"]), bool(ev.get("done", false)))
 
@@ -1084,7 +1084,7 @@ func _waterfall(seat: String, radius: float, seconds: float) -> CPUParticles3D:
 	return p
 
 
-func _collapse(node_id: int, from := "") -> void:
+func _collapse(node_id: int, from := "", launch := false) -> void:
 	## Last Stand destruction: the platform and every deck it still has fall away; decks break into
 	## the kit's fragment pieces, goo pours over the rim all the way round (waterfall board E).
 	## `from` is the owner before the drop (the sim has already cleared it): the goo's colour.
@@ -1092,6 +1092,10 @@ func _collapse(node_id: int, from := "") -> void:
 	var falling: Array = vis[node_id]["parts"].duplicate()
 	if _rims.has(node_id):                             # its neon goes down with the platform and piers
 		falling.append(_rims[node_id])
+	var rising := []                                   # LAST STAND = QUOTA: the platform (and its rim) flies to orbit instead
+	if launch:
+		rising = falling
+		falling = []
 	for i in _pier_neon:
 		for end in range(2):
 			if _pier_neon[i][end] != null and sim.edges[i]["b" if end == 1 else "a"] == node_id:
@@ -1127,16 +1131,86 @@ func _collapse(node_id: int, from := "") -> void:
 					continue
 				deck.visible = false
 				_deck_frags(deck, per, falling, frags)
-	falling.append_array(_goo.falling(node_id))       # TERRITORY: GOO - the goo drops with its platform and decks
+	(rising if launch else falling).append_array(_goo.falling(node_id))   # TERRITORY: GOO - the goo goes with its platform
 	for pid in vis.get("plazas", {}):                  # maps 3.0: a plaza goes when its last socket goes
 		var pz: Dictionary = vis["plazas"][pid]
 		if node_id in pz["members"] and pz["node"] and (pz["members"] as Array).all(func(m): return sim.collapsed.get(m, false)):
-			falling.append(pz["node"])
+			(rising if launch else falling).append(pz["node"])
+	if launch:
+		_fall_pieces(falling, frags)                   # the piers and decks still fall: only the platform launches
+		_launch(n["pos"], rising, from)
+		return
 	var wf := _waterfall(from, Rules.R, 1.8)
 	wf.amount = 220
 	wf.position = n["pos"] + Vector3(0, 0.2, 0)
 	add_child(wf)
 	_fall_pieces(falling, frags)
+
+
+func _launch(pos: Vector3, rising: Array, seat: String) -> void:
+	## LAST STAND = QUOTA (demo bd016a0d; Daniele 2026-11-15: "straight up and leaves the screen past the top edge"): the
+	## platform climbs Rules.QUOTA_LAUNCH_RISE m in Rules.QUOTA_LAUNCH_TIME s, easing in like a lift-off, on a thruster flame and
+	## a smoke trail in the owner's SEAT neon (neutral grey; COLOUR RULE: neon = seat). No river-world assets.
+	var col: Color = Rules.seat_color(seat) if seat != "" else Color(0.62, 0.65, 0.68)
+	MapBatch.release(rising)
+	_neon_merge.release(rising)
+	var dur := Rules.QUOTA_LAUNCH_TIME
+	var rise := Rules.QUOTA_LAUNCH_RISE
+	var tw := create_tween()
+	tw.set_parallel(true)
+	for p in rising:
+		var node3d := p as Node3D
+		if not is_instance_valid(node3d):
+			continue
+		tw.tween_property(node3d, "position:y", node3d.position.y + rise, dur).set_delay(0.15).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_CUBIC)
+	var rocket := Node3D.new()                         # the thruster rides under the platform
+	rocket.position = pos + Vector3(0, -0.6, 0)
+	add_child(rocket)
+	var flame := MeshInstance3D.new()
+	var cone := CylinderMesh.new()
+	cone.top_radius = Rules.R * 0.55
+	cone.bottom_radius = 0.05
+	cone.height = 3.2
+	cone.radial_segments = 10
+	cone.rings = 1
+	flame.mesh = cone
+	flame.material_override = Mats.glow(col, 1.0)
+	flame.position = Vector3(0, -1.6, 0)
+	flame.scale = Vector3(1, 0.2, 1)
+	rocket.add_child(flame)
+	var trail := CPUParticles3D.new()                  # world-space smoke: it stays behind as the platform climbs
+	var puff := SphereMesh.new()
+	puff.radius = 0.35
+	puff.height = 0.7
+	puff.radial_segments = 6
+	puff.rings = 3
+	puff.material = Mats.glow(col.lerp(Color.WHITE, 0.25), 0.32)
+	trail.mesh = puff
+	trail.local_coords = false
+	trail.amount = 40
+	trail.lifetime = 0.8
+	trail.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	trail.emission_sphere_radius = Rules.R * 0.18
+	trail.direction = Vector3.DOWN
+	trail.spread = 10.0
+	trail.initial_velocity_min = 2.0
+	trail.initial_velocity_max = 5.0
+	trail.gravity = Vector3.ZERO
+	trail.scale_amount_min = 0.7
+	trail.scale_amount_max = 1.8
+	trail.position = Vector3(0, -3.6, 0)
+	trail.emitting = true
+	rocket.add_child(trail)
+	tw.tween_property(flame, "scale", Vector3(1, 1, 1), 0.15)
+	tw.tween_property(rocket, "position:y", rocket.position.y + rise, dur).set_delay(0.15).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_CUBIC)
+	tw.chain().tween_callback(func():
+		for p in rising:
+			if is_instance_valid(p):
+				(p as Node3D).visible = false
+		trail.emitting = false
+		flame.visible = false)
+	get_tree().create_timer(dur + 1.4).timeout.connect(rocket.queue_free)
+	_pulse(pos, col, Rules.R * 1.5, 0.7)               # the pad's shock ring, ~1.5x the platform
 
 
 func _deck_frags(deck: Node3D, per: int, falling: Array, frags: Array) -> void:

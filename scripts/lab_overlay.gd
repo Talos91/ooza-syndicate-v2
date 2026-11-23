@@ -68,6 +68,8 @@ static func deck_range(map: Dictionary) -> Vector2:
 static func rules_line(sim) -> String:
 	## LAB WP4 rule options, when they matter on this board: the quota score, "gat: own platform" while a Googatling stands.
 	var parts := PackedStringArray()
+	if Rules.quota:
+		parts.append("quota A %d - B %d, %d left" % [sim.quota_of("A"), sim.quota_of("B"), sim.quota_left()])
 	if bool(Rules.lab_opt("gat_own_platform")) and (sim.nodes as Array).any(func(n): return n["structure"] == "machinegoon"):
 		parts.append("gat: own platform")
 	return "  ·  ".join(parts)

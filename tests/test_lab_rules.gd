@@ -18,6 +18,7 @@ const L11P_BEFORE := {"winner": "B", "time": 185.3, "events": 163, "hash": 11162
 const OPTS := ["gat_own_platform", "gat_start", "quota_tier", "relay_set"]
 
 var failures := 0
+var _parts_done := 0                                 # each part counts itself at its end (a script error aborts a part)
 
 
 func check(cond: bool, what: String) -> void:
@@ -123,6 +124,7 @@ func _part_a() -> void:
 	_opts({})
 	check(LabOverlay.rules_line(_sim(L09C)) == "", "overlay: no rule line with the options off")
 	check(is_equal_approx(Sim.gat_reach(), Rules.MACHINEGOON_RANGE), "option off: reach back to MACHINEGOON_RANGE")
+	_parts_done += 1
 
 
 func _relay_kill(sim: Sim, relay: int, route: Array, what: String) -> void:
@@ -183,6 +185,148 @@ func _part_c() -> void:
 	print("L09R AI vs AI (relay_set on): winner %s at %.1f s, %d events, relay fires %d, falls %d" % [s3.winner, s3.time, s3.events.size(),
 			s3.events.filter(func(e): return e["type"] == "relay_fired").size(), s3.events.filter(func(e): return e["type"] == "fall").size()])
 	check(s3.over, "L09R: an AI vs AI match ends")
+	_parts_done += 1
+
+
+func _collapse_all_but(sim: Sim, keep: Array) -> void:
+	## Marks every other platform as launched without scoring (a test shortcut; test_quota's).
+	for n in sim.nodes:
+		if not (n["id"] in keep):
+			sim.collapsed[n["id"]] = true
+
+
+func _qsim(path: String) -> Sim:
+	var sim := _sim(path, 3)
+	sim.last_stand_active = true                      # scoring only matters once the Last Stand runs
+	return sim
+
+
+func _part_b() -> void:
+	# ------------------------------------------------------------ B: quota by tier (port of the demo's tests/test_quota.gd)
+	_opts({"quota_tier": true, "gat_own_platform": true, "relay_set": true})
+	check(Rules.quota, "quota_tier on: Rules.quota")
+	var a := 0
+	var b := 4                                        # L11P homes
+	var sim := _qsim(L11P)
+	check(int(sim.nodes[a]["ring"]) == 0 and int(sim.nodes[b]["ring"]) == 0 and int(sim.nodes[5]["ring"]) == 2 and int(sim.nodes[2]["ring"]) == 1,
+			"launch order: the map's quota rings (homes 0 = last, centre 1, outer 2 = first)")
+	# 1. a launch pays its owner its tier at liftoff; neutral pays nobody
+	sim.nodes[1]["owner"] = "A"
+	sim.nodes[1]["units"] = 20.0
+	sim._drop_node(1)
+	check(sim.quota_of("A") == 1 and sim.quota_of("B") == 0, "T1 launch: A +1 (A %d, B %d)" % [sim.quota_of("A"), sim.quota_of("B")])
+	sim.nodes[2]["owner"] = "B"                       # the T2 centre
+	sim._drop_node(2)
+	check(sim.quota_of("B") == 2, "T2 launch: B +2 (B %d)" % sim.quota_of("B"))
+	sim.nodes[3]["owner"] = "A"
+	sim.nodes[3]["tier"] = 3
+	sim.nodes[3]["structure"] = "laser"               # a tower node scores its node tier
+	sim._drop_node(3)
+	check(sim.quota_of("A") == 4, "T3 laser node launch: A +3 (A %d)" % sim.quota_of("A"))
+	check(sim.events.any(func(e): return e["type"] == "launch" and e["node"] == 2 and e["seat"] == "B" and int(e["points"]) == 2),
+			"launch event names the owner and its points")
+	check(sim.fx_events.any(func(e): return e["type"] == "collapse" and bool(e.get("launch", false))), "the view gets a launch (not a plain collapse)")
+	check(sim.collapsed.get(1, false) and sim.nodes[1]["owner"] == "" and sim.nodes[1]["units"] == 0.0 and float(sim.fall_losses.get("A", 0.0)) >= 20.0,
+			"the platform is gone, its garrison splats (counted as fallen)")
+	sim._drop_node(6)
+	check(sim.quota_of("A") == 4 and sim.quota_of("B") == 2 and str(sim.quota_last_side) == "", "neutral launch pays nobody")
+	check(not sim.over, "no end with a 2-point lead and %d points on the board" % sim.quota_points_left())
+	check(LabOverlay.rules_line(sim).begins_with("quota A 4 - B 2, %d left" % sim.quota_left()), "overlay: '%s'" % LabOverlay.rules_line(sim))
+	check(sim.quota_readout().contains("A 4 · B 2"), "HUD readout: '%s'" % sim.quota_readout())
+	# 2. unreachable lead: lead > the points still on the board ends it; lead == points goes on
+	sim = _qsim(L11P)
+	_collapse_all_but(sim, [a, b, 1, 2])
+	var pts := sim.quota_points_left()
+	check(sim.quota_left() == 4 and pts == 2 * Rules.HOME_TIER + 1 + 2, "4 platforms left = %d points (homes T%d, T1, T2)" % [pts, Rules.HOME_TIER])
+	sim.quota = {"A": pts, "B": 0}
+	sim.step(0.05)
+	check(not sim.over, "lead %d = %d points left: the match goes on" % [pts, pts])
+	sim.quota = {"A": pts + 1, "B": 0}
+	sim.step(0.05)
+	check(sim.over and sim.winner == "A" and sim.quota_reason == "unreachable", "lead %d > %d points left: A wins on quota (winner '%s', %s)" % [pts + 1, pts, sim.winner, sim.quota_reason])
+	# 3. the last platform: a tie goes to its holder (its launch scores); nobody is eliminated while the launches run
+	sim = _qsim(L11P)
+	_collapse_all_but(sim, [b])
+	sim.nodes[a]["owner"] = ""                        # A holds nothing at all now
+	var hb := Sim.launch_points(sim.nodes[b])
+	sim.quota = {"A": 3 + hb, "B": 3}
+	sim.quota_last_side = "A"
+	sim.step(0.05)
+	check(not sim.over and not sim.eliminated.has("A"), "A holds nothing but keeps its points: not out during the launches")
+	sim._drop_node(b)
+	check(sim.over and sim.winner == "B" and sim.quota_reason == "final" and sim.quota_of("B") == 3 + hb,
+			"%d-%d after the last launch: its holder B wins (winner '%s', %s)" % [3 + hb, sim.quota_of("B"), sim.winner, sim.quota_reason])
+	# 4. a neutral last platform on a tie: DRAW
+	sim = _qsim(L11P)
+	_collapse_all_but(sim, [b])
+	sim.nodes[b]["owner"] = ""
+	sim.quota = {"A": 2, "B": 2}
+	sim._drop_node(b)
+	check(sim.over and sim.winner == "" and sim.draw_line != "", "2-2 with a neutral last platform: DRAW (winner '%s')" % sim.winner)
+	# 5. the Very Last Stand runs down to the last platform (its gap leaves QUOTA_END_SPARE)
+	sim = _qsim(L11P)
+	_collapse_all_but(sim, [a, b, 1])
+	sim.time = Rules.VERY_LAST_STAND_TIME
+	sim.very_last_stand_active = true
+	sim._vls_queue_next()
+	var want := (Rules.MATCH_HARD_END - Rules.QUOTA_END_SPARE - Rules.VERY_LAST_STAND_TIME) / 3.0
+	check(absf(sim.very_last_stand_gap - want) < 0.01, "VLS gap = time to the end minus the spare over 3 survivors (%.2f, want %.2f)" % [sim.very_last_stand_gap, want])
+	_collapse_all_but(sim, [b])
+	sim._vls_queue_next()
+	check(sim.last_stand_warn_node == b, "QUOTA: the last platform is queued to launch too")
+	# 6. relays never launch (L09R: 9 platforms, 2 relays)
+	var rpath := LabCards.map_path("L09R")
+	sim = _sim(rpath, 3)
+	check(sim.quota_left() == 9 and not Sim.launchable(sim.nodes[9]) and not Sim.launchable(sim.nodes[10]),
+			"L09R: 9 platforms to launch, the 2 relays never (%d)" % sim.quota_left())
+	sim.start_last_stand_now()
+	check(not sim.last_stand_order.any(func(id): return sim.nodes[id]["node_kind"] == "relay"), "relays are in no launch wave %s" % str(sim.last_stand_waves))
+	check(not sim._vls_surviving().has(9) and not sim._vls_surviving().has(10), "relays are not in the Very Last Stand")
+	var q0 := sim.quota.duplicate()
+	sim.nodes[9]["owner"] = "A"
+	sim._drop_node(9)                                 # (should a relay ever be dropped by something else: no points)
+	check(sim.quota == q0 and not sim.events.any(func(e): return e["type"] == "launch" and e["node"] == 9), "a dropped relay scores nothing")
+	# 7. full AI matches with quota on: they end, every point is an owned launch at its tier, homes launch last, no relay launches
+	for path in [L11P, rpath]:
+		Rules.lab_opts["quota_tier"] = true
+		sim = _sim(path, 11)
+		_ai_match(sim, Rules.MATCH_HARD_END + 5.0)
+		var launches := sim.events.filter(func(e): return e["type"] == "launch")
+		var paid := 0
+		for e in launches:
+			if str(e["seat"]) != "":
+				paid += int(e["points"])
+		var total := 0
+		for k in sim.quota:
+			total += int(sim.quota[k])
+		var home_seen := false
+		var homes_last := true
+		for e in launches:
+			var home: bool = int(e["node"]) in sim.homes.values()
+			if home_seen and not home:
+				homes_last = false
+			home_seen = home_seen or home
+		var code: String = str(path).get_file().substr(0, 4)
+		print("%s AI vs AI quota on: winner '%s' at %.1f s, reason '%s', quota %s, %d launches" % [code, sim.winner, sim.time, sim.quota_reason, sim.quota, launches.size()])
+		check(sim.over, "%s: the quota match ends" % code)
+		check(total == paid, "%s: every quota point is an owned launch at its tier (%d = %d)" % [code, total, paid])
+		check(launches.all(func(e): return int(e["points"]) == Sim.launch_points(sim.nodes[int(e["node"])])), "%s: each launch paid its node tier" % code)
+		check(homes_last, "%s: the homes launch last" % code)
+		check(not launches.any(func(e): return sim.nodes[int(e["node"])]["node_kind"] == "relay"), "%s: no relay launched" % code)
+	# 8. quota OFF: a drop scores nothing, no launch; the plain lab maps keep no Last Stand
+	_opts({})
+	check(not Rules.quota, "quota_tier off: Rules.quota off")
+	sim = _qsim(L11P)
+	check(int(sim.nodes[5]["ring"]) == 1 and int(sim.nodes[a]["ring"]) == 1, "quota off: the map's own rings")
+	sim.nodes[1]["owner"] = "A"
+	sim._drop_node(1)
+	check(sim.quota.is_empty() and not sim.fx_events.any(func(e): return bool(e.get("launch", false))), "quota OFF: no score, no launch")
+	_collapse_all_but(sim, [b])
+	sim.time = Rules.VERY_LAST_STAND_TIME
+	sim.very_last_stand_active = true
+	sim._vls_queue_next()
+	check(sim.last_stand_warn_node == -1, "quota OFF: the last platform never drops (unchanged)")
+	_parts_done += 1
 
 
 func _identity() -> void:
@@ -195,13 +339,16 @@ func _identity() -> void:
 	check(got["winner"] == L11P_BEFORE["winner"] and is_equal_approx(got["time"], L11P_BEFORE["time"]) \
 			and got["events"] == L11P_BEFORE["events"] and got["hash"] == L11P_BEFORE["hash"],
 			"options off: L11P AI vs AI identical to the pre-WP4 run %s" % str(L11P_BEFORE))
+	_parts_done += 1
 
 
 func _init() -> void:
 	check(Rules.lab, "a lab build (VERSION %s)" % Rules.VERSION)
 	_part_a()
 	_part_c()
+	_part_b()
 	_identity()
+	check(_parts_done == 4, "every part ran to its end (A, C, B, identity: %d of 4)" % _parts_done)
 	_opts({"gat_own_platform": true, "relay_set": true})
 	print("test_lab_rules: %s" % ("ALL PASSED" if failures == 0 else "%d FAILED" % failures))
 	quit(1 if failures > 0 else 0)
