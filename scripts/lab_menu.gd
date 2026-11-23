@@ -16,6 +16,7 @@ static var card_id := ""                         # the card being played ("" = n
 static var last_card := ""                       # the card played last (the header shows it)
 static var normal := false                       # NORMAL MENU was tapped: main shows the real menu from now on
 static var _defaults := {}                       # Rules.lab_opts before any card touched it
+static var picks := {}                           # CHOICE SHEET (lab4): card id -> {lab_opts key: index into the choice's values}
 
 var main: Node
 var page := 0
@@ -29,9 +30,23 @@ static func apply_card(card: Dictionary) -> void:
 		_defaults = Rules.lab_opts.duplicate(true)
 	var opts: Dictionary = _defaults.duplicate(true)
 	opts.merge(card.get("lab_opts", {}), true)
+	for ch in card.get("choices", []):            # the sheet's picks (values[0] = the default)
+		opts[ch["key"]] = ch["values"][pick_index(card, ch)]
 	Rules.lab_opts = opts
 	card_id = str(card["id"])
 	last_card = card_id
+
+
+static func pick_index(card: Dictionary, ch: Dictionary) -> int:
+	return clampi(int((picks.get(str(card["id"]), {}) as Dictionary).get(ch["key"], 0)), 0, (ch["values"] as Array).size() - 1)
+
+
+static func pick_tag(card: Dictionary) -> String:
+	## The card's picked values, short ("x0.9"; "8 m · x1.5 · 1 PER 2"): on the card, in the overlay's folded line. "" = no choices.
+	var parts := PackedStringArray()
+	for ch in card.get("choices", []):
+		parts.append(str(ch["names"][pick_index(card, ch)]))
+	return " · ".join(parts)
 
 
 static func reset_card() -> void:
@@ -186,7 +201,7 @@ func _card(c: Dictionary, pos: Vector2, dims: Vector2, u: float) -> Control:
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	b.add_theme_stylebox_override("disabled", UiKit.sb(Color(UiKit.PANEL, 0.55), Color(UiKit.FRAME, 0.5), 1))
 	if live:
-		b.pressed.connect(func(): _play(c))
+		b.pressed.connect(func(): _tap(c))
 	# Fixed rows, placed by hand so every card lines up: title slot (one line, shrunk to fit down to 12.5 pt, else two
 	# lines at 12.5 pt; never clipped), meta, question (takes the rest), CARD line pinned to the card's foot.
 	var pad := 10.0 * u
@@ -210,6 +225,14 @@ func _card(c: Dictionary, pos: Vector2, dims: Vector2, u: float) -> Control:
 	ml.size = Vector2(w, ml.get_combined_minimum_size().y)
 	b.add_child(ml)
 	y += ml.size.y + 4.0 * u
+	var tag := pick_tag(c)
+	if tag != "" and live:                         # CHOICE SHEET: the values the next PLAY uses (tap the card to change them)
+		var pk := _label(tag + "  ›", 14.0, UiKit.CYAN, true)
+		pk.clip_text = true
+		pk.position = Vector2(pad, y)
+		pk.size = Vector2(w, pk.get_combined_minimum_size().y)
+		b.add_child(pk)
+		y += pk.size.y + 4.0 * u
 	var idl := _label("CARD %s" % str(c["id"]), 12.5, UiKit.DIM)
 	var ih := idl.get_combined_minimum_size().y
 	idl.position = Vector2(pad, dims.y - pad * 0.8 - ih)
@@ -222,6 +245,75 @@ func _card(c: Dictionary, pos: Vector2, dims: Vector2, u: float) -> Control:
 	q.size = Vector2(w, maxf(idl.position.y - 2.0 * u - y, 10.0))
 	b.add_child(q)
 	return b
+
+
+func _tap(c: Dictionary) -> void:
+	## A card with choices opens its sheet; any other card plays at once.
+	if (c.get("choices", []) as Array).is_empty():
+		_play(c)
+	else:
+		_sheet(c)
+
+
+func _sheet(c: Dictionary) -> void:
+	## CHOICE SHEET (lab4 jobs 2 + 5): over the LAB screen, the card's title, one row per choice (label + one chip per value,
+	## the picked one lit), BACK and PLAY. Never scrolls: at most three rows of 44 pt chips on a 375 pt-tall phone.
+	_build()
+	var vp := get_viewport().get_visible_rect().size
+	var u := _u()
+	var ins := UiKit.safe_insets(vp)
+	var area := Rect2(ins.x + 12.0 * u, ins.y + 8.0 * u, vp.x - ins.x - ins.z - 24.0 * u, vp.y - ins.y - ins.w - 16.0 * u)
+	var sh := ColorRect.new()
+	sh.color = UiKit.BASE
+	sh.size = vp
+	sh.mouse_filter = Control.MOUSE_FILTER_STOP
+	_root.add_child(sh)
+	var gap := GAP_PT * u
+	var row_h := 44.0 * u
+	var t := _label(str(c["title"]), 20.0, UiKit.CYAN, true)
+	t.position = area.position
+	t.size = Vector2(area.size.x, row_h * 0.6)
+	sh.add_child(t)
+	var q := _label(str(c["question"]), 14.0, UiKit.INK)
+	q.clip_text = true
+	q.position = Vector2(area.position.x, area.position.y + row_h * 0.6)
+	q.size = Vector2(area.size.x, row_h * 0.5)
+	sh.add_child(q)
+	var y := area.position.y + row_h * 1.2 + gap
+	var label_w := 120.0 * u
+	for ch in c["choices"]:
+		var l := _label(str(ch["label"]), 15.0, UiKit.MUTED, true)
+		l.position = Vector2(area.position.x, y)
+		l.size = Vector2(label_w, row_h)
+		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		sh.add_child(l)
+		var names: Array = ch["names"]
+		var cw := minf((area.size.x - label_w - gap * names.size()) / names.size(), 170.0 * u)
+		for k in range(names.size()):
+			var on := pick_index(c, ch) == k
+			var chip := _button(str(names[k]), Vector2(cw, row_h), func(): _pick(c, ch, k))
+			chip.position = Vector2(area.position.x + label_w + k * (cw + gap), y)
+			if on:
+				chip.add_theme_stylebox_override("normal", UiKit.sb(Color(UiKit.CYAN.darkened(0.6), 0.98), UiKit.CYAN, 2))
+				chip.add_theme_stylebox_override("hover", UiKit.sb(Color(UiKit.CYAN.darkened(0.55), 0.98), UiKit.CYAN, 2))
+				chip.add_theme_color_override("font_color", UiKit.INK)
+			sh.add_child(chip)
+		y += row_h + gap
+	var by := maxf(y + gap, area.end.y - row_h)
+	var back := _button("BACK", Vector2(132.0 * u, row_h), _build)
+	back.position = Vector2(area.position.x, by)
+	sh.add_child(back)
+	var play := _button("PLAY  " + pick_tag(c), Vector2(minf(area.size.x - 140.0 * u, 320.0 * u), row_h), func(): _play(c))
+	play.add_theme_stylebox_override("normal", UiKit.sb(Color(UiKit.CYAN.darkened(0.6), 0.98), UiKit.CYAN, 2))
+	play.position = Vector2(area.end.x - play.size.x, by)
+	sh.add_child(play)
+
+
+func _pick(c: Dictionary, ch: Dictionary, k: int) -> void:
+	var p: Dictionary = picks.get(str(c["id"]), {})
+	p[ch["key"]] = k
+	picks[str(c["id"])] = p
+	_sheet(c)
 
 
 func _page(d: int) -> void:

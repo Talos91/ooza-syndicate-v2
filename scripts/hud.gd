@@ -3015,9 +3015,13 @@ func gat_line(n: Dictionary) -> String:
 	var ammo := float(n["units"])
 	var line := "ammo %d/%d · +%.1f/s · fires %.1f/s" % [Rules.shown(ammo), Rules.shown(Sim.gat_cap(n)),
 			Rules.shown_f(sim.gat_rate(n)), Rules.shown_f(Sim.gat_fire_rate(n))]
-	if bool(Rules.lab_opt("gat_own_platform")):        # LAB: it fires only over its own platform (Sim.gat_reach)
+	if float(Rules.lab_opt("gat_range")) > 0.0:        # LAB gat_range: its reach in m (Sim.gat_reach)
+		line += " · reach %d m" % int(round(Sim.gat_reach()))
+	elif bool(Rules.lab_opt("gat_own_platform")):      # LAB: it fires only over its own platform (Sim.gat_reach)
 		line += " · own platform"
-	return line + (" · EMPTY" if ammo < 0.5 * Rules.SCALE else "")
+	if not is_equal_approx(Sim.gat_ammo(), 1.0):       # LAB gat_ammo: the own units each kill costs
+		line += " · " + ("ammo free" if Sim.gat_ammo() <= 0.0 else "1 unit / %d kills" % int(round(1.0 / Sim.gat_ammo())))
+	return line + (" · EMPTY" if ammo < 0.5 * Rules.SCALE and Sim.gat_ammo() > 0.0 else "")
 
 
 func launcher_line(n: Dictionary) -> String:

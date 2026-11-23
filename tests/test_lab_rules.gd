@@ -5,16 +5,19 @@ extends SceneTree
 ##   C  relay_set - map L09R (a retract and a rotation relay on the long centre decks, a neutral Googatling T3 at the centre),
 ##      no archived relay kind (lift / tilt / remote / laser_relay) on any lab map;
 ##   B  quota_tier - quota by tier (a launch scores its node tier), relays never launch, the match ends by quota;
+##   D  lab4 jobs 2 + 5 - unit_speed (x travel speed and door rate), gat_range / gat_power / gat_ammo, the cards' choice sheet;
 ##   and the options-off identity (L11P AI vs AI equals the run recorded on the untouched lab tip 232c7787).
 ##   Godot --headless --path . --script res://tests/test_lab_rules.gd        Exit code 0 = all passed.
 
 const LabOverlay := preload("res://scripts/lab_overlay.gd")
 const LabCards := preload("res://scripts/lab_cards.gd")
+const LabMenu := preload("res://scripts/lab_menu.gd")
 const L09C := "res://maps4/L09C-clusters-9.json"
 const L11P := "res://maps4/L11P-grid-11.json"
 # L11P, AI vs AI, seed 5 (A Standard null / B Veteran ember), all three WP4 options off: recorded on the untouched lab tip
-# 232c7787 before WP4 (hash = the chained hash of every event's text)
-const L11P_BEFORE := {"winner": "B", "time": 185.3, "events": 163, "hash": 1116204576}
+# 232c7787 before WP4 (hash = the chained hash of every event's text). Re-recorded on ac3bc1c2 (lab4 job 1 re-baked the lab maps;
+# was B 185.3 s, 163 events, 1116204576) and equal there before and after lab4 jobs 2 + 5 (their options at their defaults).
+const L11P_BEFORE := {"winner": "B", "time": 390.7, "events": 581, "hash": 4257610216}
 const OPTS := ["gat_own_platform", "gat_start", "quota_tier", "relay_set"]
 
 var failures := 0
@@ -329,6 +332,128 @@ func _part_b() -> void:
 	_parts_done += 1
 
 
+func _walked(speed: float, dt_total := 0.5) -> float:
+	## Metres a B line walks along deck 3-1 of L09C in dt_total s at lab option unit_speed = speed.
+	Rules.lab_opts["unit_speed"] = speed
+	var sim := _sim(L09C)
+	var h := sim._new_horde("B", 2.0, [3, 1])
+	h["units"] = 2.0
+	h["ordered"] = 2.0
+	h["streaming"] = false
+	h["s"] = 1.0
+	sim.hordes.append(h)
+	var s0: float = h["s"]
+	var n := 0
+	while n < int(round(dt_total / 0.05)):
+		sim.step(0.05)
+		n += 1
+	return float(h["s"]) - s0
+
+
+func _part_d() -> void:
+	# ------------------------------------------------------------ D: lab4 options (unit speed, Googatling range / power / ammo)
+	var saved: Dictionary = Rules.lab_opts.duplicate(true)
+	_opts({})
+	# unit_speed: travel speed and door rate scale together (spacing kept); 1.0 outside the lab
+	var base := _walked(1.0)
+	for sp in [0.9, 0.8]:
+		var d := _walked(sp)
+		check(absf(d / base - sp) < 0.005, "unit_speed x%.1f: walks %.3f m vs %.3f m in 0.5 s (ratio %.4f)" % [sp, d, base, d / base])
+		check(is_equal_approx(Rules.move_speed(), Rules.BRAWL_SPEED * sp) and is_equal_approx(Rules.exit_rate(), Rules.BRAWL_DOOR_RATE * sp)
+				and is_equal_approx(Rules.metres_per_unit(), Rules.BRAWL_SPEED / Rules.BRAWL_DOOR_RATE),
+				"unit_speed x%.1f: move_speed %.3f, door rate %.3f, spacing unchanged" % [sp, Rules.move_speed(), Rules.exit_rate()])
+	Rules.lab_opts["unit_speed"] = 1.0
+	var hop1: Vector2 = _sim(L09C).joint_hops()
+	Rules.lab_opts["unit_speed"] = 0.8
+	var hop8: Vector2 = _sim(L09C).joint_hops()
+	check(absf(hop8.x * 0.8 - hop1.x) < 0.01, "unit_speed x0.8: cluster hop %.2f s -> %.2f s (overlay readout follows)" % [hop1.x, hop8.x])
+	check(LabOverlay.rules_line(_sim(L09C)).contains("speed x0.8"), "overlay: '%s'" % LabOverlay.rules_line(_sim(L09C)))
+	Rules.lab = false
+	check(is_equal_approx(Rules.move_speed(), Rules.BRAWL_SPEED), "unit_speed ignored outside the lab build")
+	Rules.lab = true
+	Rules.lab_opts["unit_speed"] = 1.0
+	check(Rules.move_speed() == Rules.BRAWL_SPEED and Rules.exit_rate() == Rules.BRAWL_DOOR_RATE, "unit_speed x1.0 = BRAWL_SPEED exactly")
+	# gat_range: 6 / 8 / 10 m from the node centre (over gat_own_platform)
+	_opts({"gat_own_platform": true, "gat_start": true})
+	var sim := _sim(L09C)
+	var ga := 1
+	for cs in [[6.0, [[2, 1], 4.0, true], [[2, 1], 7.0, false], [[3, 1], 9.0, false]],
+			[8.0, [[2, 1], 4.0, true], [[2, 1], 7.0, true], [[3, 1], 9.0, false]],
+			[10.0, [[2, 1], 4.0, true], [[2, 1], 7.0, true], [[3, 1], 9.0, true]]]:
+		Rules.lab_opts["gat_range"] = cs[0]
+		check(is_equal_approx(Sim.gat_reach(), cs[0]), "gat_range %.0f: reach %.1f m" % [cs[0], Sim.gat_reach()])
+		for k in [1, 2, 3]:
+			var c: Array = cs[k]
+			sim.hordes.clear()
+			sim.nodes[ga]["units"] = Sim.gat_cap(sim.nodes[ga])
+			var h := _line_at(sim, "B", c[0], ga, c[1])
+			var hd: float = (sim.nodes[ga]["pos"] as Vector3).distance_to(Sim.sample(h, h["s"])[0])
+			check(_shot(sim, ga, h) == c[2], "gat_range %.0f: line head %.1f m %s" % [cs[0], hd, "hit" if c[2] else "not hit"])
+	Rules.lab_opts["gat_range"] = 8.0
+	check(LabOverlay.rules_line(sim).contains("reach 8 m"), "overlay: '%s'" % LabOverlay.rules_line(sim))
+	Rules.lab_opts["gat_range"] = 0.0
+	check(is_equal_approx(Sim.gat_reach(), Rules.R), "gat_range 0 (default): reach back to own platform %.1f m" % Sim.gat_reach())
+	# gat_power and gat_ammo: one 0.1 s shot at a big line on the gun's own platform
+	var shots := {}
+	for pw in [1.0, 1.5, 2.0]:
+		for am in [1.0, 0.5, 0.0]:
+			Rules.lab_opts["gat_power"] = pw
+			Rules.lab_opts["gat_ammo"] = am
+			sim.hordes.clear()
+			sim.nodes[ga]["units"] = Sim.gat_cap(sim.nodes[ga])
+			var g0: float = sim.nodes[ga]["units"]
+			var h := _line_at(sim, "B", [2, 1], ga, 3.0)
+			h["units"] = 100.0
+			var u0: float = h["units"]
+			_shot(sim, ga, h)
+			shots["%s/%s" % [pw, am]] = [u0 - float(h["units"]), g0 - float(sim.nodes[ga]["units"])]
+	var k1: float = shots["1.0/1.0"][0]
+	check(is_equal_approx(k1, 8.0 * 0.1) and is_equal_approx(shots["1.0/1.0"][1], k1),
+			"default x1 / 1 per kill: T1 kills %.2f in 0.1 s (MACHINEGOON_RATE 8/s), spends %.2f" % [k1, shots["1.0/1.0"][1]])
+	for pw in [1.5, 2.0]:
+		var kk: float = shots["%s/1.0" % pw][0]
+		check(is_equal_approx(kk, k1 * pw), "gat_power x%s: kills %.2f in 0.1 s (x%.2f)" % [pw, kk, kk / k1])
+	for am in [0.5, 0.0]:
+		for pw in [1.0, 2.0]:
+			var r: Array = shots["%s/%s" % [pw, am]]
+			check(is_equal_approx(r[1], r[0] * am), "gat_ammo %s (power x%s): kills %.2f, spends %.2f own units" % [am, pw, r[0], r[1]])
+	# empty garrison: 1 per kill does not fire; free ammo fires
+	for am in [1.0, 0.0]:
+		Rules.lab_opts["gat_power"] = 1.0
+		Rules.lab_opts["gat_ammo"] = am
+		sim.hordes.clear()
+		sim.nodes[ga]["units"] = 0.0
+		var h := _line_at(sim, "B", [2, 1], ga, 3.0)
+		check(_shot(sim, ga, h) == (am == 0.0), "gat_ammo %s, empty garrison: %s" % [am, "fires" if am == 0.0 else "silent"])
+	Rules.lab_opts["gat_ammo"] = 0.5
+	Rules.lab_opts["gat_power"] = 1.5
+	sim.hordes.clear()
+	var rl := LabOverlay.rules_line(sim)
+	check(rl.contains("power x1.5") and rl.contains("1 per 2 kills"), "overlay: '%s'" % rl)
+	# the cards: values[0] = today's behaviour; a pick lands in Rules.lab_opts
+	Rules.lab_opts = saved.duplicate(true)
+	LabMenu._defaults = saved.duplicate(true)
+	var hop := LabCards.find("hop")
+	var gat := LabCards.find("gat")
+	LabMenu.picks = {}
+	LabMenu.apply_card(gat)
+	check(is_equal_approx(Sim.gat_reach(), Rules.R) and Rules.lab_opt("gat_power") == 1.0 and Rules.lab_opt("gat_ammo") == 1.0,
+			"card gat, no pick: reach %.1f m, x1, 1 per kill (today's)" % Sim.gat_reach())
+	LabMenu.apply_card(hop)
+	check(Rules.lab_opt("unit_speed") == 1.0 and LabMenu.pick_tag(hop) == "x1.0", "card hop, no pick: x1.0")
+	LabMenu.picks = {"hop": {"unit_speed": 1}, "gat": {"gat_range": 2, "gat_power": 1, "gat_ammo": 1}}
+	LabMenu.apply_card(hop)
+	check(is_equal_approx(Rules.unit_speed(), 0.9) and LabMenu.pick_tag(hop) == "x0.9", "card hop, pick 2: x0.9 (%s)" % LabMenu.pick_tag(hop))
+	LabMenu.apply_card(gat)
+	check(is_equal_approx(Sim.gat_reach(), 10.0) and Rules.lab_opt("gat_power") == 1.5 and Rules.lab_opt("gat_ammo") == 0.5
+			and Rules.lab_opt("unit_speed") == 1.0, "card gat, picks: %s (hop's speed not carried over)" % LabMenu.pick_tag(gat))
+	LabMenu.picks = {}
+	LabMenu.reset_card()
+	LabMenu._defaults = {}
+	Rules.lab_opts = saved.duplicate(true)
+	_parts_done += 1
+
+
 func _identity() -> void:
 	# ------------------------------------------------------------ options off: L11P unchanged
 	_opts({})
@@ -347,8 +472,9 @@ func _init() -> void:
 	_part_a()
 	_part_c()
 	_part_b()
+	_part_d()
 	_identity()
-	check(_parts_done == 4, "every part ran to its end (A, C, B, identity: %d of 4)" % _parts_done)
+	check(_parts_done == 5, "every part ran to its end (A, C, B, D, identity: %d of 5)" % _parts_done)
 	_opts({"gat_own_platform": true, "relay_set": true})
 	print("test_lab_rules: %s" % ("ALL PASSED" if failures == 0 else "%d FAILED" % failures))
 	quit(1 if failures > 0 else 0)

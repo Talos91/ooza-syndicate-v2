@@ -5,6 +5,7 @@ extends CanvasLayer
 ## viewport in pt and px. Refreshed 4x a second (so zoom, resize and rotation show). Text >= 12.5 pt (UiKit.pt_per_px).
 
 const LabMenu := preload("res://scripts/lab_menu.gd")
+const LabCards := preload("res://scripts/lab_cards.gd")
 const TEXT_PT := 12.5
 
 var main: Node
@@ -65,13 +66,30 @@ static func deck_range(map: Dictionary) -> Vector2:
 	return Vector2(lo, hi) if lo <= hi else Vector2(-1.0, -1.0)
 
 
+static func num(v: float) -> String:
+	## 8 -> "8", 0.9 -> "0.9", 1.5 -> "1.5" (readouts of the lab options).
+	return str(int(round(v))) if absf(v - round(v)) < 0.001 else str(snappedf(v, 0.01))
+
+
 static func rules_line(sim) -> String:
 	## LAB WP4 rule options, when they matter on this board: the quota score, "gat: own platform" while a Googatling stands.
 	var parts := PackedStringArray()
 	if Rules.quota:
 		parts.append("quota A %d - B %d, %d left" % [sim.quota_of("A"), sim.quota_of("B"), sim.quota_left()])
-	if bool(Rules.lab_opt("gat_own_platform")) and (sim.nodes as Array).any(func(n): return n["structure"] == "machinegoon"):
-		parts.append("gat: own platform")
+	if not is_equal_approx(Rules.unit_speed(), 1.0):       # lab4 job 2: CLUSTER HOP speed card
+		parts.append("speed x%s" % num(Rules.unit_speed()))
+	if (sim.nodes as Array).any(func(n): return n["structure"] == "machinegoon"):
+		var g := PackedStringArray()
+		if float(Rules.lab_opt("gat_range")) > 0.0:         # lab4 job 5: the Googatling card's choices
+			g.append("reach %s m" % num(Sim.gat_reach()))
+		elif bool(Rules.lab_opt("gat_own_platform")):
+			g.append("own platform")
+		if not is_equal_approx(float(Rules.lab_opt("gat_power")), 1.0):
+			g.append("power x%s" % num(float(Rules.lab_opt("gat_power"))))
+		if not is_equal_approx(Sim.gat_ammo(), 1.0):
+			g.append("ammo free" if Sim.gat_ammo() <= 0.0 else "ammo 1 per %s kills" % num(1.0 / Sim.gat_ammo()))
+		if not g.is_empty():
+			parts.append("gat: " + ", ".join(g))
 	return "  ·  ".join(parts)
 
 
@@ -95,6 +113,9 @@ func text() -> String:
 	var ppp := UiKit.pt_per_px(vp)
 	var win := Vector2(get_window().size)
 	var card := LabMenu.card_id if LabMenu.card_id != "" else "-"
+	var tag := LabMenu.pick_tag(LabCards.find(LabMenu.card_id)) if LabMenu.card_id != "" else ""
+	if tag != "":                                    # CHOICE SHEET picks (lab4): "hop x0.9", "gat 8 m · x1.5 · 1 PER 2"
+		card += " " + tag
 	var head := "LAB %s  ·  CARD %s  ·  %s" % [Rules.VERSION, card, str(main.map.get("code", "?"))]
 	if not open:
 		return head + "  (tap)"

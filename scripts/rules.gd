@@ -111,7 +111,13 @@ static func front_dir() -> Vector3:
 
 
 static func move_speed() -> float:
-	return deck_speed if bridge_combat else BRAWL_SPEED
+	return deck_speed if bridge_combat else BRAWL_SPEED * unit_speed()
+
+
+static func unit_speed() -> float:
+	## LAB option unit_speed (lab4 job 2; Daniele: "slow trops movement to 0.90 maybe we need a test with different unit traverse
+	## speed"): x BRAWL unit speed and door rate together, so a line keeps its spacing (metres_per_unit). 1.0 outside the lab.
+	return float(lab_opts.get("unit_speed", 1.0)) if lab else 1.0
 
 
 static func platform_mult() -> float:
@@ -119,7 +125,7 @@ static func platform_mult() -> float:
 
 
 static func exit_rate() -> float:
-	return door_rate if bridge_combat else BRAWL_DOOR_RATE
+	return door_rate if bridge_combat else BRAWL_DOOR_RATE * unit_speed()
 
 
 static func metres_per_unit() -> float:
@@ -204,9 +210,15 @@ static var lab_opts := {
 	"count_scale": 1.0,         # vat-screen digit size (x1.0 / x1.15 / x1.3 cards)
 	"hud_badge": false,         # the HUD count badge
 	"cam_lock": true,           # LAB ZOOM BOX: lab maps (MapPool.LAB) start at the fixed camera below, not fitted to the map
+	# lab4 jobs 2 + 5 (Daniele's phone test of lab3, points 5 and 8): numbers picked on a card's choice sheet (lab_cards "choices").
+	"unit_speed": 1.0,          # x BRAWL unit travel speed AND door rate (Rules.move_speed / exit_rate; spacing kept). Card CLUSTER HOP
+	"gat_range": 0.0,           # Googatling reach, m from its node centre; 0 = as before (gat_own_platform: R 6 m, else MACHINEGOON_RANGE 10 m)
+	"gat_power": 1.0,           # x Googatling fire rate (kills/s = MACHINEGOON_RATE[tier] x this; Sim.gat_fire_rate)
+	"gat_ammo": 1.0,            # own garrison units spent per unit killed (1 = before: one per kill; 0.5 = 1 per 2 kills; 0 = free)
 }
 const _LAB_OFF := {"joints": false, "gat_own_platform": false, "gat_start": false, "quota_tier": false, "relay_set": false,
-		"count_on_screen": false, "count_scale": 1.0, "hud_badge": true, "cam_lock": false}   # what the real game does (lab off)
+		"count_on_screen": false, "count_scale": 1.0, "hud_badge": true, "cam_lock": false,
+		"unit_speed": 1.0, "gat_range": 0.0, "gat_power": 1.0, "gat_ammo": 1.0}   # what the real game does (lab off)
 
 
 # LAB ZOOM BOX (lab4 job 1; Daniele's phone test of lab3: "if we trying maps more zoomed in the maps need to be buildt at zoom in

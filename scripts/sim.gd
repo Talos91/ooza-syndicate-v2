@@ -468,8 +468,16 @@ func gat_rate(n: Dictionary) -> float:
 
 static func gat_fire_rate(n: Dictionary) -> float:
 	## GOOGAT: garrison units fired per second while a target is in range (= kills/s before Anchor).
+	## LAB option gat_power (lab4 job 5; Daniele: "feels not powerful enough"): x this rate (1.0 outside the lab).
 	var t: int = clampi(int(n["tier"]), 1, 3)
-	return float(Rules.MACHINEGOON_RATE.get(t, Rules.MACHINEGOON_RATE.get(str(t), 8.0)))
+	return float(Rules.MACHINEGOON_RATE.get(t, Rules.MACHINEGOON_RATE.get(str(t), 8.0))) * float(Rules.lab_opt("gat_power"))
+
+
+static func gat_ammo() -> float:
+	## LAB option gat_ammo (lab4 job 5; Daniele: "not sure about it shooting the troops inside or if it does shouldn t be a 1 to 1
+	## bu lower ratio"): own garrison units spent per unit killed. 1.0 = the real game (one unit per kill); 0.5 = one per two
+	## kills; 0 = free (it then fires with an empty garrison too).
+	return float(Rules.lab_opt("gat_ammo"))
 
 
 func _base_production(n: Dictionary) -> float:
@@ -860,7 +868,8 @@ func _fire_machinegoon(n: Dictionary, dt: float) -> void:
 	## every seat (Daniele 2026-11-06: "neutral shoot all").
 	if is_disrupted(n["id"]):
 		return
-	if float(n["units"]) <= 0.0001:
+	var ammo := gat_ammo()                                              # LAB gat_ammo: units spent per kill (1.0 = the real game)
+	if ammo > 0.0 and float(n["units"]) <= 0.0001:
 		return
 	var reach := gat_reach()
 	var targets := _hordes_in_range(n, reach)
@@ -874,10 +883,12 @@ func _fire_machinegoon(n: Dictionary, dt: float) -> void:
 		if d < best_d:
 			best_d = d
 			best = h
-	var fire: float = minf(gat_fire_rate(n) * dt, float(n["units"]))   # the garrison caps the burst: empty = trickle
+	var fire: float = gat_fire_rate(n) * dt
+	if ammo > 0.0:
+		fire = minf(fire, float(n["units"]) / ammo)                      # the garrison caps the burst: empty = trickle
 	var mult := _cannon_mult(best)                                      # Anchor halves these too (Daniele, 2026-09-27)
 	var kill: float = minf(fire * mult, best["units"])
-	n["units"] = maxf(0.0, float(n["units"]) - (kill / mult if mult > 0.0 else fire))
+	n["units"] = maxf(0.0, float(n["units"]) - (kill / mult if mult > 0.0 else fire) * ammo)
 	var at := _hit_point(n, best, reach)
 	var hid: int = best["id"]
 	_structure_kill(n, best, kill, "machinegoon")
@@ -887,7 +898,11 @@ func _fire_machinegoon(n: Dictionary, dt: float) -> void:
 static func gat_reach() -> float:
 	## How far a Googatling reaches from its node centre. LAB option gat_own_platform (Daniele 2026-11-23: "covers only its node
 	## area not beyond (or we have spawn kill)"): only the bodies on its own platform (within Rules.R, the rim), never a
-	## neighbour platform or a deck. Off (and in the real game): MACHINEGOON_RANGE.
+	## neighbour platform or a deck. Off (and in the real game): MACHINEGOON_RANGE. LAB option gat_range (lab4 job 5; Daniele: "its
+	## range is too little to really make a difference"), when > 0, is the reach in metres (over both).
+	var r := float(Rules.lab_opt("gat_range"))
+	if r > 0.0:
+		return r
 	return Rules.R if bool(Rules.lab_opt("gat_own_platform")) else Rules.MACHINEGOON_RANGE
 
 
