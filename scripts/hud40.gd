@@ -6,7 +6,7 @@ extends RefCounted
 ## pack's 812 x 375 frame: the vat group from the safe left, the score top centre, the top keys + rack + skill keys from the safe
 ## right. Goo = faction colour (pipes recoloured from the painted NULL goo by shaders/hud_pipe_tint.gdshader, the vat / score
 ## through hud_goo); neon = seat colour (key rims, score caps). The controls, readouts and taps stay the lab HUD's (HudLab, SendTank,
-## SkillDock, Hud); only their faces and places change. Off: --hud-lab29 (the round-29/30 lab HUD) or no hud40 art.
+## SkillDock, Hud); only their faces and places change. Off: no hud40 art (then the round-29/30 lab HUD). Dev --hud-lab29 deleted 2026-11-23, back from tag archive-2026-11-23.
 
 const DIR := "res://assets/ui/hud40/"
 const PX := 2.0                                  # art px per pt (the 2x cuts)
@@ -40,7 +40,7 @@ static var _tex := {}
 
 
 static func on() -> bool:
-	if not HudLab.on() or "--hud-lab29" in OS.get_cmdline_user_args():
+	if not HudLab.on():
 		return false
 	return tex("PAINT-VAT-FRAME") != null
 

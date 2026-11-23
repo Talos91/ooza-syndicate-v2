@@ -5,7 +5,7 @@ extends RefCounted
 ## PIT (main.pit_rect, same unit): SEND = left column, SKILLS = right column (84 pt), SCORE = top centre, the two AI SCREENS in the top
 ## corners (tilted -12 / +12 deg; AI moods live there), SOUND / PAUSE / CHAT top right, MAP NAME bottom left, VERSION bottom right.
 ## Controls, readouts and taps stay Hud40's / the lab HUD's (SendTank, SkillDock, Hud): only faces and places change.
-## Goo = faction colour (rail / cable / score goo), neon = seat colour (key rims, sockets). Off: --hud-40b6.
+## Goo = faction colour (rail / cable / score goo), neon = seat colour (key rims, sockets). Off: no hud43 art (then Hud40). Dev --hud-40b6 deleted 2026-11-23, back from tag archive-2026-11-23.
 
 const DIR := "res://assets/ui/hud43/"
 const SCORE_SHADER := preload("res://assets/ui/hud43/score_share.gdshader")
@@ -39,7 +39,7 @@ static var _tex := {}
 
 
 static func on() -> bool:
-	if "--hud-40b6" in OS.get_cmdline_user_args() or not Hud40.on():
+	if not Hud40.on():
 		return false
 	return tex("skill_rail") != null
 

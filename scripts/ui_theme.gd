@@ -15,7 +15,7 @@ extends RefCounted
 
 const DIR := "res://assets/ui/round3/"
 const DATA := preload("res://scripts/ui_round3_data.gd")
-const MODES := ["dark", "light"]
+const MODES := ["dark"]                            # light deleted 2026-11-23 (tag archive-2026-11-23 keeps it)
 const SCALE := 0.36                                # source px -> canvas units: a 128 px primary is ~46 units tall
 const PILLS := ["A5", "A6", "A7", "A8", "A9", "A10", "A11"]   # the pill buttons scale with their height (round ends stay round)
 
@@ -43,17 +43,7 @@ static func match_dark(on: bool) -> void:
 
 
 static func mode() -> String:
-	if true:                                       # 0.23.22: DARK only (see the header)
-		return "dark"
-	if _match_dark:
-		return "dark"
-	if _mode == "":
-		_mode = _arg_mode()
-		if _mode == "":
-			var c := ConfigFile.new()
-			var v := str(c.get_value("display", "theme", "dark")) if c.load(Rules.settings_path) == OK else "dark"
-			_mode = v if v in MODES else "dark"
-	return _mode
+	return "dark"                                  # 0.23.22: DARK only (see the header); the light sheets were deleted 2026-11-23
 
 
 static func light() -> bool:

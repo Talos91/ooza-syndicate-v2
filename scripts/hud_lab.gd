@@ -6,7 +6,7 @@ extends RefCounted
 ## node badges 28 x 21 pt, the score tube with the timer only. Goo = shaders/hud_goo.gdshader (tint per player, level from the match,
 ## slosh, bubbles, glass highlight; clipped by the goo master's alpha). Key and slice states are built at run time from the masks;
 ## numbers, names and timers are drawn live. Placement: 25-hud-pieces-B/PIECES.json and round30-pipes/GEO.json (812 x 375 pt frame).
-## Off: dev --hud-old (the pre-lab HUD, as staging 0.24.1) or Rules.HUD_LAB = false.
+## Off: Rules.HUD_LAB = false or no lab29 art (then the pre-lab HUD). Dev --hud-old deleted 2026-11-23, back from tag archive-2026-11-23.
 
 const DIR := "res://assets/ui/lab29/"
 const GOO := preload("res://shaders/hud_goo.gdshader")
@@ -49,7 +49,7 @@ static var _tex := {}
 
 
 static func on() -> bool:
-	if not Rules.HUD_LAB or "--hud-old" in OS.get_cmdline_user_args():
+	if not Rules.HUD_LAB:
 		return false
 	return tex("vat-shell") != null
 
@@ -64,7 +64,7 @@ static func tex(n: String) -> Texture2D:
 
 
 static func u_for(vp: Vector2, mobile: bool) -> float:
-	## Screen px per layout pt: the HUD's pt (phones: real pt x hud_k), desktop x 1.2 (as the tank and HudR19).
+	## Screen px per layout pt: the HUD's pt (phones: real pt x hud_k), desktop x 1.2 (as the tank).
 	if Hud43.on():                                   # hud-43: THE PIT's unit everywhere (zones and pit always meet)
 		return Hud43.unit(vp)
 	return UiKit.hud_px_per_pt(vp, mobile) * (1.0 if mobile else 1.2)
