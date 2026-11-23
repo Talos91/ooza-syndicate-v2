@@ -197,13 +197,14 @@ static var lab: bool = VERSION.contains("-lab")
 static var lab_opts := {
 	"joints": true,             # joint edges (clusters): no deck, unbreakable, vat-to-vat path
 	"gat_own_platform": true,   # the Googatling fires only over its own platform
-	"quota_tier": true,         # quota: 1 point per tier, relays do not launch
+	"gat_start": false,         # card GOOGATLING: each seat starts with a T1 Googatling next to home (Sim._setup_lab_gat_start)
+	"quota_tier": false,        # quota: 1 point per tier, relays do not launch (on by the QUOTA card only: it changes the end)
 	"relay_set": true,          # the lab relay set (rotate, retract, switch, launcher; ferry / belt as hazards)
 	"count_on_screen": true,    # the unit count on the vat screen
 	"count_scale": 1.0,         # vat-screen digit size (x1.0 / x1.15 / x1.3 cards)
 	"hud_badge": false,         # the HUD count badge
 }
-const _LAB_OFF := {"joints": false, "gat_own_platform": false, "quota_tier": false, "relay_set": false,
+const _LAB_OFF := {"joints": false, "gat_own_platform": false, "gat_start": false, "quota_tier": false, "relay_set": false,
 		"count_on_screen": false, "count_scale": 1.0, "hud_badge": true}   # what the real game does (lab off)
 
 

@@ -22,6 +22,8 @@ func run_until(sim: Sim, cond: Callable, limit: float, dt := 0.05) -> float:
 
 func _init() -> void:
 	Rules.archived_on = true                          # 0.23.21: Mire / Anchor / Bypass are archived; their code is still tested
+	for k in ["gat_own_platform", "gat_start", "quota_tier", "relay_set"]:   # LAB WP4 rule options: this suite tests the real
+		Rules.lab_opts[k] = false                     # game's rules (tests/test_lab_rules.gd tests the options)
 	if "--only=two_doors" in OS.get_cmdline_user_args():      # TWO DOORS alone (quick)
 		_two_doors()
 		print("two_doors: %d failure(s)" % failures)

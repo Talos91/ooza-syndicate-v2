@@ -288,7 +288,43 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			_ctrl_edges[edge_controller[i]] = []
 		_ctrl_edges[edge_controller[i]].append(i)
 	_setup_proto()
+	if bool(Rules.lab_opt("gat_start")):
+		_setup_lab_gat_start()
 	_setup_skills(seat_loadouts)
+
+
+func _setup_lab_gat_start() -> void:
+	## LAB card GOOGATLING (WP4, option gat_start; the map format has no owned start structure): each seat starts owning a
+	## full T1 Googatling on the platform next to its home - a joint neighbour when the home is in a cluster, else the nearest
+	## linked node; the lowest id wins a tie, so mirrored maps stay mirror-fair.
+	for seat in homes:
+		var home: int = homes[seat]
+		var pick := -1
+		var pick_joint := false
+		var pick_d := INF
+		for link in adj[home]:
+			var nb: int = link[0]
+			var m: Dictionary = nodes[nb]
+			if m["owner"] != "" or m["node_kind"] != "common":
+				continue
+			var j: bool = edges[link[1]].get("joint", false) == true
+			var d: float = (m["pos"] as Vector3).distance_to(nodes[home]["pos"])
+			if pick < 0 or (j and not pick_joint) or (j == pick_joint and (d < pick_d - 0.01 or (absf(d - pick_d) <= 0.01 and nb < pick))):
+				pick = nb
+				pick_joint = j
+				pick_d = d
+		if pick < 0:
+			continue
+		var n: Dictionary = nodes[pick]
+		n["owner"] = seat
+		n["structure"] = "machinegoon"
+		n["tier"] = 1
+		n["units"] = gat_cap(n)
+		_sync_legacy(n)
+		var cap := armour_cap(n)
+		n["armour"] = cap
+		n["armour_from"] = cap
+		n["armour_cap"] = cap
 
 
 var _map_last_stand: Dictionary = {}
@@ -813,7 +849,8 @@ func _fire_machinegoon(n: Dictionary, dt: float) -> void:
 		return
 	if float(n["units"]) <= 0.0001:
 		return
-	var targets := _hordes_in_range(n, Rules.MACHINEGOON_RANGE)
+	var reach := gat_reach()
+	var targets := _hordes_in_range(n, reach)
 	if targets.is_empty():
 		return
 	var c: Vector3 = n["pos"]
@@ -828,10 +865,17 @@ func _fire_machinegoon(n: Dictionary, dt: float) -> void:
 	var mult := _cannon_mult(best)                                      # Anchor halves these too (Daniele, 2026-09-27)
 	var kill: float = minf(fire * mult, best["units"])
 	n["units"] = maxf(0.0, float(n["units"]) - (kill / mult if mult > 0.0 else fire))
-	var at := _hit_point(n, best, Rules.MACHINEGOON_RANGE)
+	var at := _hit_point(n, best, reach)
 	var hid: int = best["id"]
 	_structure_kill(n, best, kill, "machinegoon")
 	n["shot"] = {"t": time, "target_horde": hid, "kills": kill, "pos": at, "trickle": fire < gat_fire_rate(n) * dt * 0.99}
+
+
+static func gat_reach() -> float:
+	## How far a Googatling reaches from its node centre. LAB option gat_own_platform (Daniele 2026-11-23: "covers only its node
+	## area not beyond (or we have spawn kill)"): only the bodies on its own platform (within Rules.R, the rim), never a
+	## neighbour platform or a deck. Off (and in the real game): MACHINEGOON_RANGE.
+	return Rules.R if bool(Rules.lab_opt("gat_own_platform")) else Rules.MACHINEGOON_RANGE
 
 
 func _structure_kill(n: Dictionary, h: Dictionary, kill: float, why: String) -> void:

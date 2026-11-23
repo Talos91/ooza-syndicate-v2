@@ -2980,6 +2980,8 @@ func gat_line(n: Dictionary) -> String:
 	var ammo := float(n["units"])
 	var line := "ammo %d/%d · +%.1f/s · fires %.1f/s" % [Rules.shown(ammo), Rules.shown(Sim.gat_cap(n)),
 			Rules.shown_f(sim.gat_rate(n)), Rules.shown_f(Sim.gat_fire_rate(n))]
+	if bool(Rules.lab_opt("gat_own_platform")):        # LAB: it fires only over its own platform (Sim.gat_reach)
+		line += " · own platform"
 	return line + (" · EMPTY" if ammo < 0.5 * Rules.SCALE else "")
 
 

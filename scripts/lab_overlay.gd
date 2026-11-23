@@ -65,6 +65,14 @@ static func deck_range(map: Dictionary) -> Vector2:
 	return Vector2(lo, hi) if lo <= hi else Vector2(-1.0, -1.0)
 
 
+static func rules_line(sim) -> String:
+	## LAB WP4 rule options, when they matter on this board: the quota score, "gat: own platform" while a Googatling stands.
+	var parts := PackedStringArray()
+	if bool(Rules.lab_opt("gat_own_platform")) and (sim.nodes as Array).any(func(n): return n["structure"] == "machinegoon"):
+		parts.append("gat: own platform")
+	return "  ·  ".join(parts)
+
+
 func plat_pt() -> float:
 	## Platform diameter (screen-horizontal axis) in pt at the view's aim point (tests/map_size_probe.gd _plat_pt).
 	var cam: Camera3D = main.cam
@@ -100,6 +108,9 @@ func text() -> String:
 	if _hops.x >= 0.0:
 		deck_line += "  ·  hop: %s s" % (("%.1f" % _hops.x) if absf(_hops.y - _hops.x) < 0.05 else ("%.1f - %.1f" % [_hops.x, _hops.y]))
 	lines.append(deck_line)
+	var rl := rules_line(main.sim)
+	if rl != "":
+		lines.append(rl)
 	lines.append("view %d x %d pt  ·  %d x %d px" % [int(round(vp.x * ppp)), int(round(vp.y * ppp)), int(win.x), int(win.y)])
 	return "\n".join(lines)
 

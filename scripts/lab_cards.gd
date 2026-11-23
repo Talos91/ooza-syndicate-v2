@@ -24,8 +24,9 @@ const CARDS: Array[Dictionary] = [
 			"mode": "1v1", "ai": "Standard", "faction": "vex", "rival": "null", "lab_opts": {"joints": true}, "live": true},
 	{"id": "relay-kill", "title": "RELAY KILL", "question": "On a long deck: does it feel like a big deal?",
 			"map": "", "mode": "1v1", "ai": "Standard", "lab_opts": {}, "live": false, "coming": "lab3"},
-	{"id": "gat", "title": "GOOGATLING", "question": "On a cluster node, own platform only: useful without spawn kill?",
-			"map": "", "mode": "1v1", "ai": "Standard", "lab_opts": {}, "live": false, "coming": "lab3"},
+	{"id": "gat", "title": "GOOGATLING ON A CLUSTER", "question": "Own platform only: useful without spawn kill?",
+			"map": "L09C", "mode": "1v1", "ai": "Standard", "faction": "vex", "rival": "null",
+			"lab_opts": {"joints": true, "gat_own_platform": true, "gat_start": true}, "live": true},
 	{"id": "quota", "title": "QUOTA BY TIER", "question": "1 point per tier, relays do not launch: does the score read and matter?",
 			"map": "", "mode": "1v1", "ai": "Standard", "lab_opts": {}, "live": false, "coming": "lab3"},
 ]
