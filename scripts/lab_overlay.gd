@@ -1,6 +1,6 @@
 extends CanvasLayer
-## LAB BUILD (Rules.lab) debug overlay: a small readout in the top-left corner of a match (above the SEND vat, clear of the
-## HUD keys), tap it to fold it to one line and back. Build + card, camera distance and zoom relative to the whole-map fit,
+## LAB BUILD (Rules.lab) debug overlay: a small readout at the BOTTOM CENTRE of a match (above the bottom safe-area inset, clear of the
+## left vat sender, the right skill keys and the map / version labels), starts folded to one line, tap it to unfold and fold. Build + card, camera distance and zoom relative to the whole-map fit,
 ## pitch, platform diameter in pt (tests/map_size_probe.gd _plat_pt), node / bridge count, shortest / longest deck (m),
 ## viewport in pt and px. Refreshed 4x a second (so zoom, resize and rotation show). Text >= 12.5 pt (UiKit.pt_per_px).
 
@@ -8,7 +8,7 @@ const LabMenu := preload("res://scripts/lab_menu.gd")
 const TEXT_PT := 12.5
 
 var main: Node
-var open := true
+var open := false                                # starts folded to its one line (tap unfolds, tap folds)
 var _panel: PanelContainer
 var _label: Label
 var _t := 0.0
@@ -117,13 +117,50 @@ func text() -> String:
 	return "\n".join(lines)
 
 
+func _avoid_rects() -> Array[Rect2]:
+	## The HUD pieces the readout must stay clear of: the left vat sender, the right skill column, the bottom-left map label,
+	## the bottom-right version label (hud.gd places them; read live so a layout change moves us with it).
+	var out: Array[Rect2] = []
+	var h = main.hud if "hud" in main else null
+	if h == null:
+		return out
+	var pad := 4.0 / maxf(UiKit.pt_per_px(get_viewport().get_visible_rect().size), 0.0001)
+	for ctl in [h.side_panel, h.dock, h.map_title, h.version_label]:
+		if ctl != null and is_instance_valid(ctl) and ctl.visible:
+			out.append(Rect2(ctl.global_position, ctl.size).grow(pad))
+	return out
+
+
 func _refresh() -> void:
 	var vp: Vector2 = get_viewport().get_visible_rect().size
 	var u := 1.0 / maxf(UiKit.pt_per_px(vp), 0.0001)
 	_label.add_theme_font_size_override("font_size", int(ceil(TEXT_PT * u)))
 	_label.text = text()
 	var ins := UiKit.safe_insets(vp)
-	_panel.position = Vector2(ins.x + 4.0 * u, ins.y + 4.0 * u)
+	var margin := 12.0 * u                          # the panel's own content margins (6 pt each side)
+	# bottom centre, above the bottom safe-area inset; narrowed (and wrapped) until it clears the HUD pieces
+	_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_label.custom_minimum_size = Vector2.ZERO
+	var nat := _label.get_combined_minimum_size()
+	var avoid := _avoid_rects()
+	var w := nat.x
+	var min_w := minf(nat.x, 200.0 * u)
+	var rect := Rect2()
+	while true:
+		if w < nat.x - 0.5:
+			_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			_label.custom_minimum_size = Vector2(w, 0.0)
+		var h := _label.get_combined_minimum_size().y + margin
+		rect = Rect2((vp.x - (w + margin)) * 0.5, vp.y - ins.w - 4.0 * u - h, w + margin, h)
+		var clear := true
+		for r in avoid:
+			if r.intersects(rect):
+				clear = false
+				break
+		if clear or w <= min_w:
+			break
+		w = maxf(w - 12.0 * u, min_w)
+	_panel.position = rect.position
 	_panel.reset_size()
 
 
