@@ -1,6 +1,10 @@
 # Next session - start here
 
-## Live state (2026-11-02)
+## Live state (2026-11-23)
+**LIVE 0.25.2** since 2026-11-23 (Daniele: "Yes, go live" after his staging phone check; was 0.25.1): main tag v0.25.2 = 229fd590, gh-pages 5e1c966c, live index.pck 82,995,348 = staging, live room ooze20-net-8 / 0.25.2 (test_dedicated + test_relay PASS). Cleanup release: export filters, dead HUD parts, archived maps (except the 2v2 set test_ai_coop samples), SIEGE + 5-6 seat modes removed; old main on tag archive-2026-11-23. Headless / curl only. /staging/ = 0.25.2 (free for Ooze 3.0); main stays on 0.25.x for hotfixes. /lab/ belongs to the lab session.
+**LIVE 0.25.1** 2026-11-23 (promoted from staging on Daniele's word; was 0.23.21): main = tag v0.25.1 = 1a716645, live index.pck 88,822,112, room ooze20-net-8 / 0.25.1. (Older live notes below, to 2026-11-02, are history.)
+
+### Earlier live state (2026-11-02)
 **LIVE 0.23.20** (main = release-0.23.20 + this docs commit) = 0.23.19 + doors-main (two doors on every BRAWL platform, in and out by the nearer one; floor-arrow readout; half-turn maps exactly even) + ui-neon (Last Stand counts kept, neon alarm signs red / yellow / grey with a pulse, 34 pt upgrade chip) + faction-solar-v3 (Solar v3 unit, Rules.FACTION_LOOK, Bloom 0.75 x 4 lanes); test_net waits for a Backwash target. Room server 0.23.20. Browser check in Chromium phone emulation only; promoted on Daniele's go 2026-11-02 (no phone check of staging before the promote).
 **LIVE 0.23.19** (main = release-0.23.19 + this docs commit) = 0.23.18 + hotfix-02319: the board stays on screen when a phone turns or goes fullscreen mid-match (RenderScale.sync() first in main._on_resized), PHONE idle 30 fps, new tests/board_sweep (63 pool maps, four setups). Room server 0.23.19. Daniele tested staging on his phone, promoted on his go 2026-11-02.
 **LIVE 0.23.18** (main = release-0.23.18 + this docs commit) = 0.23.16 + perf-ios (phone 3D at 1.5 px/pt, idle 15 fps), speed-15 (BRAWL 4.8 m/s, vat PROD x 0.85, door rate kept), the E maps (E-01..E-10 in the pool), the ultimates rework, the Very Last Stand tie-break (N-24 / N-04 back in 1v1), the UI batch (44 pt deck taps, tiered danger signs, SETUP > ADVANCED). Room server 0.23.18. Checked in Chromium phone emulation only; promoted on Daniele's go 2026-11-01.

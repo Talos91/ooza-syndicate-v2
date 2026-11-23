@@ -1,6 +1,9 @@
 # Ooze Syndicate 2.0 - changelog
 
-## 0.25.2 "cleanup" - 2026-11-23 (branch main-cleanup; not on staging or live)
+## 0.25.2 "cleanup" - 2026-11-23 (staging, then LIVE 2026-11-23 on Daniele's word after his staging phone check)
+
+- **LIVE 2026-11-23**: main tag v0.25.2 = 229fd590; gh-pages 5e1c966c (root = staging bytes; staging/, lab/, CNAME untouched); live index.pck 82,995,348 (was 88,822,112) = staging; live room ooze20-net-8 / 0.25.2, test_dedicated + test_relay PASS. Staging first: gh-pages e17d70a4. Checked headless / curl only; no real-phone check of the live build beyond Daniele's staging check.
+- Fix before release: cleanup (c) had deleted 12 of the 25 2v2 maps test_ai_coop samples (44 % vs 65 %); 229fd590 restores them (0 B in the pck).
 
 - Daniele, Hub Desk dec-pack-clean-old-stuff = a; everything deleted is back from tag archive-2026-11-23 (= main 0.25.1 1a716645).
   - pack-clean: the Web pack ships only pooled + code-referenced maps; export templates off H:.
