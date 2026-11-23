@@ -9,7 +9,7 @@ class_name MapPool
 ## test_ai_curve run over. `all()` itself still carries the tutorial-only maps - test_maps4 (every baked
 ## map) and the rules tests that walk MapPool.all() for coverage still need to see them.
 
-const GROUP_ORDER := ["G", "T", "R", "N", "E", "A", "M", "C", "B", "S", "X", "P", "D", "H"]   # G = the forward pool (0.24.5, POOL G); R = round R proto maps; E = experimental E-01..E-10; P = Relays 3.0 prototype test maps (never pooled); A = Alpha 11 classics; M = maps 4.3 / 4.4 classic + 4.6 relay;
+const GROUP_ORDER := ["L", "G", "T", "R", "N", "E", "A", "M", "C", "B", "S", "X", "P", "D", "H"]   # G = the forward pool (0.24.5, POOL G); R = round R proto maps; E = experimental E-01..E-10; P = Relays 3.0 prototype test maps (never pooled); A = Alpha 11 classics; M = maps 4.3 / 4.4 classic + 4.6 relay;
                                                               # MAPS 5.0: N = the map builder's new maps (References/Ooze Syndicate maps 5.0)
                                                               # (Mushroom Wars style); D = debug / test maps
 const DIR := "res://maps4"
@@ -72,6 +72,9 @@ static func battlefield() -> Array:
 	if not _battlefield_cache.is_empty():
 		return _battlefield_cache
 	var offered := all().filter(func(p): return not p.get_file().substr(0, 4) in TUTORIAL_ONLY and not archived(p) and (not rework(p) or p.get_file().substr(0, 4) in MULTI_FILL))
+	if Rules.lab and not LAB.is_empty():              # LAB BUILD: the lab maps only (empty LAB = the G pool below, via proto_debug)
+		_battlefield_cache = offered.filter(func(p): return p.get_file().substr(0, 4) in LAB)
+		return _battlefield_cache
 	if Rules.demo:                                    # DEMO BUILD: R-01 STRAIT only
 		_battlefield_cache = offered.filter(func(p): return p.get_file().substr(0, 4) in DEMO)
 		return _battlefield_cache
@@ -122,7 +125,7 @@ static func test_scope() -> Array[String]:
 	## The maps the per-map suites verify (test_maps4, test_map_pool, phone_fit): the G pool (Daniele 2026-11-15; before: PROTO + KEEP_OLD).
 	## REWORK maps are not checked and their failures are no blockers (TEST RULE 2026-11-06).
 	var out: Array[String] = []
-	out.append_array(PROTO)
+	out.append_array(LAB if Rules.lab and not LAB.is_empty() else PROTO)   # a lab build checks what its picker offers
 	return out
 
 
@@ -158,6 +161,10 @@ const PROTO: Array[String] = ["G-01", "G-02", "G-03", "G-04", "G-05", "G-06", "G
 const THEMES := {}
 const DEMO: Array[String] = ["G-01", "G-02", "G-03", "G-04", "G-05", "G-06", "G-07", "G-08", "G-09", "G-10", "G-11", "G-12", "G-13", "G-14", "G-15", "G-16", "G-17", "G-18", "G-19",
 		"HX-1", "HX-2", "HX-3", "HX-4", "HX-5", "HX-6", "HX-7", "HX-8"]   # DEMO BUILD (Rules.demo): the G pool (2026-11-15; the REWORK maps left it) + the HX size ladder
+# LAB BUILD (Rules.lab, 05 Handoff/handoffs/LAB-BUILD-PLAN 2026-11-23.md): the lab test-card maps, group "L", codes of exactly 4
+# characters (all() / every filter here match on the first four characters of the file name). Empty until WP 1 bakes them; while
+# empty a lab build offers the G pool (proto_debug) so it stays playable.
+const LAB: Array[String] = []
 # HX SIZE LADDER (map-size study 2026-11-15; Daniele: "lets do it in the demo staging, simply make lets say 4/8 maps with just a
 # honeycomb of nodes so we get the general idea of max limits"): HX-1..HX-8, generator References/Ooze Syndicate maps - size ladder
 # HX 2026-11/generator/honeycomb.py. DEMO ONLY: group "H" is not in POOL_GROUPS and the codes are not in PROTO.
@@ -176,7 +183,7 @@ static func mode_offered(code_or_path: String, mode: String) -> bool:
 	## new pool doesn't offer (it fills a gap, it doesn't compete with the new maps). Never a WITHHELD_MODES mode.
 	if mode in WITHHELD_MODES.get(code_or_path.get_file().substr(0, 4), []) or archived(code_or_path) or (rework(code_or_path) and not code_or_path.get_file().substr(0, 4) in MULTI_FILL):
 		return false
-	if POOL_GROUPS.is_empty():
+	if POOL_GROUPS.is_empty() or (Rules.lab and code_or_path.get_file().substr(0, 4) in LAB):
 		return true
 	var c := code_or_path.get_file().substr(0, 1)
 	if c in POOL_GROUPS or code_or_path.get_file().substr(0, 4) in MULTI_KEEP:

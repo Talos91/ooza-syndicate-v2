@@ -12,7 +12,7 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.25.1"   # STAGING 0.25.1: 45B menus (16:9 SKILLS) + AI reactions (17 x 5 AIs) + B4 flat background + static size-D drill node (2026-11-18); STAGING 0.25.0: copper punk menus + HUD zones (on-board notifications, AI moods on the AI screens) + map pass (17/19 maps refit to the pit) + max 4 seats (2026-11-18); STAGING 0.24.6.1: AI screens centred in the glass, sized by the largest; STAGING 0.24.6: five new ooze models + ooze heroes in unit pictures + AI screens in the new frame + VEX neon fix (2026-11-17); STAGING 0.24.5.1 hotfix: M-15 / N-06 offered for 2v2 + FFA (MapPool.MULTI_FILL); STAGING 0.24.5: map pool G (19 shrunk maps), readability D, demolish tap, new menus, HUD 40B6 + 40B5 skill keys (2026-11-15)
+const VERSION := "0.26.0-lab1"   # LAB 1: lab foundation (Rules.lab, lab_opts, MapPool.LAB) off STAGING 0.25.1; history in CHANGELOG.md
 const WORLD_LAB_FLOOR := true   # the demo's lab5 floor on every map (the fog / tube work was tuned on it); was Rules.demo only
 const LOOK_LAB2 := true   # the lab2 world look (cream decks, owner rim band, lab floor + surround) is the default (Daniele 2026-11-12: "the new status quo"); dev --look-old = the 0.24.1 look, --look=lab = test v1
 const HUD_LAB := true    # hud-lab (2026-11-13): the round-29/30 lab HUD pack (HudLab) is THE in-match HUD; dev --hud-old = the pre-lab HUD
@@ -186,10 +186,30 @@ static var debug_tools: bool = false
 # I can test fast"): GAME SPEED and MY PRODUCTION in the Debug panel, plus refill / +100 / Last Stand now. On only in a
 # proto build (VERSION "...-proto<n>"), so the real game never reaches it; offline matches only (online the host's sim
 # must stay in sync). The panel sets the two values below; Sim.debug_prod holds the production multiplier per seat.
-static var proto_debug: bool = VERSION.contains("-proto") or VERSION.contains("-demo")   # the demo is a test line too
+static var proto_debug: bool = VERSION.contains("-proto") or VERSION.contains("-demo") or VERSION.contains("-lab")   # demo / lab are test lines too
 # DEMO BUILD (Daniele 2026-11-07: "put somewhere else where there's just a playable demo of this"): VERSION "...-demo<n>" =
 # the picker offers MapPool.DEMO only (R-01 STRAIT) and the world layer starts with the lab picture floor (no URL flags).
 static var demo: bool = VERSION.contains("-demo")
+# LAB BUILD (Daniele 2026-11-23: "build the lab with all the test so we test and tweak the game"; 05 Handoff/handoffs/LAB-BUILD-PLAN
+# 2026-11-23.md): VERSION "...-lab<n>" = grey-box test cards at oozesyndicate.com/lab/. Turns on proto_debug, NOT demo or quota.
+# Every lab rule sits behind lab_opts (read through lab_opt(): off when lab is false), never a deletion.
+static var lab: bool = VERSION.contains("-lab")
+static var lab_opts := {
+	"joints": true,             # joint edges (clusters): no deck, unbreakable, vat-to-vat path
+	"gat_own_platform": true,   # the Googatling fires only over its own platform
+	"quota_tier": true,         # quota: 1 point per tier, relays do not launch
+	"relay_set": true,          # the lab relay set (rotate, retract, switch, launcher; ferry / belt as hazards)
+	"count_on_screen": true,    # the unit count on the vat screen
+	"count_scale": 1.0,         # vat-screen digit size (x1.0 / x1.15 / x1.3 cards)
+	"hud_badge": false,         # the HUD count badge
+}
+const _LAB_OFF := {"joints": false, "gat_own_platform": false, "quota_tier": false, "relay_set": false,
+		"count_on_screen": false, "count_scale": 1.0, "hud_badge": true}   # what the real game does (lab off)
+
+
+static func lab_opt(key: String) -> Variant:
+	## A lab option: its lab_opts value in a lab build, else the real game's behaviour (_LAB_OFF).
+	return lab_opts.get(key) if lab else _LAB_OFF.get(key)
 # KIT2 at drill node SIZE D (Daniele 2026-11-18 "also in staging gogogogo"; kit2-staging, from bg-44b4 ea662788 / demo2-kit 24c346f):
 # the platform + vats baked from Models/2.0/kit-v2-detail at x0.68 (bake_demo2.py) and the full-size column (r 1.088) with its
 # wine bands (bake_demo2_D.py) in assets/kit/kit2/. VIEW ONLY and STATIC on staging: no launcher, no QUOTA, no river (the collar,

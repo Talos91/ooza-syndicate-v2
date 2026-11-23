@@ -30,7 +30,7 @@ func _ready() -> void:
 		print("test_proto_debug: TIMEOUT")
 		get_tree().quit(3))
 	var was: bool = Rules.proto_debug
-	check(was and Rules.VERSION.contains("-proto"), "a proto build (%s) has the flag on" % Rules.VERSION)
+	check(was and (Rules.VERSION.contains("-proto") or Rules.VERSION.contains("-lab")), "a proto / lab build (%s) has the flag on" % Rules.VERSION)
 	_sim_checks()
 	# --- a real match with the flag OFF: the real game's path
 	Rules.proto_debug = false
