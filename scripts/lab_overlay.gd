@@ -13,6 +13,8 @@ var _panel: PanelContainer
 var _label: Label
 var _t := 0.0
 var _decks := Vector2(-1.0, -1.0)               # shortest, longest deck (m), measured once from the map
+var _joints := 0                                 # LAB JOINT (WP3): joint links (counted apart from the bridges)
+var _hops := Vector2(-1.0, -1.0)                # vat-to-vat walk across a joint (s): shortest, longest
 
 
 func setup(m: Node) -> void:
@@ -31,17 +33,26 @@ func setup(m: Node) -> void:
 	_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_panel.add_child(_label)
 	_decks = deck_range(m.map)
+	_joints = joint_count(m.map)
+	_hops = m.sim.joint_hops() if _joints > 0 else Vector2(-1.0, -1.0)
 	_refresh()
+
+
+static func joint_count(map: Dictionary) -> int:
+	return (map.get("edges", []) as Array).filter(func(e): return e.get("joint", false) == true).size()
 
 
 static func deck_range(map: Dictionary) -> Vector2:
 	## [shortest, longest] deck in metres: each edge's walked deck (deckMetres, else its baked span minus the piers).
+	## Joints (no deck) are left out.
 	var lo := INF
 	var hi := -INF
 	var lay: Array = (map.get("layout", {}) as Dictionary).get("edges", [])
 	var edges: Array = map.get("edges", [])
 	for k in range(edges.size()):
 		var e: Dictionary = edges[k]
+		if e.get("joint", false) == true:
+			continue
 		var d := -1.0
 		if e.get("deckMetres") != null:
 			d = float(e["deckMetres"])
@@ -82,9 +93,13 @@ func text() -> String:
 	var lines := PackedStringArray([head])
 	lines.append("cam %.1f m  ·  zoom x%.2f of fit (map x%.2f)  ·  pitch %.0f deg" % [float(main.cam_dist), zoom,
 			MapCamera.zoom_for(str(main.map.get("code", ""))), float(main.cam_pitch)])
-	lines.append("platform %.1f pt  ·  nodes %d  ·  bridges %d" % [plat_pt(), (main.sim.nodes as Array).size(),
-			(main.map.get("edges", []) as Array).size()])
-	lines.append("decks %s" % (("%.1f - %.1f m" % [_decks.x, _decks.y]) if _decks.x >= 0.0 else "-"))
+	var bridges: int = (main.map.get("edges", []) as Array).size() - _joints
+	lines.append("platform %.1f pt  ·  nodes %d  ·  bridges %d%s" % [plat_pt(), (main.sim.nodes as Array).size(), bridges,
+			(" + joints %d" % _joints) if _joints > 0 else ""])
+	var deck_line := "decks %s" % (("%.1f - %.1f m" % [_decks.x, _decks.y]) if _decks.x >= 0.0 else "-")
+	if _hops.x >= 0.0:
+		deck_line += "  ·  hop: %s s" % (("%.1f" % _hops.x) if absf(_hops.y - _hops.x) < 0.05 else ("%.1f - %.1f" % [_hops.x, _hops.y]))
+	lines.append(deck_line)
 	lines.append("view %d x %d pt  ·  %d x %d px" % [int(round(vp.x * ppp)), int(round(vp.y * ppp)), int(win.x), int(win.y)])
 	return "\n".join(lines)
 
