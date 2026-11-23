@@ -2,7 +2,8 @@ extends SceneTree
 ## LAB rule options (WP4, 05 Handoff/handoffs/LAB-BUILD-PLAN 2026-11-23.md): headless checks of
 ##   A  gat_own_platform - the Googatling fires only over its own platform (Daniele 2026-11-23: "covers only its node area not
 ##      beyond (or we have spawn kill)"), and the card's gat_start (a T1 Googatling next to each home);
-##   C  relay_set - map L09R (a retract and a rotation relay on the long centre decks, a neutral Googatling T3 at the centre),
+##   C  relay_set - map L09R (lab4: one retract between the homes is the only short way across; the way round passes a neutral
+##      Googatling T3 at the top centre),
 ##      no archived relay kind (lift / tilt / remote / laser_relay) on any lab map;
 ##   B  quota_tier - quota by tier (a launch scores its node tier), relays never launch, the match ends by quota;
 ##   D  lab4 jobs 2 + 5 - unit_speed (x travel speed and door rate), gat_range / gat_power / gat_ammo, the cards' choice sheet;
@@ -155,15 +156,30 @@ func _part_c() -> void:
 	var c: Dictionary = sim.nodes[2]
 	check(c["structure"] == "machinegoon" and int(c["tier"]) == 3 and c["owner"] == "",
 			"L09R centre: a neutral Googatling T3 (%s T%d owner '%s')" % [c["structure"], int(c["tier"]), c["owner"]])
-	check(sim.nodes[9]["relay"] == "retract" and sim.nodes[10]["relay"] == "switch", "L09R relays: 9 retract, 10 switch")
-	var long_relay := 0
+	check(sim.nodes[9]["relay"] == "retract" and sim.nodes.filter(func(n): return n["node_kind"] == "relay").size() == 1,
+			"L09R: one relay, node 9, a retract")
+	var ret := []
 	for ei in sim.edge_controller:
 		var g: Dictionary = sim.edges[ei]["geo"]
-		if float(g.get("L", 0.0)) - float(g.get("p0", 0.0)) - float(g.get("p1", 0.0)) >= 8.0:
-			long_relay += 1
-	check(long_relay == 4, "L09R: both lanes cross on long relay decks >= 8 m (4 decks, got %d)" % long_relay)
-	_relay_kill(sim, 9, [6, 9], "RETRACT")
-	_relay_kill(sim, 10, [8, 10], "SWITCH")
+		if sim.edges[ei]["retracts"] and float(g.get("L", 0.0)) - float(g.get("p0", 0.0)) - float(g.get("p1", 0.0)) >= 6.0:
+			ret.append(ei)
+	check(ret.size() == 2, "L09R: the relay retracts two decks >= 6 m, one to each home (got %d)" % ret.size())
+	# lab4 job 4 (Daniele on lab3: "all bridges are super easily avoidable"): home - relay - home is the only short way across;
+	# with the relay decks left out the way round (over the Googatling) is at least twice as long, walked and by route time.
+	var hA: int = sim.homes["A"]
+	var hB: int = sim.homes["B"]
+	var avoid := {}
+	for ei in ret:
+		avoid[ei] = true
+	var r1 := sim.find_route(hA, hB)
+	var r2 := sim.find_route(hA, hB, avoid)
+	var len1: float = sim.build_path(r1)["cum"][-1]
+	var len2: float = sim.build_path(r2)["cum"][-1]
+	print("L09R home to home: over the relay %s %.1f m (%.1f s), the way round %s %.1f m (%.1f s), x%.2f" % [str(r1), len1,
+			len1 / Rules.move_speed(), str(r2), len2, len2 / Rules.move_speed(), len2 / len1])
+	check(9 in r1 and not (9 in r2) and 2 in r2, "L09R: the short route crosses the relay, the way round passes the Googatling")
+	check(len2 >= 2.0 * len1, "L09R: the way round is at least twice the relay route (%.1f vs %.1f m)" % [len2, len1])
+	_relay_kill(sim, 9, [hB, 9], "RETRACT")
 	# no archived relay kind on any lab map; the guard turns one into a plain node
 	var bad := []
 	for p in MapPool.all():
@@ -277,14 +293,13 @@ func _part_b() -> void:
 	_collapse_all_but(sim, [b])
 	sim._vls_queue_next()
 	check(sim.last_stand_warn_node == b, "QUOTA: the last platform is queued to launch too")
-	# 6. relays never launch (L09R: 9 platforms, 2 relays)
+	# 6. relays never launch (L09R: 9 platforms, 1 relay)
 	var rpath := LabCards.map_path("L09R")
 	sim = _sim(rpath, 3)
-	check(sim.quota_left() == 9 and not Sim.launchable(sim.nodes[9]) and not Sim.launchable(sim.nodes[10]),
-			"L09R: 9 platforms to launch, the 2 relays never (%d)" % sim.quota_left())
+	check(sim.quota_left() == 9 and not Sim.launchable(sim.nodes[9]), "L09R: 9 platforms to launch, the relay never (%d)" % sim.quota_left())
 	sim.start_last_stand_now()
 	check(not sim.last_stand_order.any(func(id): return sim.nodes[id]["node_kind"] == "relay"), "relays are in no launch wave %s" % str(sim.last_stand_waves))
-	check(not sim._vls_surviving().has(9) and not sim._vls_surviving().has(10), "relays are not in the Very Last Stand")
+	check(not sim._vls_surviving().has(9), "the relay is not in the Very Last Stand")
 	var q0 := sim.quota.duplicate()
 	sim.nodes[9]["owner"] = "A"
 	sim._drop_node(9)                                 # (should a relay ever be dropped by something else: no points)
@@ -320,7 +335,14 @@ func _part_b() -> void:
 	_opts({})
 	check(not Rules.quota, "quota_tier off: Rules.quota off")
 	sim = _qsim(L11P)
-	check(int(sim.nodes[5]["ring"]) == 1 and int(sim.nodes[a]["ring"]) == 1, "quota off: the map's own rings")
+	# (lab4 job 4: the check reads the rings from the map file. lab3 hard-coded home ring 1; lab4 job 1 built L11P into the zoom
+	# box, its homes moved inside the 18 m ellipse and the generator now gives them ring 0 - the same as their quota ring, so
+	# node 5 (own ring 1, quota ring 2) is what tells the two apart.)
+	var own := MapBuilder.load_map(L11P)
+	var own_ok := true
+	for n in own["nodes"]:
+		own_ok = own_ok and int(sim.nodes[int(n["id"])]["ring"]) == int(n["ring"])
+	check(own_ok and int(sim.nodes[5]["ring"]) == 1, "quota off: the map's own rings (node 5 ring %d, not its quota ring 2)" % int(sim.nodes[5]["ring"]))
 	sim.nodes[1]["owner"] = "A"
 	sim._drop_node(1)
 	check(sim.quota.is_empty() and not sim.fx_events.any(func(e): return bool(e.get("launch", false))), "quota OFF: no score, no launch")
