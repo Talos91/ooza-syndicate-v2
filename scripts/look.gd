@@ -5,7 +5,7 @@ extends RefCounted
 ##    geometry identical, colours from the 26S-structure-A zone sheets: ivory shell, mint glass, goo = AI tint,
 ##    neon = the thin player rim only), when the file is there (else the normal piece);
 ##  - lab2 (default): the PRODUCTION LAB KIT first (assets/kit/labkit/<key>.glb, branch lab-kit 9d2f186: vats = the
-##    capneon set, Daniele's pick; structures, piers, conveyors, platforms; node base + pit as vertex-colour meshes for
+##    capneon set, Daniele's pick - since kit2 the vats + platform come from assets/kit/kit2 (labkit vats deleted 2026-11-23); structures, piers, conveyors, platforms; node base + pit as vertex-colour meshes for
 ##    the world shaders), then the "_lab2" recolour, then the normal piece. Runtime tint slots kept (OS_Light / OS_Ooze_*).
 ##  - the floor to deliveries/26F-floors-B/TILE-LAB.png (2048 px = 16 m);
 ##  - a screen-pinned surround in front of the floor, behind the board and the HUD: lab2 = the 26B2 surround

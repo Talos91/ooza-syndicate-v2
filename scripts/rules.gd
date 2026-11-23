@@ -152,7 +152,8 @@ static var demo: bool = VERSION.contains("-demo")
 # the platform + vats baked from Models/2.0/kit-v2-detail at x0.68 (bake_demo2.py) and the full-size column (r 1.088) with its
 # wine bands (bake_demo2_D.py) in assets/kit/kit2/. VIEW ONLY and STATIC on staging: no launcher, no QUOTA, no river (the collar,
 # bit and legs sit under the 0:00 goo in the demo, so they are not ported). Lasers, machinegoon, bridges, pillars stay the current kit.
-# Dev: --no-kit2 = the 0.25.0 lab platform + vats.
+# The --no-kit2 fallback (the 0.25.0 lab platform + vats) was deleted 2026-11-23 (tag archive-2026-11-23); labkit/Platform_Standard
+# + Vat_T1_capneon stay: MapBuilder._warm_kit2 seeds the deck materials from them.
 static var kit2: bool = true
 const DEBUG_SPEEDS := [1, 2, 4, 8]           # x whole sim time (production, movement, cooldowns, relays, the clock)
 const DEBUG_PRODS := [1.0, 2.0, 5.0, 10.0]   # x the human seat's production only

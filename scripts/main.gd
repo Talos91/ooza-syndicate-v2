@@ -232,8 +232,6 @@ func _ready() -> void:
 			map_explicit = true
 		elif arg == "--demo":
 			demo = true
-		elif arg == "--kit2" or arg == "--no-kit2":    # KIT2 size-D look (Rules.kit2, on by default; --no-kit2 = the 0.25.0 lab kit)
-			Rules.kit2 = arg == "--kit2"
 		elif arg.begins_with("--ai="):
 			ai_level = arg.substr(5)
 		elif arg.begins_with("--shots="):
