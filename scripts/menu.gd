@@ -6,9 +6,9 @@ extends CanvasLayer
 ## - Alpha 11 laid out on a 1672x941 canvas, ours is 1280x720, so everything is scaled by K.
 ## MAIN -> 01 FACTION (portrait / stats + trait / abilities / faction tabs) -> 02 BATTLEFIELD
 ## (3D thumbnails + preview) -> 03 SETUP (players, your colour, your faction, rival, difficulty,
-## SIEGE/BRAWL, Last Stand) -> DEPLOY. OPTIONS holds the match switches (SIEGE/BRAWL, Last Stand,
+## Last Stand) -> DEPLOY. OPTIONS holds the match switches (Last Stand,
 ## enemy counts, detail). ONLINE -> CREATE ROOM / JOIN ROOM ->
-## the room lobby (players, teams, faction, colour, map, PLAYERS, SIEGE/BRAWL, Last Stand) -> DEPLOY by
+## the room lobby (players, teams, faction, colour, map, PLAYERS, Last Stand) -> DEPLOY by
 ## the host (Net, through the room server). TUTORIAL (TUTORIAL-DESIGN.md §7): the nine lesson rows
 ## (TutorialPage, TutorialDirector's table and progress), CONTINUE = the first lesson not done.
 ## ARMIES (0.18.7, SKILLS 2.0): the army presets - per faction its fixed ultimate plus 1 active and 1 map skill
@@ -32,7 +32,7 @@ var map_path := ""                                # setup() takes main's, or the
 var ai_level := "Standard"
 var mode := "1v1"
 var colour := "A"
-const MODE_NAMES := {"1v1": "1 V 1", "2v2": "2 V 2", "FFA3": "FFA 3", "FFA4": "FFA 4"}   # max 4 seats: FFA5 / 3v3 / 2v2v2 archived (Daniele 2026-11-18)
+const MODE_NAMES := {"1v1": "1 V 1", "2v2": "2 V 2", "FFA3": "FFA 3", "FFA4": "FFA 4"}   # max 4 seats: FFA5 / 3v3 / 2v2v2 deleted 2026-11-23 (Daniele 2026-11-18)
 const COLOUR_NAMES := {"A": "CYAN", "B": "GREEN", "C": "PURPLE", "D": "RED", "E": "GOLD", "F": "ROSE", "faction": "FACTION"}
 var maps: Array = []
 var _is_main := false
@@ -4218,7 +4218,7 @@ const TEXT_IN := 22.0                              # note 2: text inset inside a
 func _setup_team_of() -> Dictionary:
 	var team := {}
 	for s in _selected_map().get("seats", {}).get(mode, []):
-		if s.get("team") != null and mode in ["2v2", "3v3", "2v2v2"]:
+		if s.get("team") != null and mode == "2v2":
 			team[str(s.get("seat", ""))] = int(s["team"])
 	return team
 
@@ -4621,7 +4621,7 @@ func show_seats() -> void:
 			Vector2(x, fy + (bh - UiKit.line_h(self, 15)) / 2.0))
 	var team := {}
 	for s in sel.get("seats", {}).get(mode, []):
-		if mode in ["2v2", "3v3", "2v2v2"] and s.get("team") != null:
+		if mode == "2v2" and s.get("team") != null:
 			team[str(s.get("seat", ""))] = int(s["team"])
 	var cells := ["A", "level"] + _enemy_seats()
 	var cw := floorf((w - gap) / 2.0)

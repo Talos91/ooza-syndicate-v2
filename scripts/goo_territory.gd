@@ -12,8 +12,7 @@ extends Node3D
 ## (SPREAD_SPEED m/s: across a platform in ~0.8 s and on down its decks), a lost node's goo recedes, a
 ## retracted / switched / turning deck drops its goo and it spreads back out when the deck returns, and
 ## the goo falls with its platform in the Last Stand (Fx._collapse). Units take their race colour with a
-## player-colour rim in this mode (UnitView). SIEGE keeps its look: its hordes and rivers are goo in the
-## player colour already, a goo floor under them would hide them (renders, 0.18.7).
+## player-colour rim in this mode (UnitView).
 ## Pure view: no sim state, no net traffic. Every mesh is built once, procedurally, the first time the
 ## mode is on (no Blender bake, no remesh at runtime); only materials, visibility and one shader
 ## parameter per animating piece change afterwards. One shared material per colour.

@@ -1377,8 +1377,6 @@ func _strip_mi(ei: int, shader: Shader, params: Dictionary, seed := 0.0) -> Mesh
 # ------------------------------------------------------------------ line effects
 func _line_len(h: Dictionary) -> float:
 	## Metres of path the line's bodies cover behind its head (BRAWL: one body every BRAWL_SPACING).
-	if Rules.bridge_combat:
-		return minf(float(h["s"]), Sim.chain_length(h))
 	return minf(float(h["s"]), Rules.shown_f(h["units"]) * Rules.BRAWL_SPACING)
 
 

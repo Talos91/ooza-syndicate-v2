@@ -130,7 +130,7 @@ func _build_sim(info: Dictionary) -> Sim:
 	var teams := {}
 	for s in map["seats"][info["mode"]]:
 		seats[int(s["node"])] = s["seat"]
-		if info["mode"] in ["2v2", "3v3", "2v2v2"] and s.get("team") != null:
+		if info["mode"] == "2v2" and s.get("team") != null:
 			teams[s["seat"]] = int(s["team"])
 	var s := Sim.new()
 	s.setup(map, MapBuilder.layout(map), seats, info["players"], int(info["seed"]), teams, info.get("loadouts", {}))
@@ -216,8 +216,8 @@ func _run() -> void:
 	check(host.active and int(info["round"]) == 1 and info["players"].size() == 2, "launch: round 1 with both players")
 	_deliver()
 	check(g.active and g.match_round == 1 and g.match_info["seed"] == info["seed"], "guest receives the launch (same seed)")
-	check(info["rules"]["bridge_combat"] == false and not Rules.bridge_combat and not host.has_method("toggle_siege"),
-			"rooms play BRAWL: the launch says so and no room control switches SIEGE on (deactivated, 0.18.7)")
+	check(info["rules"]["bridge_combat"] == false and not host.has_method("toggle_siege"),
+			"rooms play BRAWL: the launch says so and no room control switches SIEGE on (deleted 2026-11-23)")
 	var hs := _build_sim(info)
 	var gs := _build_sim(g.match_info)
 	# ONLINE VERSUS (0.22.3): the card is a loading screen on both ends - up from the launch, gone only once this
@@ -272,8 +272,6 @@ func _run() -> void:
 	check(hs.hordes.size() == 1, "stale round, unknown action, bad fraction, bad id: all refused")
 	_to_host("g1", {"op": "order", "round": 1, "action": "upgrade", "a": home_a, "args": {}})
 	check(hs.nodes[home_a]["build_kind"] == "", "a guest can't upgrade the host's node")
-	var r: Array = host.main.perform("A", "recall", hs.hordes[0]["id"])
-	check(not r[0], "recall checks the line's owner")
 	host.bridge.sent = []
 	_deliver()
 

@@ -138,7 +138,6 @@ func _snap(sim: Sim, seats: Array) -> Dictionary:
 func _play(path: String, mode: String, level: String, spec: Dictionary, seed_value: int) -> Dictionary:
 	var ov = JSON.parse_string(str(args.get("override", "{}")))
 	Rules.apply_balance("", ov if ov is Dictionary else {})
-	Rules.bridge_combat = false
 	Rules.last_stand = true
 	Rules.abilities_on = true
 	var m: Dictionary = _map(path).duplicate(true)

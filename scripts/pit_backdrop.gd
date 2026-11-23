@@ -15,7 +15,7 @@ extends RefCounted
 ##    the node columns end at the goo surface (it hides the bottom of the nodes). WorldLayer.floor_y = that level.
 ##  - The old floor world is not built with it (WorldLayer: floor, pits, pit -> column pipes, walkways, Locals, lab dressing,
 ##    lab side backdrop, mist); Scenery: no sky, no void mist.
-## On: every match with the world layer (BRAWL, paused SIEGE); off with --no-pit-bg or --no-world (the old sky backdrop).
+## On: every match with the world layer; off with --no-pit-bg or --no-world (the old sky backdrop).
 ## VIEW ONLY: nothing in the Sim or the protocol.
 
 const DIR := "res://assets/art/bg44b4/"

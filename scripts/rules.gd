@@ -4,11 +4,10 @@ extends RefCounted
 ## Kit sizes match Models/2.0/build_kit_2_0.py. Army numbers follow Alpha 11's logic scaled by
 ## SCALE (PARAMETERS.md: army scale ~5x; vat caps are still an open question) - change here only.
 ##
-## SIEGE IS DEACTIVATED since 0.18.7 (Daniele: "for now completely deactivate it, i don't wanna waste
-## resources on a mode we are less and less keeping into consideration, if we will pick it up later we
-## will simply do, brawl is our game"). The game is BRAWL only: bridge_combat is locked false (SIEGE_ON),
-## no UI or flag can switch it, and the tests no longer cover SIEGE. Its numbers and code paths stay,
-## dormant and untested - re-enable with SIEGE_ON and expect to re-test everything.
+## SIEGE was deactivated in 0.18.7 (Daniele: "brawl is our game") and DELETED from the code 2026-11-23 (owner
+## decision), with the 5-6 seat modes (FFA5, 3v3, 2v2v2): the game is BRAWL, max 4 seats (1v1, 2v2, FFA3, FFA4).
+## Both come back from git tag archive-2026-11-23 (SIEGE_ON, bridge_combat, the deck / platform / door /
+## platform-fight tunables, recall, tug-of-war, sieges, goo-patch lines).
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
@@ -49,44 +48,20 @@ const ROUTE_NODE_SECONDS := 1.0      # routing: what crossing a node adds to a r
 # lip walked off it this step (view only); a line pouring into its target enters at least POUR_MIN_RATE units/s
 const POUR_STEP := 1.0
 const POUR_MIN_RATE := 4.0
-# Daniele (Alpha 13 playtest): "deck speed at default 5 m/s... deck speed and platform speed need to
-# match, no point in it being different". Was 2 m/s on decks, x6 on platforms.
-const DECK_SPEED_DEFAULT := 5.0
-const NODE_SPEED_MULT_DEFAULT := 1.0
-# live-tunable from the in-game Debug panel (PLAYTEST-NOTES 5: platform speed vs bridge speed)
-# - SIEGE only (BRAWL uses BRAWL_SPEED)
-static var deck_speed: float = DECK_SPEED_DEFAULT          # m/s along a deck
-static var node_speed_mult: float = NODE_SPEED_MULT_DEFAULT # x deck speed on platforms, piers, doors
 const ARC_R := 3.8                   # hordes flow around a node's centre structure at this radius
 const EXIT_R := 2.2                  # hordes leave from the tank bottoms (sends start at the tower)
-# THE WHOLE PLATFORM IS THE NODE (Daniele, 2026-09-25): entrances on every side - an arriving horde
-# lands on the platform from whichever pier it came by and pours onto it up to the tower's footprint
-# (ARC_R). Its units then sit on the platform ("siege") and fight the garrison there.
-const RIVER_R := 4.4                 # the goo river around the tower sits at this radius
-const RIVER_SLOTS := 14              # patches in the river ring
-const RIVER_OUTER_R := 5.35          # second ring out to the rim: the goo covers the whole platform (Alpha 16)
+const PATCH_SPACING := 1.8           # metres between sample points along a line (Sim cuts, probes)
 
-# hordes are LONG: a send streams out of the vat as one line whose length reads as its size at a
-# glance (Mushroom Wars' horde feeling without its endgame chaos). PROVISIONAL density.
-const METRES_PER_UNIT := 0.25        # 100 units = a 25 m line
-const MAX_CHAIN := 40.0              # beyond this a horde gets thicker, not longer
-const MAX_THICKEN := 0.35
-const PATCH_SPACING := 1.8
-const MAX_PATCHES := 24              # 40 m / 1.8 m + head
-
-# UNITS LEAVE THE VAT ONLY AS THEY BECOME BLOB (Daniele, 2026-09-25): a send is an order; the door
-# emits units into the line at DOOR_RATE. Units still inside stay in the vat's count and can be
+# UNITS LEAVE THE VAT ONLY AS THEY ARE EMITTED (Daniele, 2026-09-25): a send is an order; the door
+# emits units into the line at exit_rate(). Units still inside stay in the vat's count and can be
 # re-ordered - a new send takes over the previous order's not-yet-emitted part.
-const DOOR_RATE_DEFAULT := 48.0      # units/s out of the door - kept at the Alpha 12 throughput when
-                                      # deck and platform speeds were unified (it was derived from them)
-static var door_rate: float = DOOR_RATE_DEFAULT        # live-tunable (Debug panel) - SIEGE only (BRAWL uses BRAWL_DOOR_RATE)
 
 # BRAWL MOVES LIKE ALPHA 11 (Daniele, Alpha 16: "same exit and entrance speed and deck and platform
 # speed of units as Alpha 11 ... the feel exactly the same"). Alpha 11: 115 px/s everywhere (no
 # platform difference), one unit leaves every 12 px (0.104 s), each lands on arrival at that spacing.
 # Its mean hop is 284 px centre to centre; 2.0's is 21.9 m over the 99 maps (1.68 modules), so one
 # Alpha 11 px = 0.077 m: 115 px/s = 8.9 m/s, the same 2.5 s per hop, and 12 px = 0.93 m per shown
-# unit. Exit = entrance = 9.6 shown units/s (x SCALE internally). SIEGE keeps its own tunables.
+# unit. Exit = entrance = 9.6 shown units/s (x SCALE internally).
 # (Those figures predate Alpha 17's and Alpha 18's -20 % each: 5.7 m/s, ~0.59 m per shown unit; the 2026-11-01 staging
 # trial takes another 15 % off speed and vat production: 4.84 m/s, ~0.50 m per shown unit, door rate unchanged.)
 # Daniele 2026-11-01: 15 % slower, staging trial - one knob for unit movement (BRAWL_SPEED) and vat production (PROD).
@@ -111,33 +86,24 @@ static func front_dir() -> Vector3:
 
 
 static func move_speed() -> float:
-	return deck_speed if bridge_combat else BRAWL_SPEED
+	return BRAWL_SPEED
 
 
 static func platform_mult() -> float:
-	return node_speed_mult if bridge_combat else 1.0
+	return 1.0                                       # one speed everywhere (Alpha 11)
 
 
 static func exit_rate() -> float:
-	return door_rate if bridge_combat else BRAWL_DOOR_RATE
+	return BRAWL_DOOR_RATE
 
 
 static func metres_per_unit() -> float:
-	## Line density: SIEGE's blob length, or Alpha 11's column spacing (speed / rate).
-	return METRES_PER_UNIT if bridge_combat else BRAWL_SPEED / BRAWL_DOOR_RATE
+	## Line density: Alpha 11's column spacing (speed / rate).
+	return BRAWL_SPEED / BRAWL_DOOR_RATE
 
 
 static func max_chain() -> float:
-	return MAX_CHAIN if bridge_combat else 100000.0     # Alpha 11 columns are as long as the send
-const NODE_FIGHT_MULT_DEFAULT := 1.0
-static var node_fight_mult: float = NODE_FIGHT_MULT_DEFAULT   # live-tunable: x combat rates on a platform
-# BRIDGE COMBAT toggle (Daniele: "combat like Alpha 11 or like Alpha 12 - combat on bridges, not sure
-# it's fun, I wanna try with and without"). true = Alpha 12: hordes fight wherever they meet and
-# queue behind friends; false = Alpha 11: hordes pass each other and only fight at nodes.
-const SIEGE_ON := false                   # 0.18.7: SIEGE deactivated - bridge_combat can't be switched on
-static var bridge_combat: bool = false:   # BRAWL (Daniele, 2026-09-26: "brawl is back as the main game mode
-	set(v):                               # and siege is just an abandoned test for now"); locked since 0.18.7
-		bridge_combat = v and SIEGE_ON
+	return 100000.0                                  # Alpha 11 columns are as long as the send
 # LAST STAND toggle (Daniele: "add a toggle for Last Stand on or off in the match settings").
 # Off: no ring collapse; the Very Last Stand still runs at 6:00 and the 7:00 end still decides.
 static var last_stand: bool = true
@@ -161,13 +127,6 @@ static var view_yaw := 0.0
 # map's half size, so zoomed all the way out it is exactly the fitted view again. Lessons keep the fixed camera.
 const CAM_ZOOM_MIN := 0.35
 const CAM_WHEEL_STEP := 1.12          # one wheel notch
-# TUG-OF-WAR (bridge-combat mode): the front slides toward the weaker side at up to this fraction of
-# deck speed (total dominance); 2:1 odds move it at a third of that.
-const TUG_SPEED := 0.35
-# GOO HOME ADVANTAGE (Daniele, Alpha 14): a horde on another player's goo corridor moves at GOO_SLOW
-# of its speed and pushes at GOO_PUSH of its weight in a tug-of-war.
-const GOO_SLOW := 0.7
-const GOO_PUSH := 0.67
 # LOW DETAIL (Debug panel / options): half the river ring and no outer ring, one resident per tank,
 # no surface normal maps (for materials built after it is set) - to test whether the build is what
 # makes a machine "run like crazy" (Daniele, Alpha 13 playtest).
@@ -176,8 +135,7 @@ static var low_detail: bool = false
 # crawling back to the tubes (world_layer.gd). View only - the Sim and the protocol never read it. --no-world turns it off.
 static var world_layer: bool = true
 # HIDE ENEMY COUNTS (Daniele, Alpha 16: a toggle in the options and Debug). On: no unit numbers on any
-# enemy node, in either mode (badges show the seat letter). Off: BRAWL shows every count as Alpha 11
-# did; SIEGE never shows enemy numbers (an identity rule of 2.0).
+# enemy node (badges show the seat letter). Off: every count shows, as Alpha 11 did.
 static var hide_enemy_counts: bool = false
 # DEBUG TOOLS (Daniele, 0.18.7: "we are past debug tools ... you can hide them (in case we want to reactivate
 # them later maybe put in options)"): the in-match Debug button and panel, off unless switched on in OPTIONS.
@@ -206,19 +164,18 @@ static var debug_prod: float = 1.0          # the human seat's (copied into Sim.
 # try adding it so i can get the feel of it and add it as a toggle (could be a cosmetic later on)").
 # false = NEON (today's owner-colour neon trims, pier stripes and rims); true = GOO: owned platforms and
 # deck halves under goo in the player colour, units in their race colour with a player-colour rim
-# (GooTerritory, UnitView). BRAWL only - SIEGE's hordes are goo already and keep today's look. Pure view.
+# (GooTerritory, UnitView). Pure view.
 static var goo_territory: bool = false
 
 
 static func goo_look() -> bool:
-	return goo_territory and not bridge_combat
+	return goo_territory
 
 # CONTACT (Alpha 12, Daniele: "whenever an enemy crosses the hitbox of a unit they fight... a unit
 # crossing an enemy unit should always start a combat to death"): contact is geometric, anywhere -
 # decks, piers, platform arcs - a horde's head within CONTACT_R of any patch of an enemy line
 # engages it; the fight then lasts until one side is gone.
 const CONTACT_R := 2.1               # metres: about one deck width across, one patch along
-const CONTACT_CELL := 3.0            # spatial hash cell for the contact scan
 
 # RELAYS (GAME-RULES sec8): player-fired; the warning previews the outcome (the deck is still there and
 # walkable: lines on it have RELAY_WARNING s to clear it), then the authoritative tick takes the going
@@ -937,7 +894,7 @@ const SKILLS := {
 	# 0.23.21 (set R1): cd 60 -> 80 (lift +25 -> +16)
 	"demolish": {"name": "Demolish", "slot": "map", "cd": 80.0, "target": "fixed_deck",
 			"desc": "A bridge and both its connectors collapse after 1.5 s; lines pour off it; it rebuilds after 20 s.", "warn": 1.5, "down": 20.0},   # warn 1.5 s: 0.19.2 (was 3 s)
-	# speed x0.6 = 40 % slower; in SIEGE the stronger of this and the goo corridor slow applies (no stacking)
+	# speed x0.6 = 40 % slower
 	"mire": {"name": "Mire", "slot": "map", "cd": 32.0, "target": "deck",
 			"desc": "Enemy lines on one deck are 40 % slower for 8 s.", "slow": 0.6, "dur": 8.0},
 	"anchor": {"name": "Anchor", "slot": "map", "cd": 45.0, "target": "deck",
@@ -1127,7 +1084,7 @@ static func skill_slot_id(faction: String, loadout: Dictionary, slot: String) ->
 # takes no new order out (nothing leaves the home while it is threatened); 2 also brings the shortfall in from the
 # nearest own nodes, only when what can land in time saves it (else the troops stay where they are); 3 also lets those
 # donors go below their own reserve (down to AI_GUARD_FLOOR) and supersedes a donor's order still pouring out of its
-# door - BRAWL commits a line once sent (Sim.recall is SIEGE only), so the "recall" is the part still in the vat.
+# door - BRAWL commits a line once sent (there is no recall), so the "recall" is the part still in the vat.
 # "guard_share": besides the home, a node holding at least this share of the seat's troops is a key node (1.0: home
 # only). "guard_ahead": a line counts as live when it lands within this many seconds (0 = only lines already landing).
 # SHORTCUTS (ai-retune-prep, 2026-09-29; 🗺️ on N-04 Console: the remote decks are optional shortcuts beside fixed slower
@@ -1199,7 +1156,7 @@ const HUES := {
 }
 const FFA_ORDER := ["red", "green", "blue", "gold", "purple", "cyan", "rose", "orange"]
 const TEAM_FAMILIES := [["cyan", "green", "blue"], ["red", "gold", "rose"]]   # 2v2: cyan+green vs red+gold
-const TEAM_FAMILIES_3 := [["cyan", "green", "blue"], ["red", "gold", "orange"], ["purple", "rose"]]   # three-team modes (2v2v2)
+const TEAM_FAMILIES_3 := [["cyan", "green", "blue"], ["red", "gold", "orange"], ["purple", "rose"]]   # three teams (2v2v2 deleted 2026-11-23; kept so 3-team map data still colours)
 const FAMILY_NAMES := {"cyan": "COOL", "red": "WARM", "purple": "VIOLET"}   # a family by its first hue
 
 

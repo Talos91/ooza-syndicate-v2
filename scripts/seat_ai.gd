@@ -3,7 +3,7 @@ extends RefCounted
 ## Opponent AI - Alpha 11's decision loop (simulation.gd think / ai_balance.gd) on 2.0's rules, five
 ## levels (Rules.AI_LEVELS: Training, Casual, Standard, Veteran, Expert). No economy or combat cheats:
 ## it pays the player's costs and sees what the player sees, only less exactly at lower levels.
-## Every `period` seconds: relays, (SIEGE) retreats, defend threatened nodes first, invest, then at
+## Every `period` seconds: relays, defend threatened nodes first, invest, then at
 ## most one offensive every `attack_gap` seconds, planned from up to `coordination` nearby nodes
 ## against a garrison it estimates (with `error`, refreshed every `observe` s, grown by `forecast`).
 ## Target choice never privileges the human (Daniele, Alpha 17: "all AIs work together to kill the
@@ -100,8 +100,6 @@ func think(sim: Sim, dt: float) -> void:
 	_skills(sim)
 	p = _phase("skills", p)
 	_note_raids(sim)
-	if Rules.bridge_combat and int(cfg["relays"]) > 0:   # RECALL is SIEGE only
-		_retreats(sim)
 	if sim.last_stand_active:
 		_evacuate(sim)
 		_ejects(sim)
@@ -174,7 +172,7 @@ func _travel(sim: Sim, route: Array) -> float:
 
 
 func _order(done: bool) -> bool:
-	## Wraps every order that can change routes or slots (fire, recall, build, upgrade, launch, cast): once it went
+	## Wraps every order that can change routes or slots (fire, build, upgrade, launch, cast): once it went
 	## through, the think's caches are stale.
 	if done:
 		_fresh()
@@ -340,12 +338,12 @@ func _nearest_safe(sim: Sim, from_id: int) -> int:
 func _guard(sim: Sim) -> void:
 	## The reflex that needs no skill (Rules.AI_LEVELS "guard" / "guard_share" / "guard_ahead", documented there). A key
 	## node - the home, or one holding "guard_share" of its troops - under a live attack that would take it (_shortfall:
-	## the lines landing within "guard_ahead" s and the siege on it, in the defenders they kill, against what it holds,
+	## the lines landing within "guard_ahead" s, in the defenders they kill, against what it holds,
 	## makes and has coming) is, in this order: (a) frozen - marked busy, so no phase of this think orders a send out of
 	## it; (b) guard 2+: reinforced from the nearest own nodes, only when what lands in time (AI_TEAM_DEFEND_LATE after
 	## the first line) covers AI_GUARD_COVER of the shortfall - a trickle into a node that falls anyway is only lost;
 	## guard 3 donors go down to AI_GUARD_FLOOR instead of their reserve and a donor's order still pouring out of its
-	## door is superseded (BRAWL commits a line once out: Sim.recall is SIEGE only); (c) a defensive skill, if it has
+	## door is superseded (BRAWL commits a line once out: there is no recall); (c) a defensive skill, if it has
 	## one: _skills runs right after and its picks favour a node under attack. Nothing here draws on rng, so on a match
 	## where no key node is ever about to fall the decisions - and tests/ai_bench.gd's event hash - are unchanged.
 	_guarded = {}
@@ -412,7 +410,7 @@ func _guard(sim: Sim) -> void:
 
 func _shortfall(sim: Sim, n: Dictionary) -> float:
 	## Sim units the node is short of holding against what is coming (> 0: it falls): every hostile line landing on it
-	## within "guard_ahead" s and the siege on it, each turned into the defenders it kills (BRAWL landing,
+	## within "guard_ahead" s, each turned into the defenders it kills (BRAWL landing,
 	## Sim._land_classic: attack / (health x garrison x Fortify / forge) per exchange against the defender's attack /
 	## the attacker's health - its own stats it knows, a rival's are on the faction card), against its garrison, what it
 	## makes until the first line lands and its own lines on the way. No estimate error: it counts its own troops.
@@ -429,10 +427,6 @@ func _shortfall(sim: Sim, n: Dictionary) -> float:
 		first = minf(first, eta)
 		var u: float = maxf(h["units"], h["ordered"]) if h["streaming"] else h["units"]
 		kill += u * _kills_per(sim, h["owner"], n)
-	for k in n["siege"]:
-		if not sim.allied(k, seat):
-			first = 0.0
-			kill += float(n["siege"][k]) * _kills_per(sim, k, n)
 	if kill <= 0.0:
 		return 0.0
 	var held: float = sim.garrison_total(n) + sim.production(n) * (0.0 if first == INF else first) + _incoming(sim, n["id"], false)
@@ -453,9 +447,6 @@ func _defend(sim: Sim) -> void:
 		if sim.is_warned(target["id"]):
 			continue                                      # units sent there die with it
 		var threat := _incoming(sim, target["id"], true)
-		for k in target["siege"]:
-			if not sim.allied(k, seat):
-				threat += target["siege"][k]
 		if threat <= 0.0:
 			continue
 		var need: float = threat * 1.1 + 4.0 * Rules.SCALE - target["units"] - _incoming(sim, target["id"], false)
@@ -799,7 +790,7 @@ func _ally_spare(sim: Sim, target: Dictionary, travel: float) -> float:
 
 
 func _eta(sim: Sim, node_id: int) -> float:
-	## Seconds until the first hostile line lands on this node (0: a siege is already there).
+	## Seconds until the first hostile line lands on this node (0: none on the way).
 	var t := INF
 	for h in sim.hordes:
 		if h["target"] != node_id or h.get("retreat", false) or not _hostile(sim, h["owner"]):
@@ -1384,23 +1375,6 @@ func _slot_hold(sim: Sim, n: Dictionary) -> float:
 	return 0.0
 
 
-func _retreats(sim: Sim) -> void:
-	## SIEGE: recall a line being shoved back and badly outnumbered (the player's mid-fight choice).
-	for key in sim.fight_info:
-		var ids: PackedStringArray = key.split(":")
-		var a := sim._horde(int(ids[0]))
-		var b := sim._horde(int(ids[1]))
-		if a.is_empty() or b.is_empty():
-			continue
-		var mine := a if a["owner"] == seat else (b if b["owner"] == seat else {})
-		if mine.is_empty() or mine.get("retreat", false) or mine["state"] == "absorb":
-			continue                                      # recall() refuses these: try the next fight
-		var theirs := b if mine == a else a
-		if sim.power_of(mine) < 0.4 * sim.power_of(theirs) and mine["units"] > 15.0:
-			if _order(sim.recall(mine["id"])):
-				return
-
-
 # ------------------------------------------------------------------ investment
 func _build(sim: Sim) -> void:
 	## Same costs and slots as the player. One investment per `invest` seconds, never on a node under
@@ -1769,9 +1743,6 @@ func _my_lines(sim: Sim) -> Array:
 
 func _threat(sim: Sim, n: Dictionary) -> float:
 	var threat := _incoming(sim, n["id"], true)
-	for k in n["siege"]:
-		if not sim.allied(k, seat):
-			threat += n["siege"][k]
 	return threat
 
 

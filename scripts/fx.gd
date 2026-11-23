@@ -6,7 +6,7 @@ extends Node3D
 ## deck into its gate, switch/remote dissolve and assemble), the Last Stand warning ring and the falls
 ## (platform, deck fragments, waterfall of goo, hordes tumbling into the void, lines flung off a
 ## turning rotation deck), the selection ring,
-## owner-coloured deck lights (SIEGE) and Alpha 11's half-bridge neon trims (BRAWL), pier stripes and
+## Alpha 11's half-bridge neon trims, pier stripes and
 ## platform rims. The cannon laser, fights for a tower and tier-downs are combat_fx.gd. Monsters (0.19.0) are
 ## monster_view.gd; the bodies a monster kicks off its deck fly sideways into the void here (_kick_body).
 
@@ -30,7 +30,7 @@ var _beacons := {}          # relay node id -> {label, mat, top}: the relay's bi
 var _collapsed := {}
 var _conn_gone := {}                 # DEMOLISH-TAP: edge -> its connectors are hidden (the deck is down)
 var _break_per := {}         # THE WAVE (0.22.3): edge -> fall pieces per module while its deck breaks (_deck_break)
-var _lights_classic := false  # the mode the deck lights were last laid out for (true = BRAWL)
+var _lights_classic := false  # the deck lights were laid out for BRAWL (once, at the first sync)
 var _pulses: Array = []     # transient rings: {mesh, t, dur, color}
 var _frag_names := ["girder_l", "girder_r", "plate_a", "plate_b", "plate_c", "truss"]
 var _body := {}             # faction -> [Mesh, scale to UnitView.UNIT_SIZE, albedo Texture2D]: BRAWL fling bodies
@@ -119,19 +119,17 @@ func sync(dt: float) -> void:
 	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
 	if not _neon_built:
 		_build_neon()
-	var classic := not Rules.bridge_combat
-	if classic != _lights_classic:                    # SIEGE/BRAWL switched (pause menu, Debug panel)
-		_lights_classic = classic
-		_edge_light.clear()                           # SIEGE: _decks re-applies owner/state lights
+	if not _lights_classic:                           # the first frame: the kit deck lights dimmed under the trims
+		_lights_classic = true
+		_edge_light.clear()
 		_pier_key.clear()                             # _neon re-colours the pier stripes and rims
 		_rim_key.clear()
-		if classic:
-			for i in _trims:
-				for d in vis["edge_decks"][i]:
-					MapBuilder.set_lights(d, Mats.light_color(TRIM_OFF, "trim_off"))
-			for i in vis["edge_piers"]:
-				for p in vis["edge_piers"][i]:
-					MapBuilder.set_lights(p, null)      # piers as in a pure BRAWL match
+		for i in _trims:
+			for d in vis["edge_decks"][i]:
+				MapBuilder.set_lights(d, Mats.light_color(TRIM_OFF, "trim_off"))
+		for i in vis["edge_piers"]:
+			for p in vis["edge_piers"][i]:
+				MapBuilder.set_lights(p, null)          # piers as in a pure BRAWL match
 	for n in sim.nodes:
 		var entry: Dictionary = vis[n["id"]]
 		_construction(n, entry, dt)
@@ -623,7 +621,7 @@ func _last_stand_warning(n: Dictionary) -> void:
 	for link in sim.adj[id]:                        # threatened decks flash red (only the next drop's, unless loud)
 		var edge_i: int = link[1]
 		var flash := blink > 0.5 and (loud or ls_next(id) or ls_next(int(link[0])))   # (one answer per deck)
-		var off: Material = null if Rules.bridge_combat else Mats.light_color(TRIM_OFF, "trim_off")
+		var off: Material = Mats.light_color(TRIM_OFF, "trim_off")
 		var mat: Material = Mats.light_color(Rules.state_color("warn")) if flash else off
 		if _edge_light.get(edge_i, "") != "warn%d" % int(flash):
 			_edge_light[edge_i] = "warn%d" % int(flash)
@@ -642,8 +640,7 @@ func ls_next(id: int) -> bool:
 
 
 func _decks() -> void:
-	## Deck visibility and edge lights: a deck exists while its state is current (or is in motion),
-	## lights carry the nearest owner's colour (both ends held by one seat), state colour otherwise.
+	## Deck visibility: a deck exists while its state is current (or is in motion); _half_trims owns the lights.
 	for i in range(sim.edges.size()):
 		if _collapsed.has(i):
 			continue
@@ -671,104 +668,53 @@ func _decks() -> void:
 					var piece = vis.get(nid, {}).get("platform")
 					if piece is Node3D and is_instance_valid(piece):
 						(piece as Node3D).visible = not down
-		if not Rules.bridge_combat:
-			continue                                      # BRAWL: _half_trims owns the lights
-		if sim.is_warned(e["a"]) or sim.is_warned(e["b"]):
-			continue                                      # _last_stand_warning flashes these
-		if e["state"] != "" or e["retracts"]:             # relay decks keep their state colour
-			if _edge_light.get(i, "?") != "state":
-				_edge_light[i] = "state"
-				var mat := Mats.light_color(Rules.state_color("retract" if e["retracts"] else e["state"]))
-				for d in vis["edge_decks"][i]:
-					MapBuilder.set_lights(d, mat)
-			continue
-		var a: Dictionary = sim.nodes[e["a"]]
-		var b: Dictionary = sim.nodes[e["b"]]
-		var key: String = a["owner"] if a["owner"] != "" and a["owner"] == b["owner"] else ""
-		if _edge_light.get(i, "?") != key:
-			_edge_light[i] = key
-			for d in vis["edge_decks"][i]:
-				MapBuilder.set_lights(d, Mats.light(key) if key != "" else null)
-			for p in vis["edge_piers"][i]:
-				MapBuilder.set_lights(p, Mats.light(key) if key != "" else null)
 
 
 # ------------------------------------------------------------------ falls
 func _fall_horde(ev: Dictionary) -> void:
-	## Units lost to a fall tumble into the void as goo patches (waterfall board: the sheet at the
-	## lip thins into strands and drops - here the patches tilt, drop and trail droplets). BRAWL has no
-	## goo: its Alpha 11 bodies tumble down instead, one per shown unit (a line pouring off a lip loses
-	## fractions of a unit per step: they add up per seat until a whole body drops).
+	## Units lost to a fall tumble into the void: Alpha 11 bodies, one per shown unit (a line pouring off a
+	## lip loses fractions of a unit per step: they add up per seat until a whole body drops).
 	if ev.get("pour", false):
 		return                                            # walking off a lip: the line's own view drops them (0.18.7)
 	var faction: String = ev["faction"]
 	var seat: String = ev["seat"]
-	if not Rules.bridge_combat:
-		var debt: float = _fall_debt.get(seat, 0.0) + Rules.shown_f(float(ev.get("units", 0.0)))
-		var n := mini(int(debt), FLING_MAX_BODIES)
-		_fall_debt[seat] = debt - int(debt)
-		if ev.has("relay") and int(ev.get("edge", -1)) >= 0:
-			for b in _spawn_bodies(faction, seat, ev["pts"], n):
-				_relay_body(b[0], b[1], int(ev["relay"]), int(ev["edge"]))
-			return
-		if ev.has("monster"):                             # 0.19.0: a monster kicked them off the deck, sideways
-			var pts: Array = ev["pts"]
-			var along: Vector3 = ((pts[-1] as Vector3) - (pts[0] as Vector3)) * Vector3(1, 0, 1) if pts.size() >= 2 else Vector3.ZERO
-			if along.length() < 0.01:
-				along = _monster_dir(int(ev["monster"]))
-			for b in _spawn_bodies(faction, seat, pts, n):
-				_kick_body(b[0], b[1], along.normalized())
-			return
-		var wl := WorldLayer.active
+	var debt: float = _fall_debt.get(seat, 0.0) + Rules.shown_f(float(ev.get("units", 0.0)))
+	var n := mini(int(debt), FLING_MAX_BODIES)
+	_fall_debt[seat] = debt - int(debt)
+	if ev.has("relay") and int(ev.get("edge", -1)) >= 0:
 		for b in _spawn_bodies(faction, seat, ev["pts"], n):
-			var mi: MeshInstance3D = b[0]
-			var tw := create_tween()
-			tw.set_parallel(true)
-			var spin := Vector3(randf_range(-2.5, 2.5), randf_range(-1.0, 1.0), randf_range(-2.5, 2.5))
-			if wl != null:                                # WORLD PASS 2 (F1 / F2): a true 3D drop onto the floor, same
-				var p0: Vector3 = b[1]                    # acceleration, no scaling, the splat where it hits
-				var drop := wl.fall_depth(p0.y)
-				var dur := 1.4 * sqrt(drop / FLING_DROP)
-				var end := p0 + Vector3(randf_range(-1.5, 1.5), -drop, randf_range(-1.5, 1.5))
-				tw.tween_property(mi, "position", end, dur).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
-				tw.tween_property(mi, "rotation", mi.rotation + spin * dur / 1.4, dur)
-				tw.chain().tween_callback(func():
-					if is_instance_valid(wl):
-						wl.land_body(end, seat)
-					mi.queue_free())
-				continue
-			tw.tween_property(mi, "position", (b[1] as Vector3) + Vector3(randf_range(-1.5, 1.5), -FLING_DROP, randf_range(-1.5, 1.5)), 1.4).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
-			tw.tween_property(mi, "rotation", mi.rotation + spin, 1.4)
-			tw.tween_property(mi, "scale", mi.scale * 0.7, 1.4)
-			tw.chain().tween_callback(mi.queue_free)
+			_relay_body(b[0], b[1], int(ev["relay"]), int(ev["edge"]))
 		return
-	hordes.load_faction(faction)
-	var mesh: Mesh = hordes.meshes[faction].get("body_a_lod1", null)
-	for p in ev["pts"]:
-		var mi := MeshInstance3D.new()
-		mi.mesh = mesh
-		if mesh:
-			for s in range(mesh.get_surface_count()):
-				var m := mesh.surface_get_material(s) as BaseMaterial3D
-				var is_creature := m != null and m.albedo_texture != null
-				mi.set_surface_override_material(s, Mats.creature(faction, seat, hordes.textures[faction])
-						if is_creature else Mats.goo(seat))
-		mi.position = p
-		mi.rotation.y = randf() * TAU
-		add_child(mi)
+	if ev.has("monster"):                             # 0.19.0: a monster kicked them off the deck, sideways
+		var pts: Array = ev["pts"]
+		var along: Vector3 = ((pts[-1] as Vector3) - (pts[0] as Vector3)) * Vector3(1, 0, 1) if pts.size() >= 2 else Vector3.ZERO
+		if along.length() < 0.01:
+			along = _monster_dir(int(ev["monster"]))
+		for b in _spawn_bodies(faction, seat, pts, n):
+			_kick_body(b[0], b[1], along.normalized())
+		return
+	var wl := WorldLayer.active
+	for b in _spawn_bodies(faction, seat, ev["pts"], n):
+		var mi: MeshInstance3D = b[0]
 		var tw := create_tween()
 		tw.set_parallel(true)
-		var spin := Vector3(randf_range(-2.0, 2.0), randf_range(-1.0, 1.0), randf_range(-2.0, 2.0))
-		tw.tween_property(mi, "position", (p as Vector3) + Vector3(randf_range(-1.5, 1.5), -26.0, randf_range(-1.5, 1.5)), 1.4).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+		var spin := Vector3(randf_range(-2.5, 2.5), randf_range(-1.0, 1.0), randf_range(-2.5, 2.5))
+		if wl != null:                                # WORLD PASS 2 (F1 / F2): a true 3D drop onto the floor, same
+			var p0: Vector3 = b[1]                    # acceleration, no scaling, the splat where it hits
+			var drop := wl.fall_depth(p0.y)
+			var dur := 1.4 * sqrt(drop / FLING_DROP)
+			var end := p0 + Vector3(randf_range(-1.5, 1.5), -drop, randf_range(-1.5, 1.5))
+			tw.tween_property(mi, "position", end, dur).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+			tw.tween_property(mi, "rotation", mi.rotation + spin * dur / 1.4, dur)
+			tw.chain().tween_callback(func():
+				if is_instance_valid(wl):
+					wl.land_body(end, seat)
+				mi.queue_free())
+			continue
+		tw.tween_property(mi, "position", (b[1] as Vector3) + Vector3(randf_range(-1.5, 1.5), -FLING_DROP, randf_range(-1.5, 1.5)), 1.4).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
 		tw.tween_property(mi, "rotation", mi.rotation + spin, 1.4)
-		tw.tween_property(mi, "scale", Vector3(0.5, 1.6, 0.5), 1.4)
+		tw.tween_property(mi, "scale", mi.scale * 0.7, 1.4)
 		tw.chain().tween_callback(mi.queue_free)
-	var drops := _waterfall(seat, 0.9, 1.2)
-	if not ev["pts"].is_empty():
-		drops.position = ev["pts"][0]
-		drops.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
-		drops.emission_sphere_radius = 1.2
-	add_child(drops)
 
 
 # RELAYS TAKE THE GROUND AWAY (Daniele, 0.18.7: "it takes the ground away from under the feet, not pull
@@ -894,8 +840,7 @@ const FLING_MAX_BODIES := 120        # BRAWL: one Alpha 11 body per shown unit, 
 
 
 func _fling_horde(ev: Dictionary) -> void:
-	## SIEGE flings the line's goo patches (and a spray of droplets), BRAWL flings Alpha 11 creature
-	## bodies - one per shown unit, three across like UnitView's column - never goo.
+	## Flings Alpha 11 creature bodies - one per shown unit, three across like UnitView's column - never goo.
 	var pts: Array = ev.get("pts", [])
 	if pts.is_empty():
 		return
@@ -903,32 +848,6 @@ func _fling_horde(ev: Dictionary) -> void:
 	var seat: String = ev["seat"]
 	var centre: Vector3 = ev["centre"]
 	var turn: float = ev.get("turn", 1.0)
-	if Rules.bridge_combat:
-		hordes.load_faction(faction)
-		var mesh: Mesh = hordes.meshes[faction].get("body_a_lod1", null)
-		for p in pts:
-			var mi := MeshInstance3D.new()
-			mi.mesh = mesh
-			if mesh:
-				for s in range(mesh.get_surface_count()):
-					var m := mesh.surface_get_material(s) as BaseMaterial3D
-					var is_creature := m != null and m.albedo_texture != null
-					mi.set_surface_override_material(s, Mats.creature(faction, seat, hordes.textures[faction])
-							if is_creature else Mats.goo(seat))
-			mi.rotation.y = randf() * TAU
-			add_child(mi)
-			_fling_body(mi, p, centre, turn, Vector3(0.6, 1.3, 0.6))
-		var spray := _waterfall(seat, 0.9, 1.2)
-		spray.position = pts[0]
-		spray.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
-		spray.emission_sphere_radius = 1.2
-		var out: Vector3 = ((pts[0] as Vector3) - centre) * Vector3(1, 0, 1)
-		spray.direction = (out.normalized() + Vector3(0, 0.6, 0)) if out.length() > 0.01 else Vector3.UP
-		spray.spread = 40.0
-		spray.initial_velocity_min = 3.0
-		spray.initial_velocity_max = 7.0
-		add_child(spray)
-		return
 	for b in _spawn_bodies(faction, seat, pts, clampi(int(ev.get("units", 1)), 1, FLING_MAX_BODIES)):
 		_fling_body(b[0], b[1], centre, turn, (b[0] as MeshInstance3D).scale * 0.7)
 
@@ -1215,8 +1134,7 @@ func _deck_break(ei: int, node_id: int, to: float, done: bool) -> void:
 # same neon stripe should be added at the edge of nodes for consistent look" - the strips continue over
 # every pier to the platform, where a rim stripe runs round the edge of the platform in the node's
 # colour and opens at each pier mouth (and at a relay ledge or gate), so a bridge's strips turn into
-# the rim. SIEGE keeps its kit deck lights: the rims show there too (owner colour, the kit light when
-# neutral) and the pier stripes follow the deck lights' colour (_decks / _last_stand_warning).
+# the rim.
 # Geometry is static and built once: one mesh per deck half (both strips, ramps included), per pier
 # (both strips) and per platform rim; only materials (shared, per colour) and visibility change.
 var _trims := {}             # edge -> [deck half a, deck half b] MeshInstance3D (null: no deck)
@@ -1227,7 +1145,6 @@ var _rims := {}              # node id -> MeshInstance3D
 var _rim_key := {}           # node id -> owner last applied
 var _neon_built := false
 var _neon_merge := MapBatch.Merge.new()   # Alpha 21: trims, stripes and rims drawn merged per colour (map_batch.gd)
-var _kit_light: Material     # the kit's own OS_Light (SIEGE's neutral deck light)
 const NEUTRAL_TRIM := Color("ffad51")   # Alpha 11's neutral bridge trim
 const TRIM_OFF := Color(0.12, 0.14, 0.16)   # the kit's deck lights, dimmed under the trims
 const TRIM_Y := 0.1                  # strip centre above the deck plate
@@ -1236,7 +1153,6 @@ const TRIM_HH := 0.035               # half height (0.07 m)
 const TRIM_MID_GAP := 0.15           # each half stops this short of the middle (Alpha 11's split)
 const RIM_R := 5.75                  # rim stripe radius: the dark band between the plate ring and the edge
 const LEDGE_HW := 2.45               # Relay_Mount / Relay_Retract half width (kit 2.35 / 2.375) + clearance
-const SIEGE_PIER_STRIPES := true
 
 
 func _trim_off() -> float:
@@ -1246,15 +1162,6 @@ func _trim_off() -> float:
 func _build_neon() -> void:
 	_neon_built = true
 	var off := _trim_off()
-	for n in sim.nodes:
-		var pf = vis[n["id"]]["platform"]
-		if pf != null and _kit_light == null:
-			for mi in (pf as Node3D).find_children("*", "MeshInstance3D", true, false):
-				var mesh := (mi as MeshInstance3D).mesh
-				for s in range(mesh.get_surface_count()):
-					var m := mesh.surface_get_material(s)
-					if m and m.resource_name.begins_with("OS_Light"):
-						_kit_light = m
 	var gaps := {}                                    # node id -> [[start angle, arc length]]
 	for i in range(sim.edges.size()):
 		var e: Dictionary = sim.edges[i]
@@ -1463,7 +1370,7 @@ func _deck_color(owner: String) -> Color:
 
 func _half_trims() -> void:
 	## BRAWL deck halves: shown while the deck is open, each half in its end's owner colour.
-	var on := not Rules.bridge_combat and not Rules.goo_look()   # GOO: GooTerritory covers the halves
+	var on := not Rules.goo_look()                    # GOO: GooTerritory covers the halves
 	for i in _trims:
 		var e: Dictionary = sim.edges[i]
 		var show: bool = on and not _collapsed.has(i) and sim.is_edge_open(i)
@@ -1484,10 +1391,8 @@ func _half_trims() -> void:
 
 
 func _neon() -> void:
-	## Pier stripes and platform rims (see the section note): BRAWL in the end node's owner colour,
-	## SIEGE the pier follows its deck's lights and the rim the owner. A dropped node's stripes fall
-	## with it (_collapse): they are left alone from then on.
-	var brawl := not Rules.bridge_combat
+	## Pier stripes and platform rims (see the section note): in the end node's owner colour. A dropped
+	## node's stripes fall with it (_collapse): they are left alone from then on.
 	var goo := Rules.goo_look()                       # TERRITORY: GOO - no stripes or rims, GooTerritory instead
 	for i in _pier_neon:
 		var e: Dictionary = sim.edges[i]
@@ -1496,13 +1401,13 @@ func _neon() -> void:
 			var nid: int = e["a"] if end == 0 else e["b"]
 			if mi == null or sim.collapsed.get(nid, false):
 				continue
-			var key: String = sim.nodes[nid]["owner"] if brawl else _edge_light.get(i, "")
+			var key: String = sim.nodes[nid]["owner"]
 			if _pier_key.get(i * 2 + end, "?") == key + ("|goo" if goo else ""):
 				continue
 			_pier_key[i * 2 + end] = key + ("|goo" if goo else "")
 			_neon_merge.dirty = true
-			(mi as MeshInstance3D).visible = (brawl or SIEGE_PIER_STRIPES) and not goo
-			(mi as MeshInstance3D).material_override = Mats.light_color(_deck_color(key)) if brawl else _siege_light(i, key)
+			(mi as MeshInstance3D).visible = not goo
+			(mi as MeshInstance3D).material_override = Mats.light_color(_deck_color(key))
 	for id in _rims:
 		if sim.collapsed.get(id, false):
 			continue
@@ -1513,19 +1418,4 @@ func _neon() -> void:
 		_neon_merge.dirty = true
 		var mi: MeshInstance3D = _rims[id]
 		mi.visible = not goo and sim.nodes[id].get("node_kind", "") != "junction"   # JUNCTION: no rim on a junction
-		if brawl:
-			mi.material_override = Mats.light_color(_brawl_color(owner))
-		else:
-			mi.material_override = Mats.light(owner) if owner != "" else _kit_light
-
-
-func _siege_light(i: int, key: String) -> Material:
-	## The material SIEGE's deck lights carry for _edge_light key `key` (_decks, _last_stand_warning).
-	var e: Dictionary = sim.edges[i]
-	if key == "state":
-		return Mats.light_color(Rules.state_color("retract" if e["retracts"] else e["state"]))
-	if key == "warn1":
-		return Mats.light_color(Rules.state_color("warn"))
-	if key == "" or key == "warn0":
-		return _kit_light
-	return Mats.light(key)
+		mi.material_override = Mats.light_color(_brawl_color(owner))

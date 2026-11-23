@@ -19,7 +19,7 @@ static var _chev_mesh: ArrayMesh
 
 
 static func wanted(s: Sim) -> bool:
-	return Rules.TWO_DOORS and not Rules.bridge_combat and s.v3
+	return Rules.TWO_DOORS and s.v3
 
 
 func setup(s: Sim) -> void:

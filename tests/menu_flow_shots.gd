@@ -113,10 +113,6 @@ func _run() -> void:
 		m.show_lobby()
 		await shot(sh[1])
 	m._lobby_sheet = ""
-	for md in [["3v3", "19-room-host-3v3"], ["2v2v2", "20-room-host-2v2v2"], ["FFA5", "21-room-host-ffa5"]]:
-		_fake_room(md[0], false, true)
-		m.show_lobby()
-		await shot(md[1])
 	_fake_room("1v1", true)
 	m.show_lobby()
 	await shot("13-room-guest-1v1")

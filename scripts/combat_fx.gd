@@ -2,8 +2,8 @@ class_name CombatFx
 extends Node3D
 ## Combat effects (0.18.6). The fight for a tower (Daniele: "we need an animation for when 2 teams are
 ## fighting for a tower"): a contest ring round the platform in both owners' colours, impact sparks and
-## splats where the attackers hit the garrison (BRAWL: Alpha 11's front door, where every arrival is
-## resolved one by one; SIEGE: the seams of the siege on the river ring, or where a line passes through),
+## splats where the attackers hit the garrison (Alpha 11's front door, where every arrival is
+## resolved one by one),
 ## a shock flash per resolved clash, all following the fight's rate, gone when the fight ends. The
 ## conquest tier-down (Daniele: "and an animation for when a tower is conquered and its tier is lowered
 ## by 1"): a ghost of the old tier sinks into the socket in a burst of debris while the new tier rises,
@@ -15,7 +15,7 @@ extends Node3D
 ## Cosmetics.points); a Machinegoon's turret yaws to the line it is shooting (n["shot"]), a goo stream arcs
 ## from its muzzle to the target with a splash for every kill, and the T3 / Pepperbox barrel cluster spins
 ## up while it fires.
-## Everything is read from the Sim's state (lines pouring in, sieges, node losses, owners and tiers,
+## Everything is read from the Sim's state (lines pouring in, owners and tiers,
 ## laser bursts, machinegoon shots), so online guests, who apply the host's snapshots, see the same thing
 ## with no extra traffic. One MultiMesh draws every spark; rings, beams and flares are made once per node
 ## and reused.
@@ -136,73 +136,29 @@ func sync(dt: float, cam: Camera3D) -> void:
 # ------------------------------------------------------------------ the fight for a tower
 func _gather_fights(dt: float) -> void:
 	var front := Rules.front_dir()
-	if not Rules.bridge_combat:
-		# BRAWL (Alpha 11 land()): a line pouring in at an enemy or neutral node is resolved at the front
-		# door unit by unit against the garrison while it pours - that is the fight.
-		for h in sim.hordes:
-			if h["state"] != "absorb" or h["units"] <= 0.0:
-				continue
-			var n: Dictionary = sim.nodes[h["target"]]
-			if sim.collapsed.get(n["id"], false) or sim.allied(n["owner"], h["owner"]):
-				continue
-			var route: Array = h["route"]
-			var came: Vector3 = (sim.nodes[route[-2]]["pos"] - n["pos"]) if route.size() >= 2 else front
-			var rate: float = maxf(Rules.move_speed() * h["units"] / maxf(Sim.chain_length(h), 0.5), 4.0)
-			var share: float = h["units"] / maxf(h["units"] + n["units"], 0.001)
-			var door_d: Vector3 = sim.entry_door_dir(h) if Rules.TWO_DOORS else front   # TWO DOORS: the door it entered by
-			var door: Vector3 = n["pos"] + door_d * (Rules.EXIT_R + 0.35) + Vector3(0, 0.9, 0)
-			if not sim.node_hidden(n["id"], viewer):      # POWERS: inside a rival's fog the fight (and its ring) is not seen
-				_contest(n, h["owner"], came, rate, share, door)
-				_clash(door, door_d, Rules.seat_color(h["owner"]), _owner_color(n["owner"]), rate, dt)
-			if n["owner"] != "" and sim.allied(n["owner"], viewer):
-				_alarm(n, came, n["owner"] != viewer, dt)
-		for id in _fights:                            # the ring's sweep: how close the strongest side is to taking it
-			var f: Dictionary = _fights[id]
-			if f["frame"] == _frame:
-				f["target"] = _progress(sim.nodes[id], str(f["att"]))
-		return
-	# SIEGE: arrivals sit on the platform (siege) and fight the garrison at node rates (Sim._node_fights);
-	# lines passing through fight it where they cross (transit).
-	for n in sim.nodes:
-		if sim.collapsed.get(n["id"], false):
+	# BRAWL (Alpha 11 land()): a line pouring in at an enemy or neutral node is resolved at the front
+	# door unit by unit against the garrison while it pours - that is the fight.
+	for h in sim.hordes:
+		if h["state"] != "absorb" or h["units"] <= 0.0:
 			continue
-		var loss: Dictionary = n["node_loss"]
-		if loss.is_empty():
+		var n: Dictionary = sim.nodes[h["target"]]
+		if sim.collapsed.get(n["id"], false) or sim.allied(n["owner"], h["owner"]):
 			continue
-		var g_loss: float = loss.get(n["owner"], 0.0) if n["owner"] != "" else 0.0
-		var total: float = n["units"]
-		for k in n["siege"]:
-			total += n["siege"][k]
-		for k in n["siege"]:
-			var units: float = n["siege"][k]
-			var rate: float = loss.get(k, 0.0) + g_loss
-			if units <= 0.0 or rate <= 0.0:
-				continue
-			var share := units / maxf(total, 0.001)
-			var d: Vector3 = n["siege_dir"].get(k, front)
-			var a := atan2(d.z, d.x)
-			var half := share * PI
-			var col := Rules.seat_color(k)
-			var def := _owner_color(n["owner"])
-			var up := Vector3(0, 0.7, 0)
-			var e1 := Vector3(cos(a + half), 0.0, sin(a + half))
-			var e2 := Vector3(cos(a - half), 0.0, sin(a - half))
-			_contest(n, k, d, rate, share, n["pos"] + d * Rules.RIVER_R + up)
-			_clash(n["pos"] + e1 * Rules.RIVER_R + up, e1, col, def, rate * 0.5, dt)   # both seams of the siege
-			_clash(n["pos"] + e2 * Rules.RIVER_R + up, e2, col, def, rate * 0.5, dt)
-		for k in n["transit"]:
-			var rate: float = loss.get(k, 0.0)
-			var hs: Array = n["transit"][k]["hordes"]
-			if rate <= 0.0 or hs.is_empty():
-				continue
-			var head: Vector3 = Sim.sample(hs[0], hs[0]["s"])[0]
-			var d: Vector3 = head - (n["pos"] as Vector3)
-			d.y = 0.0
-			d = d.normalized() if d.length() > 0.01 else front
-			var units: float = n["transit"][k]["units"]
-			var spot: Vector3 = n["pos"] + d * Rules.RIVER_R + Vector3(0, 0.7, 0)
-			_contest(n, k, d, rate, units / maxf(units + n["units"], 0.001), spot)
-			_clash(spot, d, Rules.seat_color(k), _owner_color(n["owner"]), rate, dt)
+		var route: Array = h["route"]
+		var came: Vector3 = (sim.nodes[route[-2]]["pos"] - n["pos"]) if route.size() >= 2 else front
+		var rate: float = maxf(Rules.move_speed() * h["units"] / maxf(Sim.chain_length(h), 0.5), 4.0)
+		var share: float = h["units"] / maxf(h["units"] + n["units"], 0.001)
+		var door_d: Vector3 = sim.entry_door_dir(h) if Rules.TWO_DOORS else front   # TWO DOORS: the door it entered by
+		var door: Vector3 = n["pos"] + door_d * (Rules.EXIT_R + 0.35) + Vector3(0, 0.9, 0)
+		if not sim.node_hidden(n["id"], viewer):      # POWERS: inside a rival's fog the fight (and its ring) is not seen
+			_contest(n, h["owner"], came, rate, share, door)
+			_clash(door, door_d, Rules.seat_color(h["owner"]), _owner_color(n["owner"]), rate, dt)
+		if n["owner"] != "" and sim.allied(n["owner"], viewer):
+			_alarm(n, came, n["owner"] != viewer, dt)
+	for id in _fights:                            # the ring's sweep: how close the strongest side is to taking it
+		var f: Dictionary = _fights[id]
+		if f["frame"] == _frame:
+			f["target"] = _progress(sim.nodes[id], str(f["att"]))
 
 
 func _contest(n: Dictionary, seat: String, dir: Vector3, rate: float, share: float, spot: Vector3) -> void:
@@ -241,7 +197,7 @@ func _contest(n: Dictionary, seat: String, dir: Vector3, rate: float, share: flo
 		f["att"] = seat
 		f["angle"] = atan2(dir.z, dir.x)
 		f["share"] = lerpf(f["share"], clampf(share, 0.08, 0.9), 0.15)
-		f["target"] = clampf(share, 0.0, 1.0)             # SIEGE's sweep (BRAWL: _progress, after the gather)
+		f["target"] = clampf(share, 0.0, 1.0)             # (_progress sets the sweep after the gather)
 		f["spot"] = spot
 
 
@@ -265,10 +221,8 @@ func _update_fights(dt: float) -> void:
 		var ease_k: float = Rules.CONTEST_EASE * (1.0 if active else 4.0)
 		f["prog"] = lerpf(float(f["prog"]), float(f["target"]), minf(1.0, dt * ease_k))
 		ring.visible = true
-		# SIEGE: the goo covers the platform to its lip, so the ring rides just outside and above it
-		var siege := Rules.bridge_combat
-		ring.position = n["pos"] + Vector3(0, RING_Y + (0.45 if siege else 0.0), 0)
-		ring.scale = Vector3.ONE * (Rules.R + (0.75 if siege else 0.0))
+		ring.position = n["pos"] + Vector3(0, RING_Y, 0)
+		ring.scale = Vector3.ONE * Rules.R
 		var mat: ShaderMaterial = f["mat"]
 		mat.set_shader_parameter("col_def", _owner_color(n["owner"]))
 		mat.set_shader_parameter("col_att", Rules.seat_color(f["att"]))
@@ -281,7 +235,7 @@ func _update_fights(dt: float) -> void:
 		var glow: MeshInstance3D = f["glow"]           # the hot spot on the deck where they clash
 		glow.visible = true
 		var spot: Vector3 = f["spot"]
-		glow.position = Vector3(spot.x, (n["pos"] as Vector3).y + RING_Y + (0.9 if siege else 0.03), spot.z)
+		glow.position = Vector3(spot.x, (n["pos"] as Vector3).y + RING_Y + 0.03, spot.z)
 		glow.scale = Vector3.ONE * (3.2 + 1.8 * f["heat"])
 		var gmat: ShaderMaterial = f["gmat"]
 		gmat.set_shader_parameter("color", Rules.seat_color(f["att"]).lerp(_owner_color(n["owner"]), 0.5).lerp(HOT, 0.35))

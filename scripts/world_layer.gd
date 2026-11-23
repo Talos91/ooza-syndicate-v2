@@ -7,14 +7,14 @@ extends Node3D
 ## nearest tube (in form of goo not as units) here they enter and up the tube they go (just visual effect)").
 ## Spec: Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/WORLD-LAYER-2026-11.md. PLACEHOLDER art (primitives +
 ## shaders) until the kit pieces from world-layer/WORLD-PROMPTS.md are built.
-## VIEW ONLY: reads sim.nodes (owner, units, siege), sim.collapsed and the "fall" / "fling" fx events. It never
+## VIEW ONLY: reads sim.nodes (owner, units), sim.collapsed and the "fall" / "fling" fx events. It never
 ## writes to the Sim and adds nothing to the protocol - a guest draws the same from the host's snapshots and events.
 ##  - the floor: a plane FLOOR_DEPTH under the lowest node, dark plates, hazed and faded out at the edges;
 ## Daniele's answers (2026-11-06, OPEN-QUESTIONS): the floor varies per map - street / factory / sewer / lab; NO tubes on
 ## relays; drifting fog / clouds separate the arena from the floor; goo crawls to the nearest tube and an ENEMY tube's
 ## door lasers it (a background detail).
 ##  - a tube per node platform (not relays / junctions / plazas), from under the platform to the floor: goo flows up in the
-##    owner's colour; a siege pushes the attacker's colour down from the top (share of the fight); a capture pushes
+##    owner's colour; a capture pushes
 ##    the old colour out of the bottom (neutral: it pushes out the gray native goo); a dropped node's tube drains and sinks;
 ##  - falls: a splat where the bodies land + droplets, then goo blobs crawl to the nearest tube and ride up inside it.
 ## Budget (phones): one draw per tube, one floor, three MultiMeshes (blobs, droplets, splats) with fixed pools;
@@ -82,7 +82,6 @@ const TUBE_TOP_PILLAR := -2.3    # under the pillar's collar
 const TUBE_TOP_KIT2 := -0.9      # KIT2 at SIZE D: the full-size column meets the x0.68 hub cone 0.85 m over its bottom (NODE-SIZE-D-SPEC)
 const DRILL_R_KIT2 := 1.088      # KIT2 SIZE D: the full-size mobile goo column (M_GooColumn, 2.18 m across); drawn only (tb "r" stays)
 const PUSH_T := 1.6              # s: a capture pushes the old colour out of the tube
-const INV_MAX := 0.6             # a siege fills at most this share of the tube from the top
 const INV_RATE := 0.8            # tube share per second the invader band moves
 const LAND_DROP := 26.0          # Fx.FLING_DROP: the bodies drop this far over FALL_S (ease-in)
 const FALL_S := 1.4
@@ -579,7 +578,7 @@ func handle(ev: Dictionary) -> void:
 	var pts: Array = ev.get("pts", [])
 	if pts.is_empty():
 		return
-	if not Rules.bridge_combat and active == self:
+	if active == self:
 		return                                        # BRAWL (F1): every falling body reports where it hits (land_body)
 	var shown := float(ev.get("units", 0.0)) if ty == "fling" else Rules.shown_f(float(ev.get("units", 0.0)))
 	if shown <= 0.0:
@@ -600,8 +599,6 @@ func fall_depth(y: float) -> float:
 
 func land_body(p: Vector3, seat: String) -> void:
 	## F1: a falling body hit the floor at p (x, z): the splat appears exactly there (sync, this frame)
-	if Rules.bridge_combat:
-		return                                        # SIEGE (paused): handle() keeps its event splats
 	_landed.append([p, seat])
 
 
@@ -791,22 +788,7 @@ func _tubes_step(dt: float) -> void:
 				tb["inv"] = 0.0
 				tb["base_old"] = tb["base"]
 		else:
-			var best_seat := ""
-			var best_u := 0.0
-			var siege: Dictionary = n.get("siege", {})
-			for s in siege:
-				if s != owner and float(siege[s]) > best_u:
-					best_u = float(siege[s])
-					best_seat = s
-			var target := 0.0
-			if best_seat != "":
-				target = INV_MAX * best_u / (best_u + maxf(float(n["units"]), 0.01))
-				if best_seat != tb["inv_seat"] and float(tb["inv"]) < 0.02:
-					tb["inv_seat"] = best_seat
-					tb["inv_col"] = _col(best_seat)
-			if best_seat != tb["inv_seat"]:
-				target = 0.0
-			tb["inv"] = move_toward(float(tb["inv"]), target, dt * INV_RATE)
+			tb["inv"] = move_toward(float(tb["inv"]), 0.0, dt * INV_RATE)
 		var m: ShaderMaterial = tb["mat"]
 		var top_c: Color = tb["inv_col"]
 		var bot_c: Color = tb["base_old"] if tb["pushing"] else tb["base"]

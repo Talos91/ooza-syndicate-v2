@@ -3,7 +3,7 @@ extends CanvasLayer
 ## The match interface (2.0): Alpha 11's chrome and layout brought over in full - top bar (emblem,
 ## your total, timer, rivals, strength bar), pause menu, side send panel with the fractions and the
 ## selected vat's count, node badges floating beside their nodes (count - the owner's emblem in the
-## owner's colour instead on enemy nodes in SIEGE or when enemy counts are hidden -, emblem, tier,
+## owner's colour instead on enemy nodes when enemy counts are hidden -, emblem, tier,
 ## relay state, build bar), the
 ## ring inspector with costed actions, the skill dock (SkillDock: ACTIVE / MAP / ULTIMATE when ABILITIES
 ## are on; its target highlights sit on a layer over the badges, under the panels),
@@ -1274,8 +1274,7 @@ func _badges(cam: Camera3D) -> bool:
 			_font_color(b["label"] as Label, HudSkin.ink(col) if owner != "" else HudSkin.neutral_ink())
 		var label: Label = b["label"]
 		var sub: Label = b["sub"]
-		var classic := not Rules.bridge_combat
-		var masked := not (owner == "" or sim.allied(owner, human) or (classic and not Rules.hide_enemy_counts and shows("rival_counts")))   # Brawl = Alpha 11: every count, unless hidden (TUTORIAL: from L3)
+		var masked := not (owner == "" or sim.allied(owner, human) or (not Rules.hide_enemy_counts and shows("rival_counts")))   # Brawl = Alpha 11: every count, unless hidden (TUTORIAL: from L3)
 		# POWERS (0.22.2): a rival's Fog of War over this node - "?" for its count, no owner emblem, no tags or build bar
 		# (your own side's nodes stay readable to you; Sim.node_hidden is true only outside the caster's side)
 		var fogged: bool = sim.node_hidden(n["id"], human) and (owner == "" or not sim.allied(owner, human))
@@ -1293,14 +1292,14 @@ func _badges(cam: Camera3D) -> bool:
 		# no numbers on enemy nodes: the owner's emblem in the owner's colour stands in the count's place
 		# (Daniele: "don't use A B and C but use emblems in the color of the owner")
 		var emb: TextureRect = b["emblem"]
-		var show_emb := owner != "" and (classic or masked) and not fogged
+		var show_emb := owner != "" and not fogged
 		if show_emb and emb.get_meta("f", "") != sim.factions.get(owner, ""):
 			emb.set_meta("f", sim.factions.get(owner, ""))
 			emb.texture = emblem_texture(str(sim.factions.get(owner, "null")))
 		if show_emb and emb.get_meta("seat", "") != owner:
 			emb.set_meta("seat", owner)
 			tint_emblem(emb, Rules.seat_color(owner))
-		sub.visible = (not classic or n["build_kind"] != "" or sim.last_stand_active) and not fogged   # (POWERS: fog)
+		sub.visible = (n["build_kind"] != "" or sim.last_stand_active) and not fogged   # (POWERS: fog)
 		if Calm.labels() and not fogged and owner != "" and n["relay"] == "" and str(n["structure"]) in ["vat", "machinegoon"]:
 			sub.visible = true                          # calm-pass B: the tier chip folded into the badge ("T3" / "GAT2")
 		# Alpha 19 (Daniele: "some text is too long, like the word FINAL isn't necessary"): two compact
@@ -3744,7 +3743,6 @@ func _build_debug() -> void:
 		_build_proto_debug(box)
 		if not Rules.debug_tools:
 			return
-	# (0.18.7: SIEGE is deactivated - its deck / platform / door / platform-fight tunables left the panel)
 	var forge := _debug_slider(box, "Forge bonus", 0.0, 200.0, 5.0, Rules.forge_bonus * 100.0, "+%.0f%% attack",
 			func(v: float): Rules.forge_bonus = v / 100.0)
 	var hide := button("", Callable(), 0, 44, 18)

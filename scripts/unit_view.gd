@@ -402,7 +402,7 @@ func add_horde(h: Dictionary, shown_units: float, time: float, drop := {}, ghost
 # come out of the door is shown DROP_T s ahead - a goo blob squeezes out of one of the vat's tanks (the
 # tanks take turns), falls with a stretch, splats on the platform, forms into the creature and runs to
 # the door, reaching it exactly when the line's own stream puts it there. Stateless: a body's phase is
-# how far it still is from the door (BRAWL) or how many units are still to be emitted before it (SIEGE).
+# how far it still is from the door.
 const DROP_T := 1.0                  # seconds from the tank to the door
 const BLOB_R := 0.46                 # a dropped blob's radius (m)
 const DROP_UP := 1.4                 # m/s up as it squeezes out over the tank's rim
@@ -465,34 +465,6 @@ func _drop_bodies(h: Dictionary, drop: Dictionary, head: float, count: int, time
 			var wave := sin(time * WAVE + fmod(j * 0.618 + float(h["id"]) * 0.137, 1.0) * TAU)
 			add_unit(h["faction"], h["owner"], ph[0], face_yaw(dir.normalized() if dir.length() > 0.01 else Vector3.ZERO, to_cam, screen_right),
 					maxf(0.0, wave) * HOP * size, wave * ROLL, wave * SQUASH * soft + (1.0 - size) * 0.3, lerpf(0.25, 1.0, size))
-
-
-func add_goo_drops(seat: String, drop: Dictionary, door_pt: Vector3, emitted: float, total: float) -> void:
-	## SIEGE: one goo blob per shown unit still to leave the door within DROP_T s (never fewer - the
-	## phone profile keeps them all): it drops out of a tank, splats and slides into the line's stream
-	## at the door. `emitted` / `total`: shown units of the order out / ordered.
-	var spouts: PackedVector3Array = drop["spouts"]
-	if spouts.is_empty():
-		return
-	var rate: float = Rules.shown_f(Rules.exit_rate())
-	var i := int(floor(emitted)) + 1
-	var top := int(ceil(total))
-	var k := 0
-	while i <= top and k < 40:
-		var lead := (float(i) - emitted) / maxf(rate, 0.01)   # seconds until it reaches the door
-		if lead > DROP_T:
-			break
-		var u := clampf(1.0 - lead / DROP_T, 0.0, 1.0)
-		var spout: Vector3 = spouts[i % spouts.size()]
-		var rim: Vector3 = (drop["rims"] as PackedVector3Array)[i % spouts.size()]
-		var ph := drop_phase(u, spout, rim, (drop["lands"] as PackedVector3Array)[i % spouts.size()], door_pt)
-		var blob: Vector3 = ph[1]
-		if blob.x <= 0.01 or u >= 0.64:              # no creature in SIEGE: the blob itself slides in
-			var d := clampf((u - 0.64) / 0.36, 0.0, 1.0)
-			blob = Vector3(1.15, 0.62, 1.15) * lerpf(1.0, 0.55, d * d) if u >= 0.64 else Vector3(1.0, 0.8, 1.0)
-		add_blob(seat, ph[0], blob * BLOB_R * 1.25)
-		i += 1
-		k += 1
 
 
 # ------------------------------------------------------------------ falls and pops (pooled)

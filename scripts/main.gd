@@ -7,10 +7,10 @@ extends Node3D
 ## relay's button platform off the rim is a second tap target for its node (double-tap it, or the node, to fire).
 ## Command-line user args (after `--`):
 ##   --map=res://maps4/T-01-first-steps.json  map to load (skips the title screen)
-##   --mode=1v1|2v2|FFA3|FFA4  match mode (the map's first mode if it lacks this one; 5-6 seat modes archived 2026-11-18)
+##   --mode=1v1|2v2|FFA3|FFA4  match mode (the map's first mode if it lacks this one; 5-6 seat modes deleted 2026-11-23)
 ##   --demo                                 every seat played by the AI
 ##   --ai=Training|Casual|Standard|Veteran|Expert  AI level (Rules.AI_LEVELS; the menu picks it otherwise)
-##   --brawl (alias --classic)              no-op: BRAWL is the only mode since 0.18.7 (SIEGE deactivated)
+##   --brawl (alias --classic)              no-op: BRAWL is the only mode (SIEGE deleted 2026-11-23)
 ##   --seed=N                               deterministic Last Stand method / chaos order
 ##   --shots=4,12,25 --out=<dir>            save screenshots at those match times, then quit
 ##   --ff=350                               step the sim headless-fast (no rendering) to this match
@@ -407,7 +407,7 @@ func _start_map(path: String) -> void:
 	var teams := {}
 	for s in map["seats"][mode]:
 		seats[int(s["node"])] = s["seat"]
-		if mode in ["2v2", "3v3", "2v2v2"] and s.get("team") != null:
+		if mode == "2v2" and s.get("team") != null:
 			teams[s["seat"]] = int(s["team"])
 	if not HUMAN in seats.values() and not online:     # FFA maps may seat A elsewhere; A is always you
 		var first: int = seats.keys()[0]
@@ -825,16 +825,10 @@ func _on_order_feedback(msg: String) -> void:
 
 
 func _placed_refusal(method: String, id: int, msg: String) -> void:
-	## A refused order's reason, where it was given: above the skill slot (a cast), at the line (a recall), at the
+	## A refused order's reason, where it was given: above the skill slot (a cast), at the
 	## node (everything else) - Hud.toast's line only when the place is gone.
 	if method == "cast":
 		hud.skill_refusal(id, msg)
-	elif method == "recall":
-		var h := sim._horde(id)
-		if h.is_empty():
-			hud.toast(msg)
-		else:
-			hud.callout_at(Sim.sample(h, float(h["s"]))[0], "line:%d" % id, msg, "warn")
 	elif id >= 0 and id < sim.nodes.size():
 		hud.callout_node(id, msg, hud.kind_of(msg))
 	else:
@@ -979,17 +973,13 @@ static func keep_own_settings() -> void:
 
 static func restore_own_settings() -> void:
 	## After a room's round (LEAVE ROOM, back offline): the default numbers again - no balance preset, the default
-	## forge bonus and speeds (Net._launch sets them for the round) - and the player's own toggles. A no-op while no
+	## forge bonus (Net._launch sets it for the round) - and the player's own toggles. A no-op while no
 	## room wrote anything, so the Debug panel's offline tuning still carries to the next match.
 	if not room_rules:
 		return
 	room_rules = false
 	Rules.apply_balance("")
 	Rules.forge_bonus = Rules.FORGE_BONUS_DEFAULT
-	Rules.deck_speed = Rules.DECK_SPEED_DEFAULT
-	Rules.node_speed_mult = Rules.NODE_SPEED_MULT_DEFAULT
-	Rules.door_rate = Rules.DOOR_RATE_DEFAULT
-	Rules.node_fight_mult = Rules.NODE_FIGHT_MULT_DEFAULT
 	if not own_settings.is_empty():
 		Rules.last_stand = bool(own_settings["last_stand"])
 		Rules.abilities_on = bool(own_settings["abilities_on"])
@@ -1685,14 +1675,6 @@ func node_action(method: String, id: int, args := {}) -> bool:
 func perform(seat: String, method: String, id: int, args := {}) -> Array:
 	## One player's order, checked for that seat: [accepted, feedback line]. The host runs guests'
 	## orders through here too (Net._execute), so ownership is always checked against the Sim.
-	if method == "recall":
-		var h := sim._horde(id)
-		if h.is_empty() or h["owner"] != seat:
-			return [false, "That line can't turn back now"]
-		var units: float = h["units"]
-		if sim.recall(id):
-			return [true, "Recalled - %d units turning back" % Rules.shown(units)]
-		return [false, "That line can't turn back now"]
 	if method == "cast":                               # SKILLS 2.0: id = slot index (0 active, 1 map, 2 ultimate)
 		var slot: String = ["active", "map", "ultimate"][id] if id >= 0 and id <= 2 else ""
 		var target = args.get("target", null)
@@ -2362,10 +2344,6 @@ func _unhandled_input(event: InputEvent) -> void:
 				else:
 					hud.close_inspector()
 					selected = -1
-					var own := _horde_at(hit) if Rules.bridge_combat else {}   # RECALL is SIEGE only (Alpha 16)
-					if not own.is_empty():                       # tap one of your lines: RECALL it
-						node_action("recall", own["id"])
-						return
 			else:
 				if _swallow_release:
 					_swallow_release = false
@@ -2768,27 +2746,6 @@ func _perf(dt: float) -> void:
 			Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
 			Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME), px.x, px.y, RenderScale.scale_now(),
 			PerfProfile.device_pixel_ratio()])
-
-
-func _horde_at(p: Vector3) -> Dictionary:
-	## The player's own horde whose line passes within reach of a ground point (recall target).
-	if p == Vector3.INF:
-		return {}
-	var best := {}
-	var best_d := 2.2 if not mobile else 3.2
-	for h in sim.hordes:
-		if h["owner"] != HUMAN or h["state"] == "absorb" or h.get("retreat", false):
-			continue
-		var len := Sim.chain_length(h)
-		var k := 0.0
-		while k <= len:
-			var q: Vector3 = Sim.sample(h, h["s"] - k)[0]
-			var d := Vector2(q.x - p.x, q.z - p.z).length()
-			if d < best_d:
-				best_d = d
-				best = h
-			k += 1.2
-	return best
 
 
 func _queue_inspect(id: int) -> void:

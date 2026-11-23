@@ -352,7 +352,7 @@ func sync(dt: float) -> void:
 			rec["last_col"] = col
 			if rec["glass"] >= 0:
 				(rec["mi"] as MeshInstance3D).set_surface_override_material(rec["glass"], Mats.glass(glass_tint(owner)))
-		var ag := 1.0 if (n["build_kind"] != "" or not n["siege"].is_empty()) else 0.0
+		var ag := 1.0 if n["build_kind"] != "" else 0.0
 		if ag != float(rec["last_agit"]):
 			mat.set_shader_parameter("agitation", ag)
 			rec["last_agit"] = ag

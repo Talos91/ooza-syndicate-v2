@@ -68,7 +68,7 @@ func _init() -> void:
 	for code in MapPool.KEEP_OLD:
 		check(not code in MapPool.ARCHIVED and MapPool.all().any(func(p): return p.get_file().begins_with(code)), "%s: kept, baked, not archived" % code)
 	for code in MapPool.ARCHIVED:
-		check(MapPool.all().any(func(p): return p.get_file().begins_with(code)) and not MapPool.mode_offered(code, "1v1"), "%s: archived (file kept, no mode offered)" % code)
+		check(not MapPool.mode_offered(code, "1v1"), "%s: archived (no mode offered; 65 archived files deleted 2026-11-23, tag archive-2026-11-23)" % code)
 	check(not MapPool.battlefield().any(func(p): return MapPool.archived(p)), "no archived map on the battlefield")
 	# POOL G (Daniele 2026-11-15): the pool is the 19 G maps; the 18 REWORK maps stay baked but are never offered
 	check(MapPool.PROTO.size() == 19 and MapPool.PROTO.all(func(c): return MapPool.all().any(func(p): return p.get_file().begins_with(c))), "POOL G: 19 G maps, all baked")
@@ -107,9 +107,9 @@ func _init() -> void:
 		var s_teams := {}
 		for s in sm["seats"][md]:
 			s_seats[int(s["node"])] = s["seat"]
-			if md in ["2v2", "3v3", "2v2v2"] and s.get("team") != null:
+			if md == "2v2" and s.get("team") != null:
 				s_teams[s["seat"]] = int(s["team"])
-		# every map plays BRAWL (0.18.7: SIEGE is deactivated - a map's "combatMode" no longer picks the mode)
+		# every map plays BRAWL (SIEGE deleted 2026-11-23 - a map's "combatMode" no longer picks the mode)
 		_play(sm, spos, s_seats, s_teams, md)
 
 	_check_overpass()

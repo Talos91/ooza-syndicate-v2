@@ -5,8 +5,8 @@ extends Node3D
 ## that has one), the forge ignites - a white-hot flare and a column of sparks - and an energy wave in the
 ## owner's colour mixed with a hot forge orange radiates from it across the map. Over 2.0 s it reaches
 ## every structure and unit of that player in turn by distance: a structure (vat, cannon, forge, relay
-## node) flashes, pumps its scale and throws a ring and sparks off its platform; a unit (BRAWL creature
-## bodies in UnitView, SIEGE goo patches and river rings in HordeView) glows, hops and swells. Pure view:
+## node) flashes, pumps its scale and throws a ring and sparks off its platform; a unit (creature
+## bodies in UnitView) glows, hops and swells. Pure view:
 ## the forge is read from the Sim's node state (owner + attachment, which travel in every snapshot), so
 ## online guests see it with no new net traffic. It never touches input. The views hook in with one
 ## check, `if ForgePulse.live:`, and multiply in `ForgePulse.boost(seat, pos)`, 0 when nothing plays, so

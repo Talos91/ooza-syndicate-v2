@@ -17,7 +17,7 @@ extends SceneTree
 ##   --fair=1 (both AIs estimate garrisons with the defender's attack and garrison stats, balance_ai.gd)
 ##   --maps=C-01,M-03 (codes; default: every BRAWL 1v1 map in MapPool, no tutorials / debug)
 ##   --shard=k/n   --out=<file.jsonl>   --dt=0.1   --tag=<label>
-## BRAWL only (Daniele, 0.18.7: "brawl is our game" - SIEGE is deactivated). Skills / abilities play as the
+## BRAWL only (Daniele, 0.18.7: "brawl is our game" - SIEGE deleted 2026-11-23). Skills / abilities play as the
 ## game's default (off); the relay rule in force at run time applies (it may move these numbers).
 ## The Rules overrides are applied before every match (Rules.apply_balance), so any proposal can be A/B
 ## tested the same way; --preset=b187 is the 0.18.7 proposal. Matches play with the Last Stand ON and the
@@ -52,7 +52,7 @@ func _run() -> void:
 			push_error("--override is not a JSON dictionary")
 			quit(2)
 			return
-	brawl = true                                 # SIEGE is deactivated (0.18.7): BRAWL only
+	brawl = true                                 # SIEGE deleted 2026-11-23: BRAWL only
 	level = str(args.get("level", "Standard"))
 	dt = float(args.get("dt", "0.1"))
 	_apply()
@@ -75,7 +75,6 @@ func _run() -> void:
 
 func _apply() -> void:
 	Rules.apply_balance(preset, overrides)
-	Rules.bridge_combat = not brawl
 	Rules.last_stand = true
 	Rules.abilities_on = false                   # the game default (skills off until their UI ships)
 
@@ -181,7 +180,7 @@ func _capture_once(tier: int, send: float, forge: bool, faction: String) -> Dict
 		for hh in sim.hordes:
 			if hh["owner"] == "A":
 				left = true
-		if not left and n["siege"].is_empty() and sim.time > t0 + 1.0:
+		if not left and sim.time > t0 + 1.0:
 			break
 	var won: bool = n["owner"] == "A"
 	# spent = attackers lost in combat (the prize vat produces meanwhile, so its garrison is no measure)

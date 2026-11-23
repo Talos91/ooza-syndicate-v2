@@ -44,7 +44,7 @@ func _build_sim(info: Dictionary) -> Sim:
 	var teams := {}
 	for s in map["seats"][info["mode"]]:
 		seats[int(s["node"])] = s["seat"]
-		if info["mode"] in ["2v2", "3v3", "2v2v2"] and s.get("team") != null:
+		if info["mode"] == "2v2" and s.get("team") != null:
 			teams[s["seat"]] = int(s["team"])
 	var s := Sim.new()
 	s.setup(map, MapBuilder.layout(map), seats, info["players"], int(info["seed"]), teams, info.get("loadouts", {}))

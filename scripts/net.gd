@@ -2,7 +2,7 @@ extends Node
 ## Ooze Syndicate 2.0 - online rooms (autoload "Net"). Began as Alpha 11's PeerJS approach, ported from
 ## Game/Alpha 11/scripts/network.gd (the P2P half) to 2.0's seats, maps and Sim:
 ## - the transport is RelayBridge (the room server, see ROOM SERVER below; the PeerJS rooms were removed in Alpha 21);
-## - four-character room codes, 2-4 players: free-for-all (1v1, FFA 3-4) and teams (2v2) (5-6 seat modes archived 2026-11-18),
+## - four-character room codes, 2-4 players: free-for-all (1v1, FFA 3-4) and teams (2v2) (5-6 seat modes deleted 2026-11-23),
 ##   host-assigned seats (join order); in team modes every player can switch team in the lobby (JOIN
 ##   TEAM, host-validated: a team never exceeds its seats; the host can move players too) and the team
 ##   decides the seat the player gets at DEPLOY (Daniele, 0.18.7: "there should be so i can switch to my
@@ -10,7 +10,7 @@ extends Node
 ## - room colours (Daniele, 0.18.7: the same colours on every screen): every player picks a hue in the
 ##   lobby, unique in the room, teammates in one hue family (Rules.colour_families); the host validates,
 ##   and the launch carries the seat -> hue map (room_colours) that every browser renders;
-## - the HOST's Sim is the only simulation. Guests send orders (send, recall, upgrade, build, switch,
+## - the HOST's Sim is the only simulation. Guests send orders (send, upgrade, build, switch,
 ##   restore); the host validates ownership, rate-limits and answers every order with the same
 ##   feedback line the offline game toasts. The host broadcasts compressed snapshots ~10 Hz plus the
 ##   view's effect events; guests render snapshots with light prediction (lines keep moving);
@@ -77,15 +77,15 @@ signal order_feedback(message: String)
 signal seats_changed                               # host: which seats the AI plays changed
 
 const VERSION_TAG := "ooze20-net-8"               # plus Rules.VERSION: guests must match the host exactly (2: team switch, room colours; 3: structures 2.1, teams; 4: server-hosted rooms, room owner; 5: delta snapshots, binary frames; 6: READY; 7: player names; 8: POWERS - new horde keys, Portal [entrance, exit])
-# MAX 4 SEATS (Daniele 2026-11-18, screen layout): FFA5, 3v3 and 2v2v2 are ARCHIVED - no selector, no room offers them, a request for
-# one is refused (set_mode). Git history keeps them (before map-pass: MODES 1v1 FFA3 FFA4 FFA5 2v2 3v3 2v2v2, SLOTS up to 6).
+# MAX 4 SEATS (Daniele 2026-11-18, screen layout; deleted from the code 2026-11-23): FFA5, 3v3 and 2v2v2 are gone - a request for
+# one is refused (set_mode). Tag archive-2026-11-23 keeps them (MODES 1v1 FFA3 FFA4 FFA5 2v2 3v3 2v2v2, SLOTS up to 6).
 const MODES := ["1v1", "FFA3", "FFA4", "2v2"]
 const MODE_LABELS := {"1v1": "1 V 1", "FFA3": "FFA 3", "FFA4": "FFA 4", "2v2": "2 V 2"}
 const SLOTS := {"1v1": 2, "FFA3": 3, "FFA4": 4, "2v2": 4}
 const TEAM_MODES := ["2v2"]
-const SEATS := ["A", "B", "C", "D", "E", "F"]
+const SEATS := ["A", "B", "C", "D", "E", "F"]     # rooms seat A-D only (SLOTS); E / F stay so an out-of-range slot never indexes past the end
 const FACTIONS := ["vex", "null", "bloom", "ember", "solar"]
-const ACTIONS := ["send", "recall", "upgrade", "build_cannon", "build_forge", "restore", "switch", "cast",
+const ACTIONS := ["send", "upgrade", "build_cannon", "build_forge", "restore", "switch", "cast",
 		"build", "launch_monster", "eject"]
 const STRUCTURE_ACTIONS := ["build", "launch_monster", "eject"]   # run through Sim.structure_order
 const BUILD_KINDS := ["vat", "machinegoon", "laser", "forge", "monster_hub"]
@@ -133,7 +133,6 @@ var colour := ""                                   # the hue you asked for (a Ru
 # room settings (host decides; guests receive them with the lobby)
 var mode := "1v1"
 var map_path := ""                                   # set from the map pool when a room opens
-const siege := false                               # 0.18.7: SIEGE is deactivated - rooms play BRAWL (the wire fields stay, fixed)
 var last_stand := true
 var abilities := true                              # ABILITIES ON/OFF (0.18.7: default on in both modes)
 var loadout := {}                                  # your own {"active", "map"} (empty = the faction's default)
@@ -340,7 +339,7 @@ func _unique_name(nm: String, id: int) -> String:
 
 
 func team_of_slot(slot: int) -> int:
-	## Team modes take the map's teams (2v2 A+B vs C+D, 3v3, 2v2v2); FFA: everyone alone (-1).
+	## Team modes take the map's teams (2v2 A+B vs C+D); FFA: everyone alone (-1).
 	if not mode in TEAM_MODES:
 		return -1
 	var seats: Array = map_data(map_path).get("seats", {}).get(mode, [])
@@ -1050,7 +1049,7 @@ func _reseat(teams := {}) -> void:
 
 
 func publish_lobby() -> void:
-	_broadcast("lobby", {"roster": roster, "mode": mode, "map": map_path, "siege": siege,
+	_broadcast("lobby", {"roster": roster, "mode": mode, "map": map_path, "siege": false,   # SIEGE deleted 2026-11-23: the field stays, fixed
 			"last_stand": last_stand, "round": match_round, "ai_fill": ai_fill, "abilities": abilities, "owner": room_owner,
 			"backdrop": room_backdrop, "ai_picks": ai_picks})   # UI: an older client ignores them
 	lobby_changed.emit()
@@ -1186,9 +1185,10 @@ func launch_round(fill := "") -> void:
 			"players": players, "roster": roster, "ai": ai, "ai_fill": ai_fill, "colours": room_colours(), "loadouts": loadouts,
 			"backdrop": _backdrop_index(),             # UI: the round's background, the same on every screen
 			"cosmetics": cosmetics,
-			"rules": {"bridge_combat": siege, "last_stand": last_stand, "abilities_on": abilities, "deck_speed": Rules.deck_speed,
-					"node_speed_mult": Rules.node_speed_mult, "door_rate": Rules.door_rate,
-					"node_fight_mult": Rules.node_fight_mult, "forge_bonus": Rules.forge_bonus,
+			# SIEGE deleted 2026-11-23: bridge_combat and its four tunables stay on the wire at their old fixed values (ignored)
+			"rules": {"bridge_combat": false, "last_stand": last_stand, "abilities_on": abilities, "deck_speed": 5.0,
+					"node_speed_mult": 1.0, "door_rate": 48.0,
+					"node_fight_mult": 1.0, "forge_bonus": Rules.forge_bonus,
 					"hide_enemy_counts": Rules.hide_enemy_counts, "balance_preset": Rules.BALANCE_PRESET}}
 	_broadcast("launch", info)
 	_launch(info)
@@ -1204,13 +1204,8 @@ func _launch(info: Dictionary) -> void:
 	mode = str(info["mode"])
 	map_path = str(info["map"])
 	var r: Dictionary = info["rules"]
-	last_stand = bool(r["last_stand"])                 # (r["bridge_combat"] is always false: BRAWL only)
-	Rules.bridge_combat = false
-	Rules.last_stand = last_stand
-	Rules.deck_speed = float(r["deck_speed"])
-	Rules.node_speed_mult = float(r["node_speed_mult"])
-	Rules.door_rate = float(r["door_rate"])
-	Rules.node_fight_mult = float(r["node_fight_mult"])
+	last_stand = bool(r["last_stand"])                 # (r["bridge_combat"] / deck_speed / node_speed_mult / door_rate /
+	Rules.last_stand = last_stand                      # node_fight_mult are SIEGE's, ignored since 2026-11-23)
 	Rules.apply_balance(str(r.get("balance_preset", "")))   # the host's balance preset (0.18.7; "" = default numbers)
 	Rules.forge_bonus = float(r["forge_bonus"])
 	Rules.hide_enemy_counts = bool(r.get("hide_enemy_counts", false))   # the host's option, the same for all
