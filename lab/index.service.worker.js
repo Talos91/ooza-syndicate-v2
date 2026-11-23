@@ -4,7 +4,7 @@
 // Incrementing CACHE_VERSION will kick off the install event and force
 // previously cached resources to be updated from the network.
 /** @type {string} */
-const CACHE_VERSION = '1795419050|27936934';
+const CACHE_VERSION = '1795422502|33473930';
 /** @type {string} */
 const CACHE_PREFIX = 'Ooze Syndicate 2-sw-cache-';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
