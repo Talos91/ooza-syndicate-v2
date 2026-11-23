@@ -634,9 +634,12 @@ func _very_last_stand() -> void:
 		if (m["lastStand"].get("methods", []) as Array).is_empty():
 			picks.append(m)
 			break
-	for i in [0, maps.size() / 3, maps.size() * 2 / 3, maps.size() - 1]:
-		if not maps[i] in picks:
-			picks.append(maps[i])
+	# the spread picks are maps WITH a Last Stand order (lab maps have none: their board is a fixed size and they are not
+	# picked by list position, which moved whenever a map was added), the Last Stand drop check is unchanged for them
+	var ringed: Array = maps.filter(func(mm): return not (mm["lastStand"].get("methods", []) as Array).is_empty())
+	for i in [0, ringed.size() / 3, ringed.size() * 2 / 3, ringed.size() - 1]:
+		if not ringed[i] in picks:
+			picks.append(ringed[i])
 	for m in picks:
 		var code: String = m["code"]
 		var md: String = m["modes"][0]
