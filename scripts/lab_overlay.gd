@@ -1,6 +1,7 @@
 extends CanvasLayer
-## LAB BUILD (Rules.lab) debug overlay: a small readout at the BOTTOM CENTRE of a match (above the bottom safe-area inset, clear of the
-## left vat sender, the right skill keys and the map / version labels), starts folded to one line, tap it to unfold and fold. Build + card, camera distance and zoom relative to the whole-map fit,
+## LAB BUILD (Rules.lab) debug overlay: a small readout, BOTTOM CENTRE of a match when that spot is clear (else the nearest clear
+## spot: clear of the left vat sender, the right skill keys, the top band, the map / version labels and every node badge; drawn
+## UNDER the HUD and hidden while a match screen such as PAUSE is up - lab4 job 6), starts folded to one line, tap it to unfold and fold. Build + card, camera distance and zoom relative to the whole-map fit,
 ## pitch, platform diameter in pt (tests/map_size_probe.gd _plat_pt), node / bridge count, shortest / longest deck (m),
 ## viewport in pt and px. Refreshed 4x a second (so zoom, resize and rotation show). Text >= 12.5 pt (UiKit.pt_per_px).
 
@@ -16,11 +17,12 @@ var _t := 0.0
 var _decks := Vector2(-1.0, -1.0)               # shortest, longest deck (m), measured once from the map
 var _joints := 0                                 # LAB JOINT (WP3): joint links (counted apart from the bridges)
 var _hops := Vector2(-1.0, -1.0)                # vat-to-vat walk across a joint (s): shortest, longest
+var _placed := false                             # a spot was chosen (kept while it stays clear)
 
 
 func setup(m: Node) -> void:
 	main = m
-	layer = 90
+	layer = 0                                     # lab4 job 6: UNDER the HUD (1): never over a badge, the pause menu or a screen
 	_panel = PanelContainer.new()
 	var box := UiKit.sb(Color(UiKit.BASE, 0.78), Color(UiKit.CYAN, 0.6), 1, 4)
 	box.set_content_margin_all(6.0)
@@ -145,54 +147,127 @@ func text() -> String:
 
 
 func _avoid_rects() -> Array[Rect2]:
-	## The HUD pieces the readout must stay clear of: the left vat sender, the right skill column, the bottom-left map label,
-	## the bottom-right version label (hud.gd places them; read live so a layout change moves us with it).
+	## The HUD pieces the readout must stay clear of (lab4 job 6: the node badges and the top band too): the left vat sender,
+	## the right skill column, the bottom-left map label, the bottom-right version label, the score capsule + status line, the
+	## top-right buttons, the quota pill, every node badge shown (hud.gd places them; read live so a layout change moves us).
 	var out: Array[Rect2] = []
 	var h = main.hud if "hud" in main else null
-	if h == null:
+	if h == null or not is_instance_valid(h):
 		return out
 	var pad := 4.0 / maxf(UiKit.pt_per_px(get_viewport().get_visible_rect().size), 0.0001)
-	for ctl in [h.side_panel, h.dock, h.map_title, h.version_label]:
-		if ctl != null and is_instance_valid(ctl) and ctl.visible:
-			out.append(Rect2(ctl.global_position, ctl.size).grow(pad))
+	for ctl in [h.side_panel, h.dock, h.map_title, h.version_label, h.top_panel, h.pause_button, h.music_button,
+			h.get("debug_button"), h.get("chat_button"), h.get("_quota_box"), h.get("lab_tube")]:
+		if ctl != null and is_instance_valid(ctl) and (ctl as Control).visible:
+			out.append(Rect2((ctl as Control).global_position, (ctl as Control).size).grow(pad))
+	if h.status_label and h.status_label.visible and h.status_label.text != "":
+		out.append(Rect2(h.status_label.global_position, h.status_label.size).grow(pad))
+	for id in h.badges:
+		var b: Dictionary = h.badges[id]
+		var p: Control = b["panel"]
+		if p.visible and (b["label"] as Control).visible:
+			out.append(Rect2(p.global_position, p.size).grow(pad))
 	return out
 
 
+static func _hit_area(r: Rect2, avoid: Array[Rect2]) -> float:
+	var a := 0.0
+	for o in avoid:
+		a += r.intersection(o).get_area()
+	return a
+
+
+func _screen_open() -> bool:
+	## A match screen (pause, settings, the end card, out, reconnect) is up: the readout hides (lab4 job 6).
+	var h = main.hud if "hud" in main else null
+	if h == null or not is_instance_valid(h):
+		return false
+	for k in ["pause_panel", "end_panel", "out_panel", "reconnect_panel"]:
+		var c = h.get(k)
+		if c != null and is_instance_valid(c) and (c as Control).visible:
+			return true
+	return false
+
+
 func _refresh() -> void:
+	var off := _screen_open()
+	_panel.visible = not off
+	if off:
+		return
 	var vp: Vector2 = get_viewport().get_visible_rect().size
 	var u := 1.0 / maxf(UiKit.pt_per_px(vp), 0.0001)
 	_label.add_theme_font_size_override("font_size", int(ceil(TEXT_PT * u)))
 	_label.text = text()
 	var ins := UiKit.safe_insets(vp)
 	var margin := 12.0 * u                          # the panel's own content margins (6 pt each side)
-	# bottom centre, above the bottom safe-area inset; narrowed (and wrapped) until it clears the HUD pieces
+	var avoid := _avoid_rects()
+	# the free span between the left sender and the right skill column (the readout never goes over either)
+	var h = main.hud
+	var lb := ins.x + 4.0 * u
+	var rb := vp.x - ins.z - 4.0 * u
+	if h.side_panel and h.side_panel.visible:
+		lb = maxf(lb, h.side_panel.global_position.x + h.side_panel.size.x + 4.0 * u)
+	if h.dock and h.dock.visible:
+		rb = minf(rb, h.dock.global_position.x - 4.0 * u)
 	_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	_label.custom_minimum_size = Vector2.ZERO
 	var nat := _label.get_combined_minimum_size()
-	var avoid := _avoid_rects()
-	var w := nat.x
-	var min_w := minf(nat.x, 200.0 * u)
-	var rect := Rect2()
+	var w := minf(nat.x, maxf(rb - lb - margin, 120.0 * u))
+	if w < nat.x - 0.5:                              # narrower than its one-line width: wrapped
+		_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_label.custom_minimum_size = Vector2(w, 0.0)
+	var sz := Vector2(w + margin, _label.get_combined_minimum_size().y + margin)
+	# where: bottom centre first, else slid along the bottom, else under the top band, else stepped up from the bottom - the first spot
+	# that touches nothing; the current spot is kept while it stays clear (no hopping); none clear = the least covered one.
+	# The layer sits UNDER the HUD (layer 0 < 1), so a badge or a menu is never hidden by the readout even then.
+	var top_y := float(h.top_used()) + 4.0 * u if h.has_method("top_used") else ins.y + 70.0 * u
+	var q = h.get("_quota_box")
+	if q != null and (q as Control).visible:
+		top_y = maxf(top_y, (q as Control).global_position.y + (q as Control).size.y + 4.0 * u)
+	var bot_y := vp.y - ins.w - 4.0 * u - sz.y
+	var xs: Array[float] = [(vp.x - sz.x) * 0.5]
+	var step := 24.0 * u
+	var k := 1
 	while true:
-		if w < nat.x - 0.5:
-			_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			_label.custom_minimum_size = Vector2(w, 0.0)
-		var h := _label.get_combined_minimum_size().y + margin
-		rect = Rect2((vp.x - (w + margin)) * 0.5, vp.y - ins.w - 4.0 * u - h, w + margin, h)
-		var clear := true
-		for r in avoid:
-			if r.intersects(rect):
-				clear = false
-				break
-		if clear or w <= min_w:
+		var l := (vp.x - sz.x) * 0.5 - k * step
+		var r := (vp.x - sz.x) * 0.5 + k * step
+		if l < lb and r + sz.x > rb:
 			break
-		w = maxf(w - 12.0 * u, min_w)
-	_panel.position = rect.position
+		if l >= lb:
+			xs.append(l)
+		if r + sz.x <= rb:
+			xs.append(r)
+		k += 1
+	var spots: Array[Vector2] = []
+	var ys: Array[float] = [bot_y, top_y]              # the bottom edge, under the top band, then every 12 pt up from the bottom
+	var yy := bot_y - 12.0 * u
+	while yy > top_y:
+		ys.append(yy)
+		yy -= 12.0 * u
+	for y0 in ys:
+		for xx in xs:
+			spots.append(Vector2(xx, y0))
+	var cur := Rect2(_panel.position, sz)
+	var best := spots[0]
+	var best_a := INF
+	if _placed and absf(cur.position.x - clampf(cur.position.x, lb, rb - sz.x)) < 0.5 and cur.position.y >= top_y - 0.5 			and cur.end.y <= vp.y - ins.w + 0.5 and _hit_area(cur, avoid) <= 0.0:
+		best = cur.position
+	else:
+		for p in spots:
+			var a := _hit_area(Rect2(p, sz), avoid)
+			if a < best_a:
+				best_a = a
+				best = p
+				if a <= 0.0:
+					break
+	_placed = true
+	_panel.position = best
 	_panel.reset_size()
 
 
 func _process(delta: float) -> void:
 	_t += delta
+	if _screen_open() == _panel.visible:            # a screen opened / closed: hide / show at once
+		_t = 0.25
 	if _t >= 0.25:
 		_t = 0.0
 		_refresh()

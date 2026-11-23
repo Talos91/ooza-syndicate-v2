@@ -22,6 +22,8 @@ var main: Node
 var page := 0
 var _root: Control
 var _built_size := Vector2.ZERO
+var _built_ppp := 0.0                            # lab4 job 6: UiKit.pt_per_px the screen was built at
+var _sheet_card := {}                            # the CHOICE SHEET open ({} = none): a rebuild reopens it
 
 
 static func apply_card(card: Dictionary) -> void:
@@ -71,7 +73,25 @@ func setup(m: Node) -> void:
 
 
 func _build_deferred() -> void:
-	_build.call_deferred()
+	_rebuild.call_deferred()
+
+
+func _rebuild() -> void:
+	## A new size (or pt scale): the screen again, its open sheet too (lab4 job 6: a resize closed it).
+	var c := _sheet_card
+	_build()
+	if not c.is_empty():
+		_sheet(c)
+
+
+func _process(_dt: float) -> void:
+	## lab4 job 6 ("first load after a rotation may lay out oversized"): on the web the page's pt size (CSS px) can settle
+	## after the canvas did, with no size_changed of its own - built again when the size or the pt scale moved.
+	var vp := get_viewport().get_visible_rect().size
+	if vp.x <= 0.0 or vp.y <= 0.0:
+		return
+	if vp != _built_size or (_built_ppp > 0.0 and absf(UiKit.pt_per_px(vp) / _built_ppp - 1.0) > 0.005):
+		_rebuild()
 
 
 func _u() -> float:
@@ -112,6 +132,8 @@ func _build() -> void:
 	if vp.x <= 0.0 or vp.y <= 0.0:
 		return
 	_built_size = vp
+	_built_ppp = UiKit.pt_per_px(vp)
+	_sheet_card = {}
 	if is_instance_valid(_root):
 		_root.queue_free()
 	var u := _u()
@@ -227,11 +249,17 @@ func _card(c: Dictionary, pos: Vector2, dims: Vector2, u: float) -> Control:
 	y += ml.size.y + 4.0 * u
 	var tag := pick_tag(c)
 	if tag != "" and live:                         # CHOICE SHEET: the values the next PLAY uses (tap the card to change them)
-		var pk := _label(tag + "  ›", 14.0, UiKit.CYAN, true)
-		pk.clip_text = true
-		pk.position = Vector2(pad, y)
-		pk.size = Vector2(w, pk.get_combined_minimum_size().y)
+		var pk := _label(tag + "  ›", 14.0, UiKit.CYAN, true)   # lab4 job 6: shrunk to one line (>= 12.5 pt), else two lines
 		b.add_child(pk)
+		var ppt := 14.0
+		while ppt > UiKit.MIN_FONT_PT and UiKit.HEAD.get_string_size(pk.text, HORIZONTAL_ALIGNMENT_LEFT, -1, _font_px(ppt)).x > w:
+			ppt -= 0.5
+		pk.add_theme_font_size_override("font_size", _font_px(ppt))
+		if UiKit.HEAD.get_string_size(pk.text, HORIZONTAL_ALIGNMENT_LEFT, -1, _font_px(ppt)).x > w:
+			pk.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		pk.position = Vector2(pad, y)
+		pk.size = Vector2(w, 0.0)
+		pk.size = Vector2(w, pk.get_combined_minimum_size().y)
 		y += pk.size.y + 4.0 * u
 	var idl := _label("CARD %s" % str(c["id"]), 12.5, UiKit.DIM)
 	var ih := idl.get_combined_minimum_size().y
@@ -242,9 +270,34 @@ func _card(c: Dictionary, pos: Vector2, dims: Vector2, u: float) -> Control:
 	q.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	q.clip_text = true
 	q.position = Vector2(pad, y)
-	q.size = Vector2(w, maxf(idl.position.y - 2.0 * u - y, 10.0))
 	b.add_child(q)
+	# lab4 job 6 (QUOTA's question was cut off): the question always fits - 14 pt shrunk down to 12.5, then the CARD line
+	# gives its row (the id is in the overlay too), never a hidden line (Ooze menus never scroll)
+	if not _fit_wrapped(q, Vector2(w, maxf(idl.position.y - 2.0 * u - y, 10.0)), 14.0):
+		idl.visible = false
+		_fit_wrapped(q, Vector2(w, maxf(dims.y - pad * 0.8 - y, 10.0)), 14.0)
 	return b
+
+
+func _fit_wrapped(l: Label, box: Vector2, hi_pt: float) -> bool:
+	## A wrapped label in `box` (px) at the largest size from hi_pt down to 12.5 pt at which every line shows (measured with the
+	## font: lines x (height + line spacing)); false = not even at 12.5 (left at 12.5).
+	l.size = box
+	var f := l.get_theme_font("font")
+	var ls := float(l.get_theme_constant("line_spacing"))
+	var pt := hi_pt
+	while true:
+		var fs := _font_px(pt)
+		l.add_theme_font_size_override("font_size", fs)
+		var lh := f.get_height(fs)
+		var lines := int(round(f.get_multiline_string_size(l.text, HORIZONTAL_ALIGNMENT_LEFT, box.x, fs, -1,
+				TextServer.BREAK_MANDATORY | TextServer.BREAK_WORD_BOUND | TextServer.BREAK_ADAPTIVE).y / maxf(lh, 1.0)))
+		if lines * (lh + ls) - ls <= box.y + 0.5:
+			return true
+		if pt <= UiKit.MIN_FONT_PT + 0.001:
+			return false
+		pt = maxf(pt - 0.5, UiKit.MIN_FONT_PT)
+	return false
 
 
 func _tap(c: Dictionary) -> void:
@@ -259,6 +312,7 @@ func _sheet(c: Dictionary) -> void:
 	## CHOICE SHEET (lab4 jobs 2 + 5): over the LAB screen, the card's title, one row per choice (label + one chip per value,
 	## the picked one lit), BACK and PLAY. Never scrolls: at most three rows of 44 pt chips on a 375 pt-tall phone.
 	_build()
+	_sheet_card = c
 	var vp := get_viewport().get_visible_rect().size
 	var u := _u()
 	var ins := UiKit.safe_insets(vp)
@@ -275,10 +329,11 @@ func _sheet(c: Dictionary) -> void:
 	t.size = Vector2(area.size.x, row_h * 0.6)
 	sh.add_child(t)
 	var q := _label(str(c["question"]), 14.0, UiKit.INK)
+	q.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # lab4 job 6: shrunk / wrapped to fit, never cut
 	q.clip_text = true
 	q.position = Vector2(area.position.x, area.position.y + row_h * 0.6)
-	q.size = Vector2(area.size.x, row_h * 0.5)
 	sh.add_child(q)
+	_fit_wrapped(q, Vector2(area.size.x, row_h * 0.6), 14.0)
 	var y := area.position.y + row_h * 1.2 + gap
 	var label_w := 120.0 * u
 	for ch in c["choices"]:

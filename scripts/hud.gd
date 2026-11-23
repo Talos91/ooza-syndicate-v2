@@ -1151,33 +1151,87 @@ func badge_at(p: Vector2) -> int:
 
 
 # ------------------------------------------------------------------ per frame
-var _quota_label: Label                     # LAST STAND = QUOTA (lab): the plain score line under the top bar
+var _quota_box: PanelContainer             # LAST STAND = QUOTA (lab): the score pill in the top band
+var _quota_score: Label                     # "QUOTA  A 5 · B 3" - the digits >= 12.5 pt tall
+var _quota_sub: Label                       # "4 LAUNCHES LEFT · 9 PTS"
+const QUOTA_SCORE_PT := 20.0                # Rajdhani digits are 0.643 em: 20 pt -> 12.9 pt digits (lab4 job 6: >= 12.5 pt)
+const QUOTA_SUB_PT := 12.5
 
 
 func _quota_sync() -> void:
-	## LAST STAND = QUOTA (lab option quota_tier; the demo's QuotaBar wears the river look, so a bare label): top centre,
-	## under the clock, text >= 12.5 pt (UiKit.pt_per_px), only in a quota match.
+	## LAST STAND = QUOTA (lab option quota_tier): a dark pill with a light score line (digits >= 12.5 pt tall) and the
+	## launches / points still on the board under it, in the top band beside the score capsule (left of it, else right of it,
+	## else under the status line), never over another HUD piece. Only in a quota match. (lab4 job 6: was a 13 pt bare line
+	## under the clock, over the status line.)
 	if not Rules.quota:
-		if _quota_label:
-			_quota_label.visible = false
+		if _quota_box:
+			_quota_box.visible = false
 		return
 	var vp: Vector2 = get_viewport().get_visible_rect().size
 	var u := 1.0 / maxf(UiKit.pt_per_px(vp), 0.0001)
-	if _quota_label == null:
-		_quota_label = Label.new()
-		_quota_label.add_theme_font_override("font", UiKit.BODY)
-		_quota_label.add_theme_color_override("font_color", UiKit.INK)
-		_quota_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
-		_quota_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_quota_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		root.add_child(_quota_label)
-	_quota_label.add_theme_font_size_override("font_size", int(ceil(13.0 * u)))
-	_quota_label.add_theme_constant_override("outline_size", int(ceil(3.0 * u)))
-	_quota_label.text = sim.quota_readout()
-	_quota_label.visible = top_panel.visible
-	_quota_label.reset_size()
+	if _quota_box == null:
+		_quota_box = PanelContainer.new()
+		_quota_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var v := VBoxContainer.new()
+		v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		v.add_theme_constant_override("separation", 0)
+		_quota_box.add_child(v)
+		_quota_score = Label.new()
+		_quota_sub = Label.new()
+		for l: Label in [_quota_score, _quota_sub]:
+			l.add_theme_font_override("font", UiKit.BODY)
+			l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+			l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			v.add_child(l)
+		_quota_score.add_theme_color_override("font_color", Color(1, 1, 1))
+		_quota_sub.add_theme_color_override("font_color", Color(0.86, 0.9, 0.95))
+		root.add_child(_quota_box)
+	var box := UiKit.sb(Color(0.02, 0.025, 0.035, 0.9), Color(1, 1, 1, 0.35), 1, 6)
+	box.set_content_margin_all(0.0)
+	box.content_margin_left = 8.0 * u
+	box.content_margin_right = 8.0 * u
+	box.content_margin_top = 1.0 * u
+	box.content_margin_bottom = 2.0 * u
+	_quota_box.add_theme_stylebox_override("panel", box)
+	_quota_score.add_theme_font_size_override("font_size", int(ceil(QUOTA_SCORE_PT * u)))
+	_quota_sub.add_theme_font_size_override("font_size", int(ceil(QUOTA_SUB_PT * u)))
+	_quota_score.add_theme_constant_override("outline_size", int(ceil(2.0 * u)))
+	_quota_sub.add_theme_constant_override("outline_size", int(ceil(2.0 * u)))
+	_quota_score.text = "QUOTA  A %d · B %d" % [sim.quota_of("A"), sim.quota_of("B")]
+	_quota_sub.text = "%d LAUNCHES LEFT · %d PTS" % [sim.quota_left(), sim.quota_points_left()]
+	_quota_box.visible = top_panel.visible
+	_quota_box.reset_size()
+	_quota_box.size = _quota_box.get_combined_minimum_size()
+	_quota_box.position = _quota_place(vp, u, _quota_box.size)
+
+
+func _quota_place(vp: Vector2, u: float, sz: Vector2) -> Vector2:
+	## Where the quota pill goes: the first spot (left of the score capsule, right of it, under the status line) that stays on
+	## the safe screen and touches no other HUD piece.
 	var ins := UiKit.safe_insets(vp)
-	_quota_label.position = Vector2((vp.x - _quota_label.size.x) * 0.5, ins.y + 52.0 * u)
+	var gap := 6.0 * u
+	var tp := Rect2(top_panel.position, top_panel.size)
+	if lab_tube and lab_tube.visible:
+		tp = tp.merge(Rect2(lab_tube.position, lab_tube.size))
+	var y := maxf(margins.y, ins.y)
+	var spots: Array[Vector2] = [Vector2(tp.position.x - gap - sz.x, y), Vector2(tp.end.x + gap, y)]
+	var below := tp.end.y + 2.0
+	if status_label and status_label.visible and status_label.text != "":
+		below = maxf(below, status_label.position.y + status_label.size.y + 2.0)
+	spots.append(Vector2((vp.x - sz.x) * 0.5, below))
+	var safe := Rect2(Vector2(maxf(margins.x, ins.x), 0.0), Vector2(vp.x - maxf(margins.x, ins.x) - maxf(margins.z, ins.z), vp.y))
+	var others: Array[Rect2] = [tp]
+	for c in [side_panel, dock, pause_button, music_button, debug_button, chat_button, map_title, version_label, notices]:
+		if c != null and is_instance_valid(c) and (c as Control).visible:
+			others.append(Rect2((c as Control).global_position, (c as Control).size))
+	for p in spots:
+		var r := Rect2(p, sz)
+		if not safe.encloses(r):
+			continue
+		if others.all(func(o: Rect2): return not o.intersects(r)):
+			return p
+	return spots[spots.size() - 1]
 
 
 func _ls_word() -> String:

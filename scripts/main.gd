@@ -143,6 +143,10 @@ var sun: DirectionalLight3D
 var touches := {}
 var margins := Vector4(16, 12, 16, 12)
 var _fitted_size := Vector2.ZERO
+var _fitted_ppp := 0.0                                 # LAB (lab4 job 6): UiKit.pt_per_px at the last layout
+var _fitted_ins := Vector4.ZERO                        # LAB: the safe-area insets at the last layout
+var _ins_check_t := 0.0
+var _hud_built_ppt := 0.0                              # LAB: UiKit.hud_px_per_pt the HUD was BUILT at (its fonts / sizes)
 var _tap_node := -1
 var _tap_time := 0.0
 var _press_pos := Vector2.ZERO
@@ -598,6 +602,8 @@ func _start_map(path: String) -> void:
 	hud = Hud.new()
 	add_child(hud)
 	hud.setup(self)
+	if Rules.lab:                                      # lab4 job 6: the scale the HUD was built at (_on_resized rebuilds it)
+		_hud_built_ppt = UiKit.hud_px_per_pt(get_viewport().get_visible_rect().size, mobile)
 	if scenery and scenery.pit:
 		scenery.pit.build_mounts(hud)                 # ROUND 44 B4: the HUD sits on the painted mounts
 	if director:
@@ -1061,11 +1067,51 @@ func _on_resized() -> void:
 		return
 	var vp := get_viewport().get_visible_rect().size
 	_fitted_size = vp
+	if Rules.lab:                                      # lab4 job 6: the pt size and insets this layout used; a HUD built at
+		_fitted_ppp = UiKit.pt_per_px(vp)              # another scale (a portrait or not-yet-settled page) is built again
+		_fitted_ins = UiKit.safe_insets(vp)
+		_ins_check_t = 0.0
+		var ppt := UiKit.hud_px_per_pt(vp, mobile)
+		if _hud_built_ppt > 0.0 and absf(ppt / _hud_built_ppt - 1.0) > 0.03:
+			_rebuild_hud()
 	RenderScale.sync()                                 # hotfix-02319: the scaled 3D's size first - the fit below measures through it
 	_apply_safe_area()
 	hud.layout(vp, margins)
 	combat.top_limit = hud.top_used() + 3.0 * 38.0 * hud.ui_scale   # the top bar and up to three toasts
 	_fit_camera()
+
+
+func _layout_stale(delta: float) -> bool:
+	## LAB (lab4 job 6, "first load after a rotation may lay out oversized"): on the web the page's real size in pt (CSS px,
+	## web/viewport-fix.js) and its safe-area insets can settle AFTER the canvas did (iOS finishes a rotation up to 1.2 s
+	## later), with no size_changed of their own: the layout is redone when either moves, not only when the canvas size does.
+	if not started or _fitted_ppp <= 0.0:
+		return false
+	var vp := get_viewport().get_visible_rect().size
+	if absf(UiKit.pt_per_px(vp) / _fitted_ppp - 1.0) > 0.005:
+		return true
+	_ins_check_t += delta
+	if _ins_check_t < 0.5:                             # the insets read the page's CSS: twice a second is plenty
+		return false
+	_ins_check_t = 0.0
+	return not UiKit.safe_insets(vp).is_equal_approx(_fitted_ins)
+
+
+func _rebuild_hud() -> void:
+	## LAB (lab4 job 6): the HUD bakes its fonts and piece sizes at setup (hud.setup -> pt()); layout() only moves them. A
+	## match started in portrait, or before the page's pt size settled, kept a HUD up to ~1.8x too big after the turn. When
+	## the HUD's px-per-pt moved by > 3 %, it is built again at the new scale (a view only: the match state lives in sim).
+	var old := hud
+	remove_child(old)
+	old.free()                                         # (its _exit_tree first: the new HUD sets the dark match theme again)
+	hud = Hud.new()
+	add_child(hud)
+	hud.setup(self)
+	if scenery and scenery.pit:
+		scenery.pit.build_mounts(hud)
+	if vat_count:
+		vat_count.hud = hud
+	_hud_built_ppt = UiKit.hud_px_per_pt(get_viewport().get_visible_rect().size, mobile)
 
 
 func _apply_safe_area() -> void:
@@ -1841,7 +1887,7 @@ func _process(delta: float) -> void:
 		sim.fx_events.clear()
 		return
 	# --- end SERVER HOST ---
-	if get_viewport().get_visible_rect().size != _fitted_size:
+	if get_viewport().get_visible_rect().size != _fitted_size or (Rules.lab and _layout_stale(delta)):
 		_on_resized()
 	var dt := minf(delta, 0.05)
 	_flush_inspect()
