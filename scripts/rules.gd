@@ -203,9 +203,32 @@ static var lab_opts := {
 	"count_on_screen": true,    # the unit count on the vat screen
 	"count_scale": 1.0,         # vat-screen digit size (x1.0 / x1.15 / x1.3 cards)
 	"hud_badge": false,         # the HUD count badge
+	"cam_lock": true,           # LAB ZOOM BOX: lab maps (MapPool.LAB) start at the fixed camera below, not fitted to the map
 }
 const _LAB_OFF := {"joints": false, "gat_own_platform": false, "gat_start": false, "quota_tier": false, "relay_set": false,
-		"count_on_screen": false, "count_scale": 1.0, "hud_badge": true}   # what the real game does (lab off)
+		"count_on_screen": false, "count_scale": 1.0, "hud_badge": true, "cam_lock": false}   # what the real game does (lab off)
+
+
+# LAB ZOOM BOX (lab4 job 1; Daniele's phone test of lab3: "if we trying maps more zoomed in the maps need to be buildt at zoom in
+# target ... the map size needs to allow for that zoom"). With lab_opt("cam_lock") a lab map's start view is ONE fixed camera
+# (main._lab_cam_locked): yaw 0, pitch LAB_CAM_PITCH, distance LAB_CAM_DIST, aimed LAB_CAM_AIM_Z m (+z, towards the viewer) off the map frame's centre
+# (layout 0, 0 = the generator's frame point (80, 40); a map may sit off-centre to use the wider far side). LAB_CAM_DIST = pool G's median start-view platform size x 1.18 (the half-bridge zoom gain of
+# MAP-PLANNING-NUMBERS 2026-11-22): 69.4 pt x 1.18 = 81.9 pt at 844 x 390 pt (no notch), tests/lab_box_probe.gd ref=1 (lab3's own
+# fits: L09P 68.8 m, L09C 73.5, L11P 78.7, L13C 106.2). The BOX is the ground a platform RIM
+# (LAB_BOX_RIM, Look.RIM_OUT) may reach at that camera and still show inside main.pit_rect() (the HUD columns, the top band, the
+# bottom strip and the side safe areas out) on BOTH reference phones (844 x 390 pt, 47 pt notch insets; 812 x 375 pt, 44 pt):
+# a trapezoid in metres from the frame centre, +z towards the viewer (the screen's bottom, the map's +y): far edge z = FAR_Z
+# (half-width FAR_HALF_W), near edge z = NEAR_Z (half-width NEAR_HALF_W); the far edge also keeps a 7.5 m tower in view.
+# The lab map generator (References/Ooze Syndicate maps - lab 2026-11/generator/labmaps.py) reads these lines and refuses
+# a map outside the box. Re-measure with tests/lab_box_probe.gd after changing the camera, the pit or the HUD bands.
+const LAB_CAM_PITCH := 45.0
+const LAB_CAM_DIST := 74.5
+const LAB_CAM_AIM_Z := 0.4            # probe: 0.57 (844 x 390) / 0.18 (812 x 375); the box below is the two phones' overlap
+const LAB_BOX_RIM := 6.14
+const LAB_BOX_FAR_Z := -27.2          # probe: -27.95 / -27.48 from each phone's own aim (the tower top sets it, not the ground)
+const LAB_BOX_NEAR_Z := 27.2          # probe: 27.95 / 27.48
+const LAB_BOX_FAR_HALF_W := 51.8      # probe: 52.79 / 52.06 at the far edge
+const LAB_BOX_NEAR_HALF_W := 30.5     # probe: 30.75 / 30.55 at the near edge (inscribed rectangle 61.0 x 54.4 m)
 
 
 # LAB RELAY SET (option relay_set; Daniele 2026-11-23: "keep rotate, retract, switch and launcher; turn ferry and conveyor to hazard

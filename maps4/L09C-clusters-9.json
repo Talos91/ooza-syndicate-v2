@@ -29,11 +29,11 @@
  "nodes": [
   {
    "id": 0,
-   "x": 43.348,
+   "x": 45.848,
    "y": 40.0,
    "plaza": null,
    "socket": null,
-   "ring": 1,
+   "ring": 0,
    "category": "normal",
    "relay": null,
    "home": true,
@@ -44,7 +44,7 @@
   },
   {
    "id": 1,
-   "x": 54.0,
+   "x": 56.5,
    "y": 33.85,
    "plaza": null,
    "socket": null,
@@ -62,7 +62,7 @@
   },
   {
    "id": 2,
-   "x": 54.0,
+   "x": 56.5,
    "y": 46.15,
    "plaza": null,
    "socket": null,
@@ -134,11 +134,11 @@
   },
   {
    "id": 6,
-   "x": 116.652,
+   "x": 114.152,
    "y": 40.0,
    "plaza": null,
    "socket": null,
-   "ring": 1,
+   "ring": 0,
    "category": "normal",
    "relay": null,
    "home": true,
@@ -149,7 +149,7 @@
   },
   {
    "id": 7,
-   "x": 106.0,
+   "x": 103.5,
    "y": 33.85,
    "plaza": null,
    "socket": null,
@@ -167,7 +167,7 @@
   },
   {
    "id": 8,
-   "x": 106.0,
+   "x": 103.5,
    "y": 46.15,
    "plaza": null,
    "socket": null,
@@ -309,57 +309,57 @@
    "from": 1,
    "to": 3,
    "tier": "L",
-   "seconds": 5.76,
+   "seconds": 4.54,
    "level": 0,
    "state": null,
    "relay": null,
    "retracts": false,
-   "deckMetres": 11.52,
-   "modules": 2.88,
-   "centreDistance": 26.72,
-   "nominal": 26.72
+   "deckMetres": 9.09,
+   "modules": 2.272,
+   "centreDistance": 24.29,
+   "nominal": 24.29
   },
   {
    "from": 2,
    "to": 5,
    "tier": "L",
-   "seconds": 5.76,
+   "seconds": 4.54,
    "level": 0,
    "state": null,
    "relay": null,
    "retracts": false,
-   "deckMetres": 11.52,
-   "modules": 2.88,
-   "centreDistance": 26.72,
-   "nominal": 26.72
+   "deckMetres": 9.09,
+   "modules": 2.272,
+   "centreDistance": 24.29,
+   "nominal": 24.29
   },
   {
    "from": 7,
    "to": 3,
    "tier": "L",
-   "seconds": 5.76,
+   "seconds": 4.54,
    "level": 0,
    "state": null,
    "relay": null,
    "retracts": false,
-   "deckMetres": 11.52,
-   "modules": 2.88,
-   "centreDistance": 26.72,
-   "nominal": 26.72
+   "deckMetres": 9.09,
+   "modules": 2.272,
+   "centreDistance": 24.29,
+   "nominal": 24.29
   },
   {
    "from": 8,
    "to": 5,
    "tier": "L",
-   "seconds": 5.76,
+   "seconds": 4.54,
    "level": 0,
    "state": null,
    "relay": null,
    "retracts": false,
-   "deckMetres": 11.52,
-   "modules": 2.88,
-   "centreDistance": 26.72,
-   "nominal": 26.72
+   "deckMetres": 9.09,
+   "modules": 2.272,
+   "centreDistance": 24.29,
+   "nominal": 24.29
   }
  ],
  "rings": {
@@ -411,7 +411,7 @@
    }
   ]
  },
- "note": "LAB L09C: 9 platforms, 4 bridges + 8 joints, decks 11.52-11.52 m, 85 x 37 m. Clusters: does the board read on your phone?",
+ "note": "LAB L09C: 9 platforms, 4 bridges + 8 joints, decks 9.09-9.09 m, 80 x 37 m. Clusters: does the board read on your phone?",
  "ruleWaivers": {
   "G05": "lab: deck lengths off the kit tiers on purpose (short inside a side, long across)",
   "L01": "lab: no Last Stand, the start view is what is judged",
@@ -425,22 +425,22 @@
   "finale": "none"
  },
  "footprint": [
-  85.3,
+  80.3,
   36.6
  ],
  "layout": {
   "K": 1.0,
   "nodes": {
    "0": [
-    -36.652,
+    -34.152,
     0.0
    ],
    "1": [
-    -26.0,
+    -23.5,
     -6.15
    ],
    "2": [
-    -26.0,
+    -23.5,
     6.15
    ],
    "3": [
@@ -456,15 +456,15 @@
     12.3
    ],
    "6": [
-    36.652,
+    34.152,
     0.0
    ],
    "7": [
-    26.0,
+    23.5,
     -6.15
    ],
    "8": [
-    26.0,
+    23.5,
     6.15
    ]
   },
@@ -473,11 +473,11 @@
    {
     "joint": true,
     "A": [
-     -31.326,
+     -28.826,
      -3.075
     ],
     "B": [
-     -31.326,
+     -28.826,
      -3.075
     ],
     "L": 0.0,
@@ -495,11 +495,11 @@
    {
     "joint": true,
     "A": [
-     -31.326,
+     -28.826,
      3.075
     ],
     "B": [
-     -31.326,
+     -28.826,
      3.075
     ],
     "L": 0.0,
@@ -517,11 +517,11 @@
    {
     "joint": true,
     "A": [
-     -26.0,
+     -23.5,
      0.0
     ],
     "B": [
-     -26.0,
+     -23.5,
      0.0
     ],
     "L": 0.0,
@@ -539,11 +539,11 @@
    {
     "joint": true,
     "A": [
-     31.326,
+     28.826,
      -3.075
     ],
     "B": [
-     31.326,
+     28.826,
      -3.075
     ],
     "L": 0.0,
@@ -561,11 +561,11 @@
    {
     "joint": true,
     "A": [
-     31.326,
+     28.826,
      3.075
     ],
     "B": [
-     31.326,
+     28.826,
      3.075
     ],
     "L": 0.0,
@@ -583,11 +583,11 @@
    {
     "joint": true,
     "A": [
-     26.0,
+     23.5,
      0.0
     ],
     "B": [
-     26.0,
+     23.5,
      0.0
     ],
     "L": 0.0,
@@ -648,35 +648,14 @@
    },
    {
     "A": [
-     -20.1611,
-     -7.5311
+     -17.6955,
+     -7.6691
     ],
     "B": [
-     -5.8388,
-     -10.9189
+     -5.8045,
+     -10.781
     ],
-    "L": 14.7175,
-    "p0": 1.6,
-    "p1": 1.6,
-    "lean0": -0.0,
-    "lean1": -0.0,
-    "plaza0": false,
-    "plaza1": false,
-    "h": 0.0,
-    "r0": 0.0,
-    "r1": 0.0,
-    "dock": false
-   },
-   {
-    "A": [
-     -20.1611,
-     7.5311
-    ],
-    "B": [
-     -5.8388,
-     10.9189
-    ],
-    "L": 14.7175,
+    "L": 12.2915,
     "p0": 1.6,
     "p1": 1.6,
     "lean0": 0.0,
@@ -690,18 +669,18 @@
    },
    {
     "A": [
-     20.1611,
-     -7.5311
+     -17.6955,
+     7.6691
     ],
     "B": [
-     5.8388,
-     -10.9189
+     -5.8045,
+     10.781
     ],
-    "L": 14.7175,
+    "L": 12.2915,
     "p0": 1.6,
     "p1": 1.6,
-    "lean0": 0.0,
-    "lean1": 0.0,
+    "lean0": -0.0,
+    "lean1": -0.0,
     "plaza0": false,
     "plaza1": false,
     "h": 0.0,
@@ -711,18 +690,39 @@
    },
    {
     "A": [
-     20.1611,
-     7.5311
+     17.6955,
+     -7.6691
     ],
     "B": [
-     5.8388,
-     10.9189
+     5.8045,
+     -10.781
     ],
-    "L": 14.7175,
+    "L": 12.2915,
     "p0": 1.6,
     "p1": 1.6,
     "lean0": -0.0,
     "lean1": -0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     17.6955,
+     7.6691
+    ],
+    "B": [
+     5.8045,
+     10.781
+    ],
+    "L": 12.2915,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
     "plaza0": false,
     "plaza1": false,
     "h": 0.0,
@@ -740,7 +740,12 @@
    "ledge_hits": 0,
    "tower_on_socket": [],
    "docks": 0,
-   "off_length": []
+   "off_length": [
+    "1-3 L 9.1 m",
+    "2-5 L 9.1 m",
+    "7-3 L 9.1 m",
+    "8-5 L 9.1 m"
+   ]
   }
  }
 }

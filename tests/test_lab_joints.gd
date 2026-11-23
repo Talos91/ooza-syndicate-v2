@@ -6,8 +6,9 @@ extends SceneTree
 
 const LabOverlay := preload("res://scripts/lab_overlay.gd")
 const CLUSTER_MAPS := ["res://maps4/L09C-clusters-9.json", "res://maps4/L11C-clusters-11.json", "res://maps4/L13C-clusters-13.json"]
-# L11P, AI vs AI, seed 5 (A Standard null / B Veteran ember): recorded on the untouched lab tip 22134b70 before WP3
-const L11P_BEFORE := {"winner": "B", "time": 185.3, "events": 163}
+# L11P, AI vs AI, seed 5 (A Standard null / B Veteran ember): recorded on the untouched lab tip 22134b70 before WP3 (B at 185.3 s,
+# 163 events); re-recorded for lab4 (L11P rebuilt into the zoom box, same graph) with joints off AND on agreeing
+const L11P_BEFORE := {"winner": "B", "time": 390.7, "events": 581}
 
 var failures := 0
 

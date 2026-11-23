@@ -412,6 +412,8 @@ func _start_map(path: String) -> void:
 	_lm("map_json")
 	if not pitch_forced:                               # Alpha 18: each map's own camera angle (phone-fit probe)
 		cam_pitch = MapCamera.pitch_for(str(map.get("code", "")), str((map.get("tags", {}) as Dictionary).get("size", "")))
+		if _lab_cam_locked():
+			cam_pitch = Rules.LAB_CAM_PITCH
 	_base_pitch = cam_pitch
 	if not map["seats"].has(mode):                     # this map doesn't offer the mode: its first one
 		mode = "1v1" if map["seats"].has("1v1") else map["seats"].keys()[0]
@@ -449,6 +451,8 @@ func _start_map(path: String) -> void:
 		lo = lo.min(n["pos"])
 		hi = hi.max(n["pos"])
 	Rules.view_yaw = PI / 2.0 if (hi - lo).z > (hi - lo).x else 0.0
+	if _lab_cam_locked():                              # LAB ZOOM BOX: the box is in the map's own axes (x across, y = depth)
+		Rules.view_yaw = 0.0
 	# --- SERVER HOST (Alpha 21, the server session): the room server's match host runs the Sim, the AI and Net only.
 	# Nobody sees its screen, so no world, views, effects or HUD are built (_process has the matching block); the
 	# guests get everything from the Sim's snapshots and fx events. Keep this block whole when editing _start_map. ---
@@ -1131,6 +1135,8 @@ func _fit_camera() -> void:
 	cam_pitch = _base_pitch                           # the start view stays exactly as it was
 	_start_fit = _fit_nodes(sim.nodes)
 	_start_fit[1] *= MapCamera.zoom_for(str(map.get("code", "")))   # Daniele 2026-11-13: "zoom in a bit" (per map, phone_fit)
+	if _lab_cam_locked():                             # LAB ZOOM BOX: one fixed camera on the map frame's centre (layout 0, 0);
+		_start_fit = [Vector3(0.0, 0.0, Rules.LAB_CAM_AIM_Z), Rules.LAB_CAM_DIST]   # the map is built into its box (Rules.LAB_BOX_*)
 	cam_target = _start_fit[0]
 	cam_dist = _start_fit[1]
 	if _fit_gone > 0 and scenario_focus == Vector3.INF:   # resized after a Last Stand zoom: keep the survivors framed
@@ -1150,6 +1156,12 @@ func _fit_camera() -> void:
 		hi = hi.max(n["pos"])
 	_map_half = ((hi - lo) / 2.0).abs() + Vector3(Rules.R, 0, Rules.R)
 	_place_camera()
+
+
+func _lab_cam_locked() -> bool:
+	## LAB ZOOM BOX (lab4): a lab map on a lab build with lab_opt("cam_lock") starts at Rules.LAB_CAM_* instead of its own fit.
+	## Scenario / thumbnail framings and the Last Stand survivor zoom are unchanged.
+	return Rules.lab_opt("cam_lock") == true and str(map.get("code", "")) in MapPool.LAB
 
 
 func _zoom_enabled() -> bool:
