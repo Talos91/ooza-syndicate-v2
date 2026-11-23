@@ -12,7 +12,7 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.26.0-lab1"   # LAB 1: lab foundation (Rules.lab, lab_opts, MapPool.LAB) off STAGING 0.25.1; history in CHANGELOG.md
+const VERSION := "0.26.0-lab2"   # LAB 2: joint edges + cluster ladder (WP3) on LAB 1 (Rules.lab, lab_opts, MapPool.LAB) off STAGING 0.25.1; history in CHANGELOG.md
 const WORLD_LAB_FLOOR := true   # the demo's lab5 floor on every map (the fog / tube work was tuned on it); was Rules.demo only
 const LOOK_LAB2 := true   # the lab2 world look (cream decks, owner rim band, lab floor + surround) is the default (Daniele 2026-11-12: "the new status quo"); dev --look-old = the 0.24.1 look, --look=lab = test v1
 const HUD_LAB := true    # hud-lab (2026-11-13): the round-29/30 lab HUD pack (HudLab) is THE in-match HUD; dev --hud-old = the pre-lab HUD
