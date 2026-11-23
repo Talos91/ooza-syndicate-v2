@@ -162,9 +162,9 @@ const THEMES := {}
 const DEMO: Array[String] = ["G-01", "G-02", "G-03", "G-04", "G-05", "G-06", "G-07", "G-08", "G-09", "G-10", "G-11", "G-12", "G-13", "G-14", "G-15", "G-16", "G-17", "G-18", "G-19",
 		"HX-1", "HX-2", "HX-3", "HX-4", "HX-5", "HX-6", "HX-7", "HX-8"]   # DEMO BUILD (Rules.demo): the G pool (2026-11-15; the REWORK maps left it) + the HX size ladder
 # LAB BUILD (Rules.lab, 05 Handoff/handoffs/LAB-BUILD-PLAN 2026-11-23.md): the lab test-card maps, group "L", codes of exactly 4
-# characters (all() / every filter here match on the first four characters of the file name). Empty until WP 1 bakes them; while
+# characters (all() / every filter here match on the first four characters of the file name). While the list is
 # empty a lab build offers the G pool (proto_debug) so it stays playable.
-const LAB: Array[String] = []
+const LAB: Array[String] = ["L09P", "L11P", "L13P"]   # WP 1: the plain reading ladder (generator References/Ooze Syndicate maps - lab 2026-11/generator/labmaps.py); cluster variants L09C.. come with WP 3
 # HX SIZE LADDER (map-size study 2026-11-15; Daniele: "lets do it in the demo staging, simply make lets say 4/8 maps with just a
 # honeycomb of nodes so we get the general idea of max limits"): HX-1..HX-8, generator References/Ooze Syndicate maps - size ladder
 # HX 2026-11/generator/honeycomb.py. DEMO ONLY: group "H" is not in POOL_GROUPS and the codes are not in PROTO.
