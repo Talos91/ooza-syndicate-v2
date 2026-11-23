@@ -10,6 +10,7 @@ const Cards := preload("res://scripts/lab_cards.gd")
 const GAP_PT := 8.0
 const CARD_MIN_W_PT := 150.0
 const HEAD_PT := 44.0
+const TITLE_SLOT_PT := 34.0                    # the card title row: two lines at the smallest size
 
 static var card_id := ""                         # the card being played ("" = none: a normal match)
 static var last_card := ""                       # the card played last (the header shows it)
@@ -159,6 +160,16 @@ func _build() -> void:
 		_root.add_child(_card(Cards.CARDS[k], pos, Vector2(card_w, card_h), u))
 
 
+func fit_title_pt(title: String, width_pt: float) -> float:
+	## Largest title size (pt, 17 down to UiKit.MIN_FONT_PT = 12.5) at which the title is one line in width_pt.
+	var pt := 17.0
+	while pt > UiKit.MIN_FONT_PT:
+		if UiKit.HEAD.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, _font_px(pt)).x <= width_pt * _u():
+			return pt
+		pt -= 0.5
+	return UiKit.MIN_FONT_PT
+
+
 func _card(c: Dictionary, pos: Vector2, dims: Vector2, u: float) -> Control:
 	var live: bool = bool(c.get("live", false)) and Cards.map_path(str(c.get("map", ""))) != ""
 	var b := Button.new()
@@ -176,29 +187,40 @@ func _card(c: Dictionary, pos: Vector2, dims: Vector2, u: float) -> Control:
 	b.add_theme_stylebox_override("disabled", UiKit.sb(Color(UiKit.PANEL, 0.55), Color(UiKit.FRAME, 0.5), 1))
 	if live:
 		b.pressed.connect(func(): _play(c))
+	# Fixed rows, placed by hand so every card lines up: title slot (one line, shrunk to fit down to 12.5 pt, else two
+	# lines at 12.5 pt; never clipped), meta, question (takes the rest), CARD line pinned to the card's foot.
 	var pad := 10.0 * u
-	var box := VBoxContainer.new()
-	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	box.position = Vector2(pad, pad * 0.8)
-	box.size = dims - Vector2(pad * 2.0, pad * 1.6)
-	box.add_theme_constant_override("separation", int(4.0 * u))
-	b.add_child(box)
+	var w := dims.x - pad * 2.0
+	var y := pad * 0.8
 	var ink := UiKit.INK if live else UiKit.DIM
-	var t := _label(str(c["title"]), 17.0, UiKit.CYAN if live else UiKit.DIM, true)
-	t.clip_text = true
-	box.add_child(t)
-	var meta := "%s  ·  %s  ·  AI %s" % [str(c["map"]), str(c.get("mode", "1v1")).to_upper(), str(c.get("ai", ""))] if live \
-			else "COMING IN %s" % str(c.get("coming", "a later lab")).to_upper()
+	var tcol := UiKit.CYAN if live else UiKit.DIM
+	var title_txt := str(c["title"])
+	var tpt := fit_title_pt(title_txt, w / u)
+	var t := _label(title_txt, tpt, tcol, true)
+	t.position = Vector2(pad, y)
+	t.size = Vector2(w, 0.0)
+	if tpt <= UiKit.MIN_FONT_PT + 0.01 and UiKit.HEAD.get_string_size(title_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, _font_px(tpt)).x > w:
+		t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # still too wide at the smallest size: two lines
+	b.add_child(t)
+	y += TITLE_SLOT_PT * u
+	var meta := "%s  ·  %s  ·  AI %s" % [str(c["map"]), str(c.get("mode", "1v1")).to_upper(), str(c.get("ai", ""))] if live 			else "COMING IN %s" % str(c.get("coming", "a later lab")).to_upper()
 	var ml := _label(meta, 13.0, UiKit.MUTED if live else UiKit.COPPER)
 	ml.clip_text = true
-	box.add_child(ml)
+	ml.position = Vector2(pad, y)
+	ml.size = Vector2(w, ml.get_combined_minimum_size().y)
+	b.add_child(ml)
+	y += ml.size.y + 4.0 * u
+	var idl := _label("CARD %s" % str(c["id"]), 12.5, UiKit.DIM)
+	var ih := idl.get_combined_minimum_size().y
+	idl.position = Vector2(pad, dims.y - pad * 0.8 - ih)
+	idl.size = Vector2(w, ih)
+	b.add_child(idl)
 	var q := _label(str(c["question"]), 14.0, ink)
 	q.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	q.custom_minimum_size = Vector2(box.size.x, 0.0)
-	q.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	box.add_child(q)
-	var idl := _label("CARD %s" % str(c["id"]), 12.5, UiKit.DIM)
-	box.add_child(idl)
+	q.clip_text = true
+	q.position = Vector2(pad, y)
+	q.size = Vector2(w, maxf(idl.position.y - 2.0 * u - y, 10.0))
+	b.add_child(q)
 	return b
 
 
