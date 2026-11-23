@@ -2547,12 +2547,16 @@ func _node_at(p: Vector3, screen: Vector2 = Vector2(-1, -1)) -> int:
 			return b
 	if p == Vector3.INF:
 		return -1
+	var best := -1                                     # the NEAREST centre among the tap discs that hold p (touching
+	var best_d := INF                                  # platforms' discs overlap; was the lowest id, LAB WP3)
 	for n in sim.nodes:
 		if sim.collapsed.get(n["id"], false) or n.get("node_kind", "") == "junction":   # JUNCTION: not tappable
 			continue
-		if (n["pos"] as Vector3).distance_to(p) <= Rules.R + (2.5 if mobile else 1.0):
-			return n["id"]
-	return -1
+		var dn := (n["pos"] as Vector3).distance_to(p)
+		if dn <= Rules.R + (2.5 if mobile else 1.0) and dn < best_d:
+			best = n["id"]
+			best_d = dn
+	return best
 
 
 func _relay_button_at(p: Vector3, screen: Vector2) -> int:
