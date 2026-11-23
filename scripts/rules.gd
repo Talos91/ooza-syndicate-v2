@@ -206,9 +206,9 @@ static var lab_opts := {
 	"gat_start": false,         # card GOOGATLING: each seat starts with a T1 Googatling next to home (Sim._setup_lab_gat_start)
 	"quota_tier": false,        # quota: 1 point per tier, relays do not launch (on by the QUOTA card only: it changes the end)
 	"relay_set": true,          # the lab relay set (rotate, retract, switch, launcher; ferry / belt as hazards)
-	"count_on_screen": true,    # the unit count on the vat screen
-	"count_scale": 1.0,         # vat-screen digit size (x1.0 / x1.15 / x1.3 cards)
-	"hud_badge": false,         # the HUD count badge
+	"count_on_screen": false,   # lab4 job 3 (WP 6): the unit count on each vat's screen, in the world (vat_count.gd). Card COUNT SIZE
+	"count_scale": 1.0,         # vat-screen digit size x (1.0 = VatCount.DIGIT_H 1.15 m; card choices x1.0 / x1.15 / x1.3)
+	"hud_badge": true,          # the HUD count badge (Hud._badges); off only with count_on_screen (card COUNT SIZE)
 	"cam_lock": true,           # LAB ZOOM BOX: lab maps (MapPool.LAB) start at the fixed camera below, not fitted to the map
 	# lab4 jobs 2 + 5 (Daniele's phone test of lab3, points 5 and 8): numbers picked on a card's choice sheet (lab_cards "choices").
 	"unit_speed": 1.0,          # x BRAWL unit travel speed AND door rate (Rules.move_speed / exit_rate; spacing kept). Card CLUSTER HOP

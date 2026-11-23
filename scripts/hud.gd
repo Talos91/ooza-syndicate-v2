@@ -1297,6 +1297,9 @@ func _badges(cam: Camera3D) -> bool:
 		if sim.collapsed.get(n["id"], false) or n.get("node_kind", "") == "junction":   # JUNCTION: no badge
 			panel.visible = false
 			continue
+		if not bool(Rules.lab_opt("hud_badge")):         # LAB card COUNT SIZE: the count is on the vat screen (vat_count.gd)
+			panel.visible = false
+			continue
 		# ui-neon (Daniele 2026-11-02, "unit count HUD disappearing"): a warned node keeps its badge - the count stays readable
 		# all through the Last Stand; the neon alarm sign (HudOverlay._draw_danger_symbols) sits beside it, clear of it.
 		# (0.19.0 hid the badge here, when the sign replaced a round badge; with a whole ring warned at once that hid 6 counts.)

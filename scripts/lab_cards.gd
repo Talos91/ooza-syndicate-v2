@@ -14,7 +14,10 @@ const SPEED := {"key": "unit_speed", "label": "UNIT SPEED", "values": [1.0, 0.9,
 # platform radius = gat_own_platform's reach (today's lab card); 10 m = MACHINEGOON_RANGE (the real game).
 const GAT_RANGE := {"key": "gat_range", "label": "RANGE", "values": [6.0, 8.0, 10.0], "names": ["6 m", "8 m", "10 m"]}
 const GAT_POWER := {"key": "gat_power", "label": "POWER", "values": [1.0, 1.5, 2.0], "names": ["x1", "x1.5", "x2"]}
-const GAT_AMMO := {"key": "gat_ammo", "label": "AMMO", "values": [1.0, 0.5, 0.0], "names": ["1 PER KILL", "1 PER 2", "FREE"]}
+# lab4 job 3 (Daniele: "count size not there need to put so i can test"; the count ON the vat screen, "try +15 %", no HUD badge).
+# x1.0 = VatCount.DIGIT_H (three digits fill the vat capital's width).
+const COUNT := {"key": "count_scale", "label": "COUNT SIZE", "values": [1.0, 1.15, 1.3], "names": ["x1.0", "x1.15", "x1.3"]}
+const GAT_AMMO :={"key": "gat_ammo", "label": "AMMO", "values": [1.0, 0.5, 0.0], "names": ["1 PER KILL", "1 PER 2", "FREE"]}
 
 const CARDS: Array[Dictionary] = [
 	{"id": "read-9", "title": "READING 9", "question": "Does the board read on your phone?", "map": "L09P", "mode": "1v1",
@@ -29,8 +32,9 @@ const CARDS: Array[Dictionary] = [
 			"mode": "1v1", "ai": "Standard", "faction": "vex", "rival": "null", "lab_opts": {"joints": true}, "live": true},
 	{"id": "clus-13", "title": "CLUSTERS 13", "question": "Where does the board stop reading well, with clusters?", "map": "L13C",
 			"mode": "1v1", "ai": "Standard", "faction": "vex", "rival": "null", "lab_opts": {"joints": true}, "live": true},
-	{"id": "count", "title": "COUNT SIZE", "question": "Vat-screen count at x1.0 / x1.15 / x1.3: which size reads?",
-			"map": "", "mode": "1v1", "ai": "Standard", "lab_opts": {}, "live": false, "coming": "lab3"},
+	{"id": "count", "title": "COUNT SIZE", "question": "The count on the vat screen, no HUD badge: which size reads?",
+			"map": "L11C", "mode": "1v1", "ai": "Standard", "faction": "vex", "rival": "null",
+			"lab_opts": {"joints": true, "count_on_screen": true, "hud_badge": false}, "live": true, "choices": [COUNT]},
 	{"id": "hop", "title": "CLUSTER HOP", "question": "Is the hop from vat to vat enough warning? Try each unit speed.", "map": "L09C",
 			"mode": "1v1", "ai": "Standard", "faction": "vex", "rival": "null", "lab_opts": {"joints": true}, "live": true,
 			"choices": [SPEED]},

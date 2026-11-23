@@ -82,6 +82,7 @@ var forge_pulse: ForgePulse                        # a forge coming online: the 
 var skill_fx: SkillFx                              # Skills 2.0 in the world: every cast, lasting effect and end
 var scenery: Scenery
 var hud: Hud
+var vat_count: Node3D                               # LAB card COUNT SIZE (vat_count.gd), null otherwise
 var cam: Camera3D
 var cam_target := Vector3.ZERO
 var cam_dist := 90.0
@@ -160,6 +161,7 @@ var color_choice := "A"                       # your ownership colour: palette k
 var menu_layer: CanvasLayer
 const LabMenu := preload("res://scripts/lab_menu.gd")         # LAB BUILD (Rules.lab): the test-card screen
 const LabOverlay := preload("res://scripts/lab_overlay.gd")   # LAB BUILD: the in-match debug readout
+const VatCountScript := preload("res://scripts/vat_count.gd")   # LAB card COUNT SIZE: counts on the vat screens
 static var relaunch := {}                     # survives a scene reload: Play again / Main menu
 static var last_map_path := ""                 # MAIN MENU remembers the last map played (0.19.0)
 # --- TUTORIAL (TUTORIAL-DESIGN.md §8): the lesson director, its coach overlay, the half-speed clock ---
@@ -609,6 +611,10 @@ func _start_map(path: String) -> void:
 		var lab_overlay := LabOverlay.new()
 		add_child(lab_overlay)
 		lab_overlay.setup(self)
+	if Rules.lab and bool(Rules.lab_opt("count_on_screen")) and not Net.dedicated:   # LAB card COUNT SIZE: counts on the vat screens
+		vat_count = VatCountScript.new()
+		add_child(vat_count)
+		vat_count.setup(self)
 	started = true
 	paused = false
 	_lm("started")

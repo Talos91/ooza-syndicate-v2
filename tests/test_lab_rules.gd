@@ -7,6 +7,8 @@ extends SceneTree
 ##      no archived relay kind (lift / tilt / remote / laser_relay) on any lab map;
 ##   B  quota_tier - quota by tier (a launch scores its node tier), relays never launch, the match ends by quota;
 ##   D  lab4 jobs 2 + 5 - unit_speed (x travel speed and door rate), gat_range / gat_power / gat_ammo, the cards' choice sheet;
+##   E  lab4 job 3 - card COUNT SIZE: count_on_screen (the count on each vat's screen, vat_count.gd) + hud_badge off, count_scale
+##      x1.0 / x1.15 / x1.3 (a real match scene: labels per node with the badge's text, colour follows the owner, badges hidden);
 ##   and the options-off identity (L11P AI vs AI equals the run recorded on the untouched lab tip 232c7787).
 ##   Godot --headless --path . --script res://tests/test_lab_rules.gd        Exit code 0 = all passed.
 
@@ -496,7 +498,123 @@ func _init() -> void:
 	_part_b()
 	_part_d()
 	_identity()
-	check(_parts_done == 5, "every part ran to its end (A, C, B, D, identity: %d of 5)" % _parts_done)
 	_opts({"gat_own_platform": true, "relay_set": true})
+
+
+func _initialize() -> void:
+	_finish.call_deferred()                          # part E needs the main loop (a match scene)
+
+
+func _finish() -> void:
+	await _part_e()
+	check(_parts_done == 6, "every part ran to its end (A, C, B, D, identity, E: %d of 6)" % _parts_done)
 	print("test_lab_rules: %s" % ("ALL PASSED" if failures == 0 else "%d FAILED" % failures))
 	quit(1 if failures > 0 else 0)
+
+
+func _frames(n: int) -> void:
+	for i in range(n):
+		await process_frame
+
+
+func _launch(card: Dictionary) -> Node:
+	LabMenu.apply_card(card)
+	load("res://scripts/main.gd").relaunch = {"faction": "vex", "rival": "null", "mode": "1v1", "ai": "Standard",
+			"map": LabCards.map_path(str(card["map"]))}
+	change_scene_to_file("res://main.tscn")
+	await _frames(45)
+	return current_scene
+
+
+func _part_e() -> void:
+	# ------------------------------------------------------------ E: card COUNT SIZE (lab4 job 3)
+	var VatCount = load("res://scripts/vat_count.gd")      # (loaded here: it reaches Hud, which needs the autoloads)
+	var saved: Dictionary = Rules.lab_opts.duplicate(true)
+	check(not bool(Rules.lab_opt("count_on_screen")) and bool(Rules.lab_opt("hud_badge")) and Rules.lab_opt("count_scale") == 1.0,
+			"count options default off in the lab (no vat-screen count, HUD badge on, x1.0)")
+	Rules.lab = false
+	check(bool(Rules.lab_opt("hud_badge")) and not bool(Rules.lab_opt("count_on_screen")), "outside the lab: HUD badge on, no vat-screen count")
+	Rules.lab = true
+	var card := LabCards.find("count")
+	check(bool(card.get("live", false)) and str(card["map"]) == "L11C" and LabCards.map_path("L11C") != "",
+			"card COUNT SIZE live on L11C (%s)" % LabCards.map_path("L11C"))
+	var ch: Dictionary = (card.get("choices", []) as Array)[0] if not (card.get("choices", []) as Array).is_empty() else {}
+	check(ch.get("key", "") == "count_scale" and ch.get("values", []) == [1.0, 1.15, 1.3] and ch.get("names", []) == ["x1.0", "x1.15", "x1.3"],
+			"card COUNT SIZE: choice sheet x1.0 / x1.15 / x1.3")
+	LabMenu._defaults = saved.duplicate(true)
+	LabMenu.picks = {}
+	LabMenu.apply_card(card)
+	check(bool(Rules.lab_opt("count_on_screen")) and not bool(Rules.lab_opt("hud_badge")) and Rules.lab_opt("count_scale") == 1.0
+			and LabMenu.pick_tag(card) == "x1.0", "card count, no pick: on screen, badge off, x1.0")
+	var digit := {}
+	for k in [1, 0]:                                 # x1.15 first (Daniele's "+15 %"), then x1.0
+		LabMenu.picks = {"count": {"count_scale": k}}
+		var want: float = ch["values"][k]
+		var m: Node = await _launch(card)
+		var vc = m.get("vat_count")
+		check(vc != null, "x%s: the match has a VatCount" % str(want))
+		if vc == null:
+			continue
+		var sim = m.sim
+		var hud = m.hud
+		var nodes := 0
+		var ok_text := true
+		var ok_scale := true
+		for n in sim.nodes:
+			if n.get("node_kind", "") == "junction":
+				continue
+			nodes += 1
+			if not vc.screens.has(n["id"]):
+				ok_text = false
+				continue
+			var l: Label3D = vc.screens[n["id"]]["label"]
+			if l.text != vc.count_text(n) or (n["owner"] in ["", "A"] and l.text != str(Rules.shown(n["units"]))):
+				ok_text = false
+				print("  node %d: label '%s', badge text '%s', units %s" % [n["id"], l.text, vc.count_text(n), Rules.shown(n["units"])])
+			if not is_equal_approx(l.pixel_size * l.font_size, VatCount.EM * want):
+				ok_scale = false
+		check(nodes > 0 and vc.screens.size() == nodes and ok_text, "x%s: a vat-screen label per node (%d) with the node's count" % [str(want), nodes])
+		check(ok_scale and is_equal_approx(vc.digit_height_m(), VatCount.DIGIT_H * want),
+				"x%s: digit %.3f m (x%s of %.3f m)" % [str(want), vc.digit_height_m(), str(want), VatCount.DIGIT_H])
+		var shown := 0
+		for id in hud.badges:
+			if (hud.badges[id]["panel"] as Control).visible:
+				shown += 1
+		check(shown == 0, "x%s: every HUD count badge hidden (%d shown)" % [str(want), shown])
+		digit[k] = vc.digit_pt(m.cam)
+		# live: a count change and an owner change show on the screen
+		var nid := -1
+		for n in sim.nodes:
+			if n["owner"] == "" and vc.screens.has(n["id"]):
+				nid = n["id"]
+				break
+		if nid >= 0:
+			var n: Dictionary = sim.nodes[nid]
+			n["owner"] = "B"
+			n["units"] = 40.0
+			vc.sync()
+			var l: Label3D = vc.screens[nid]["label"]
+			var fc: Color = ((vc.screens[nid]["frame"] as MeshInstance3D).material_override as StandardMaterial3D).albedo_color
+			check(l.text == vc.count_text(n) and l.text in [str(Rules.shown(40.0)), ""] and fc == Rules.seat_color("B") and l.modulate == Rules.seat_color("B").lerp(Color.WHITE, 0.35),
+					"x%s: node %d taken by B with 40 units -> '%s', frame in B's seat colour" % [str(want), nid, l.text])
+		var hid: int = sim.nodes.filter(func(x): return x["owner"] == "A")[0]["id"]
+		var pv: Node3D = vc.screens[hid]["pivot"]
+		var vat: Node3D = m.vis[hid]["vat_node"]
+		check(pv.global_position.y > vat.global_position.y + 3.0 and pv.visible,
+				"x%s: home's screen on the tower (%.2f m above the vat base)" % [str(want), pv.global_position.y - vat.global_position.y])
+	check(digit.has(0) and digit.has(1) and digit[0] > 0.0 and absf(digit[1] / digit[0] - 1.15) < 0.03,
+			"digit pt at the aim: x1.0 %.1f pt, x1.15 %.1f pt (this window, not the 844 x 390 probe)" % [digit.get(0, 0.0), digit.get(1, 0.0)])
+	# options off (a card without the count): no VatCount, badges back
+	var plain := LabCards.find("clus-11")
+	LabMenu.picks = {}
+	var m2: Node = await _launch(plain)
+	var shown2 := 0
+	for id in m2.hud.badges:
+		if (m2.hud.badges[id]["panel"] as Control).visible:
+			shown2 += 1
+	check(m2.get("vat_count") == null and shown2 > 0, "card clus-11: no vat-screen count, %d HUD badges shown" % shown2)
+	LabMenu.picks = {}
+	LabMenu.reset_card()
+	LabMenu._defaults = {}
+	Rules.lab_opts = saved.duplicate(true)
+	_parts_done += 1

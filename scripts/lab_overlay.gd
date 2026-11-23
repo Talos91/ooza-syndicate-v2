@@ -118,6 +118,9 @@ func text() -> String:
 		card += " " + tag
 	var head := "LAB %s  ·  CARD %s  ·  %s" % [Rules.VERSION, card, str(main.map.get("code", "?"))]
 	if not open:
+		var vf = main.get("vat_count")
+		if vf != null:                               # card COUNT SIZE: the measured digit in the folded line too
+			head += "  ·  digit %.1f pt" % vf.digit_pt(main.cam)
 		return head + "  (tap)"
 	var fit: float = float(main._view_fit[1]) if main._view_fit.size() > 1 else float(main.cam_dist)
 	var zoom := fit / maxf(float(main.cam_dist), 0.001)
@@ -127,6 +130,9 @@ func text() -> String:
 	var bridges: int = (main.map.get("edges", []) as Array).size() - _joints
 	lines.append("platform %.1f pt  ·  nodes %d  ·  bridges %d%s" % [plat_pt(), (main.sim.nodes as Array).size(), bridges,
 			(" + joints %d" % _joints) if _joints > 0 else ""])
+	var vc = main.get("vat_count")
+	if vc != null:                                   # lab4 job 3: card COUNT SIZE - the vat-screen digit at the aim
+		lines.append("digit %.1f pt (vat screen x%s, %.2f m)" % [vc.digit_pt(main.cam), num(vc.scale_k), vc.digit_height_m()])
 	var deck_line := "decks %s" % (("%.1f - %.1f m" % [_decks.x, _decks.y]) if _decks.x >= 0.0 else "-")
 	if _hops.x >= 0.0:
 		deck_line += "  ·  hop: %s s" % (("%.1f" % _hops.x) if absf(_hops.y - _hops.x) < 0.05 else ("%.1f - %.1f" % [_hops.x, _hops.y]))
