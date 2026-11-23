@@ -208,6 +208,13 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 		var retracts: bool = e.get("retracts", false) == true or st == "ret"   # maps 3.0 spells a retract "ret"
 		if st == "ret":
 			st = ""
+		# LAB JOINT (Daniele 2026-11-23, WP3; Rules.lab_opt("joints")): two touching platforms of a cluster, joined with no
+		# deck. It rides the plaza-link path (no deck, no pier, no relay, never breaks, no deck skill or effect targets it:
+		# every deck check already skips plaza links) plus "joint": true for its own path (vat -> contact point -> vat).
+		# With the option off the map is not offered (MapPool) and nothing here changes.
+		var joint: bool = v3 and e.get("joint", false) == true and Rules.lab_opt("joints") == true
+		if joint:
+			mods = 0.0
 		edges.append({"a": int(e["from"]), "b": int(e["to"]), "modules": mods,
 				"state": st, "retracts": retracts, "overpass": e.get("overpass", false) == true,
 				"geo": geo[ek] if v3 else {}, "plaza": false,
@@ -222,6 +229,9 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 				"belt": str(e["belt"]) if e.get("belt") != null else "",
 				"ferry": (e["ferry"] as Dictionary).duplicate() if e.get("ferry") is Dictionary else {},
 				"deck_m": float(e.get("deckMetres", 0.0)) if e.get("deckMetres") != null else 0.0})
+		if joint:
+			edges[-1]["plaza"] = true
+			edges[-1]["joint"] = true
 		var i := edges.size() - 1
 		adj[int(e["from"])].append([int(e["to"]), i])
 		adj[int(e["to"])].append([int(e["from"]), i])
@@ -1465,7 +1475,7 @@ func edge_cost(ei: int) -> float:
 	var e: Dictionary = edges[ei]
 	if not v3:
 		return e["modules"] * Rules.MODULE_SECONDS
-	if e["plaza"]:
+	if e["plaza"] and not e.get("joint", false):     # (LAB JOINT: its baked L, 0 m rim to rim: the walk is on the platforms)
 		return (nodes[e["a"]]["pos"] as Vector3).distance_to(nodes[e["b"]]["pos"]) / Rules.move_speed()
 	return float(e["geo"]["L"]) / Rules.move_speed()
 
@@ -1532,6 +1542,8 @@ func exit_of(ei: int, node_id: int) -> Vector3:
 	## maps 3.0: where edge ei leaves node_id's footprint (the baked rim exit); plaza links leave a
 	## socket at the tower's footprint toward the other socket.
 	var e: Dictionary = edges[ei]
+	if e.get("joint", false):                         # LAB JOINT: both ends leave by the contact point
+		return joint_point(ei)
 	if e["plaza"]:
 		var o: Vector3 = nodes[_other_end(ei, node_id)]["pos"]
 		var p: Vector3 = nodes[node_id]["pos"]
@@ -1539,6 +1551,29 @@ func exit_of(ei: int, node_id: int) -> Vector3:
 	var g: Dictionary = e["geo"]
 	var q: Array = g["A"] if e["a"] == node_id else g["B"]
 	return Vector3(q[0], _lift_end_y(ei, node_id), q[1])
+
+
+func joint_point(ei: int) -> Vector3:
+	## LAB JOINT: where the two touching platforms meet (the baked contact point, midway between the centres).
+	var e: Dictionary = edges[ei]
+	var q: Array = e["geo"]["A"]
+	return Vector3(q[0], ((nodes[e["a"]]["pos"] as Vector3).y + (nodes[e["b"]]["pos"] as Vector3).y) * 0.5, q[1])
+
+
+func joint_hops() -> Vector2:
+	## LAB JOINT: [shortest, longest] vat-to-vat walk across one joint, in seconds at the move speed (both directions of
+	## every joint: the doors differ); (-1, -1) on a map without joints. The overlay's "hop" and test_lab_joints read it.
+	var lo := INF
+	var hi := -INF
+	for ei in range(edges.size()):
+		if not edges[ei].get("joint", false):
+			continue
+		for r in [[edges[ei]["a"], edges[ei]["b"]], [edges[ei]["b"], edges[ei]["a"]]]:
+			var cum: PackedFloat32Array = build_path(r)["cum"]
+			var t: float = cum[cum.size() - 1] / Rules.move_speed()
+			lo = minf(lo, t)
+			hi = maxf(hi, t)
+	return Vector2(lo, hi) if lo <= hi else Vector2(-1.0, -1.0)
 
 
 const CROSSING_OVER_H := 4.0       # EXP Crossing over lane: the span's height (build_connectors_exp.py H = OVER_H)
@@ -1655,11 +1690,13 @@ func _build_path3(route: Array) -> Dictionary:
 	var ex0 := exit_of(_edge_index(route[0], route[1]), route[0])
 	var y0 := Vector3.UP * node_y(route[0])          # a lift platform: walk at its level
 	var d0 := (((ex0 - a0["pos"]) as Vector3) * Vector3(1, 0, 1)).normalized()
+	var joint0: bool = edges[_edge_index(route[0], route[1])].get("joint", false)
 	if brawl:
 		var a_exit := Rules.exit_angle(atan2(d0.z, d0.x))   # the front door (DOOR_EXITS: or the back, if nearer)
 		add.call(a0["pos"] + _door_dir(a_exit) * Rules.EXIT_R + y0, 1)
-		for p in _arc(a0["pos"], a_exit, atan2(d0.z, d0.x), ring):
-			add.call(p + y0, 1)
+		if not joint0:                                # LAB JOINT: out of the vat straight to the contact point
+			for p in _arc(a0["pos"], a_exit, atan2(d0.z, d0.x), ring):
+				add.call(p + y0, 1)
 	else:
 		add.call(a0["pos"] + d0 * Rules.EXIT_R + y0, 1)
 	add.call(ex0, 1)
@@ -1703,8 +1740,9 @@ func _build_path3(route: Array) -> Dictionary:
 			node_spans.append({"node": route[i + 1], "s0": node_s0, "s1": _length(pts)})
 		elif brawl:                                   # Alpha 11: round the ring to the front door, then in
 			var a_door := Rules.entry_angle(atan2(din.z, din.x))   # TWO_DOORS: or the back door, if nearer
-			for p in _arc(b["pos"], atan2(din.z, din.x), a_door, ring):
-				add.call(p + yb, 1)
+			if not e.get("joint", false):             # LAB JOINT: from the contact point straight to the vat
+				for p in _arc(b["pos"], atan2(din.z, din.x), a_door, ring):
+					add.call(p + yb, 1)
 			add.call(b["pos"] + _door_dir(a_door) * Rules.EXIT_R + yb, 1)
 		else:                                         # onto the platform up to the tower's footprint
 			add.call(b["pos"] + din * Rules.ARC_R + yb, 1)
@@ -2201,6 +2239,8 @@ func _begin_break(ei: int, node_id: int) -> void:
 	## THE WAVE: node_id dropped - its deck ei starts breaking from that end (or, already breaking from the other
 	## end, from both). A deck that is not there (closed relay state, demolished, already gone) has nothing to break.
 	var e: Dictionary = edges[ei]
+	if e.get("joint", false):                             # LAB JOINT: no deck to break (it goes with its platforms)
+		return
 	var end := "a" if e["a"] == node_id else "b"
 	if breaking.has(ei):
 		breaking[ei]["f" + end] = true
