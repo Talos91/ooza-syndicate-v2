@@ -63,5 +63,25 @@
  addEventListener('resize', settle);
  addEventListener('pageshow', settle);
  if (window.visualViewport) visualViewport.addEventListener('resize', settle);
- window.OozeViewport = {size, safe, nativeSize: () => [nativeW(), nativeH()], covering};
+ // FOLDABLES (ui-fold, 2026-11-07): what the device reports, for the game's quality tier "hi" (PerfProfile.hi_capable).
+ // Capability only, never the brand: the screen in CSS px, the WebGL2 max texture size, deviceMemory / hardwareConcurrency
+ // (Chromium only; 0 = not reported), and the fold hints where the browser has them (viewport segments, Chrome 138+;
+ // device posture, Chrome 132+ / Samsung Internet) - logged, not used to decide.
+ let capsCache = null;
+ function caps() {
+  if (capsCache) return capsCache;
+  let maxTex = 0;
+  try {
+   const c = document.createElement('canvas'), gl = c.getContext('webgl2') || c.getContext('webgl');
+   if (gl) { maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE) || 0; const lose = gl.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext(); }
+  } catch (e) {}
+  const a = screen.width || 0, b = screen.height || 0;
+  let segs = 0, posture = '';
+  try { segs = (window.viewport && window.viewport.segments) ? window.viewport.segments.length : 0; } catch (e) {}
+  try { posture = (navigator.devicePosture && navigator.devicePosture.type) || ''; } catch (e) {}
+  capsCache = {w: Math.max(a, b), h: Math.min(a, b), dpr: window.devicePixelRatio || 1, max_tex: maxTex,
+   mem: navigator.deviceMemory || 0, cores: navigator.hardwareConcurrency || 0, segments: segs, posture: posture};
+  return capsCache;
+ }
+ window.OozeViewport = {size, safe, nativeSize: () => [nativeW(), nativeH()], covering, caps};
 })();
