@@ -1082,6 +1082,94 @@ func badge_at(p: Vector2) -> int:
 
 
 # ------------------------------------------------------------------ per frame
+var _quota_box: PanelContainer             # LAST STAND = QUOTA (lab): the score pill in the top band
+var _quota_score: Label                     # "QUOTA  A 5 · B 3" - the digits >= 12.5 pt tall
+var _quota_sub: Label                       # "4 LAUNCHES LEFT · 9 PTS"
+const QUOTA_SCORE_PT := 20.0                # Rajdhani digits are 0.643 em: 20 pt -> 12.9 pt digits (lab4 job 6: >= 12.5 pt)
+const QUOTA_SUB_PT := 12.5
+
+
+func _quota_sync() -> void:
+	## LAST STAND = QUOTA (lab option quota_tier): a dark pill with a light score line (digits >= 12.5 pt tall) and the
+	## launches / points still on the board under it, in the top band beside the score capsule (left of it, else right of it,
+	## else under the status line), never over another HUD piece. Only in a quota match. (lab4 job 6: was a 13 pt bare line
+	## under the clock, over the status line.)
+	if not Rules.quota:
+		if _quota_box:
+			_quota_box.visible = false
+		return
+	var vp: Vector2 = get_viewport().get_visible_rect().size
+	var u := 1.0 / maxf(UiKit.pt_per_px(vp), 0.0001)
+	if _quota_box == null:
+		_quota_box = PanelContainer.new()
+		_quota_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var v := VBoxContainer.new()
+		v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		v.add_theme_constant_override("separation", 0)
+		_quota_box.add_child(v)
+		_quota_score = Label.new()
+		_quota_sub = Label.new()
+		for l: Label in [_quota_score, _quota_sub]:
+			l.add_theme_font_override("font", UiKit.BODY)
+			l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+			l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			v.add_child(l)
+		_quota_score.add_theme_color_override("font_color", Color(1, 1, 1))
+		_quota_sub.add_theme_color_override("font_color", Color(0.86, 0.9, 0.95))
+		root.add_child(_quota_box)
+	var box := UiKit.sb(Color(0.02, 0.025, 0.035, 0.9), Color(1, 1, 1, 0.35), 1, 6)
+	box.set_content_margin_all(0.0)
+	box.content_margin_left = 8.0 * u
+	box.content_margin_right = 8.0 * u
+	box.content_margin_top = 1.0 * u
+	box.content_margin_bottom = 2.0 * u
+	_quota_box.add_theme_stylebox_override("panel", box)
+	_quota_score.add_theme_font_size_override("font_size", int(ceil(QUOTA_SCORE_PT * u)))
+	_quota_sub.add_theme_font_size_override("font_size", int(ceil(QUOTA_SUB_PT * u)))
+	_quota_score.add_theme_constant_override("outline_size", int(ceil(2.0 * u)))
+	_quota_sub.add_theme_constant_override("outline_size", int(ceil(2.0 * u)))
+	_quota_score.text = "QUOTA  A %d · B %d" % [sim.quota_of("A"), sim.quota_of("B")]
+	_quota_sub.text = "%d LAUNCHES LEFT · %d PTS" % [sim.quota_left(), sim.quota_points_left()]
+	_quota_box.visible = top_panel.visible
+	_quota_box.reset_size()
+	_quota_box.size = _quota_box.get_combined_minimum_size()
+	_quota_box.position = _quota_place(vp, u, _quota_box.size)
+
+
+func _quota_place(vp: Vector2, u: float, sz: Vector2) -> Vector2:
+	## Where the quota pill goes: the first spot (left of the score capsule, right of it, under the status line) that stays on
+	## the safe screen and touches no other HUD piece.
+	var ins := UiKit.safe_insets(vp)
+	var gap := 6.0 * u
+	var tp := Rect2(top_panel.position, top_panel.size)
+	if lab_tube and lab_tube.visible:
+		tp = tp.merge(Rect2(lab_tube.position, lab_tube.size))
+	var y := maxf(margins.y, ins.y)
+	var spots: Array[Vector2] = [Vector2(tp.position.x - gap - sz.x, y), Vector2(tp.end.x + gap, y)]
+	var below := tp.end.y + 2.0
+	if status_label and status_label.visible and status_label.text != "":
+		below = maxf(below, status_label.position.y + status_label.size.y + 2.0)
+	spots.append(Vector2((vp.x - sz.x) * 0.5, below))
+	var safe := Rect2(Vector2(maxf(margins.x, ins.x), 0.0), Vector2(vp.x - maxf(margins.x, ins.x) - maxf(margins.z, ins.z), vp.y))
+	var others: Array[Rect2] = [tp]
+	for c in [side_panel, dock, pause_button, music_button, debug_button, chat_button, map_title, version_label, notices]:
+		if c != null and is_instance_valid(c) and (c as Control).visible:
+			others.append(Rect2((c as Control).global_position, (c as Control).size))
+	for p in spots:
+		var r := Rect2(p, sz)
+		if not safe.encloses(r):
+			continue
+		if others.all(func(o: Rect2): return not o.intersects(r)):
+			return p
+	return spots[spots.size() - 1]
+
+
+func _ls_word() -> String:
+	## LAST STAND = QUOTA: platforms launch instead of dropping.
+	return "NEXT LAUNCH" if Rules.quota else "NEXT DROP"
+
+
 func sync(dt: float, cam: Camera3D) -> void:
 	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
 	if main.online:
@@ -1103,6 +1191,7 @@ func sync(dt: float, cam: Camera3D) -> void:
 		lab_tube.sync()
 		if is_instance_valid(lab_feed) and dock.slots.size() > 0:
 			lab_feed.lay(dock.position + (dock.slots[0] as Control).position, HudLab.u_of(self))
+	_quota_sync()
 	top_left.visible = show_chips
 	top_right.visible = show_chips
 	if show_chips:
@@ -1118,19 +1207,19 @@ func sync(dt: float, cam: Camera3D) -> void:
 		status_label.text = ""
 	elif sim.very_last_stand_active:
 		# 0.23.23 (Daniele: "last stand message is too long"): the line says what drops when, nothing more
-		status_label.text = ("VERY LAST STAND · DROP EVERY %d s" % int(round(sim.very_last_stand_gap))
+		status_label.text = ((("VERY LAST STAND · LAUNCH EVERY %d s" if Rules.quota else "VERY LAST STAND · DROP EVERY %d s") % int(round(sim.very_last_stand_gap)))
 				if sim.very_last_stand_gap > 0.0 else "VERY LAST STAND · CONQUEST DECIDES")
 	elif sim.last_stand_active:
 		var next := ""
 		var pending: int = sim.last_stand_waves.size() if sim.v3 else sim.last_stand_order.size()
 		if sim.v3 and not sim.last_stand_warn.is_empty():
-			next = "NEXT DROP %d s · %d LEFT" % [int(ceil(sim.last_stand_warn_t)), sim.last_stand_queue.size()]
+			next = _ls_word() + " %d s · %d LEFT" % [int(ceil(sim.last_stand_warn_t)), sim.last_stand_queue.size()]
 		elif sim.last_stand_warn_node >= 0:
-			next = "NEXT DROP %d s" % int(ceil(sim.last_stand_warn_t))
+			next = _ls_word() + " %d s" % int(ceil(sim.last_stand_warn_t))
 		elif sim.last_stand_next < pending:
-			next = "NEXT DROP %d s" % int(ceil(maxf(sim._next_wave_at - sim.time, 0.0)))
+			next = _ls_word() + " %d s" % int(ceil(maxf(sim._next_wave_at - sim.time, 0.0)))
 		else:
-			next = "CONQUEST DECIDES"
+			next = "QUOTA DECIDES" if Rules.quota else "CONQUEST DECIDES"
 		# the method and how it falls only while the announcement pulses (HUD_LS_PULSE s); then just the next drop
 		status_label.text = ("LAST STAND · %s · %s" % [sim.last_stand_method.to_upper(), _ls_how]) if _ls_pulse > 0.0 and _ls_how != "" 				else "LAST STAND · %s" % next
 	elif Rules.last_stand and not sim.over and sim.time > Rules.LAST_STAND_TIME - 15.0 and sim.time < Rules.LAST_STAND_TIME and not (sim.v3 and (sim._map_last_stand.get("methods", []) as Array).is_empty()):
@@ -1189,6 +1278,9 @@ func _badges(cam: Camera3D) -> bool:
 		var b: Dictionary = badges[n["id"]]
 		var panel: Control = b["panel"]
 		if sim.collapsed.get(n["id"], false) or n.get("node_kind", "") == "junction":   # JUNCTION: no badge
+			panel.visible = false
+			continue
+		if not bool(Rules.lab_opt("hud_badge")):         # LAB card COUNT SIZE: the count is on the vat screen (vat_count.gd)
 			panel.visible = false
 			continue
 		# ui-neon (Daniele 2026-11-02, "unit count HUD disappearing"): a warned node keeps its badge - the count stays readable
@@ -2700,7 +2792,13 @@ func gat_line(n: Dictionary) -> String:
 	var ammo := float(n["units"])
 	var line := "ammo %d/%d · +%.1f/s · fires %.1f/s" % [Rules.shown(ammo), Rules.shown(Sim.gat_cap(n)),
 			Rules.shown_f(sim.gat_rate(n)), Rules.shown_f(Sim.gat_fire_rate(n))]
-	return line + (" · EMPTY" if ammo < 0.5 * Rules.SCALE else "")
+	if float(Rules.lab_opt("gat_range")) > 0.0:        # LAB gat_range: its reach in m (Sim.gat_reach)
+		line += " · reach %d m" % int(round(Sim.gat_reach()))
+	elif bool(Rules.lab_opt("gat_own_platform")):      # LAB: it fires only over its own platform (Sim.gat_reach)
+		line += " · own platform"
+	if not is_equal_approx(Sim.gat_ammo(), 1.0):       # LAB gat_ammo: the own units each kill costs
+		line += " · " + ("ammo free" if Sim.gat_ammo() <= 0.0 else "1 unit / %d kills" % int(round(1.0 / Sim.gat_ammo())))
+	return line + (" · EMPTY" if ammo < 0.5 * Rules.SCALE and Sim.gat_ammo() > 0.0 else "")
 
 
 func launcher_line(n: Dictionary) -> String:
@@ -3229,6 +3327,9 @@ func _build_end() -> void:
 	if not main.online:                                # UX pass (board 07): PLAY AGAIN = the same setup, one tap
 		primary = ["PLAY AGAIN  →", main.restart]
 		quiet = [["HOME", main.to_menu], ["RANDOM MAP", main.rematch_random], ["CHANGE SETUP", func(): main.to_menu("setup")]]
+		var lab_menu := preload("res://scripts/lab_menu.gd")
+		if lab_menu.wanted() and lab_menu.card_id != "":   # LAB BUILD: a test card's match - PLAY AGAIN or back to the cards
+			quiet = [["LAB CARDS", main.to_menu]]
 	if _end_page == "details":
 		s.details({"name": str(main.map.get("name", "")), "sub": where, "outcome": outcome, "primary": primary,
 				"back": func():
@@ -3247,6 +3348,9 @@ func _build_end() -> void:
 	sub = _versus_line(seats) + "\n" + sub           # HUD pass: who played - a human by name, an AI by faction and level
 	if draw and sim.draw_line != "":                   # 7:00, a neutral last platform: the funny call-out (0.19.0)
 		sub = str(sim.draw_line) + "\n" + sub
+	if Rules.quota and sim.last_stand_active:          # LAST STAND = QUOTA (lab): the score and how it was decided
+		var why: String = {"unreachable": "QUOTA LEAD NOBODY COULD CATCH", "final": "QUOTA AFTER THE LAST LAUNCH"}.get(sim.quota_reason, "ELIMINATION")
+		sub = "QUOTA  A %d · B %d  ·  %s" % [sim.quota_of("A"), sim.quota_of("B"), why] + "\n" + sub
 	var st := Progression.seat_stats(sim, human)
 	var third := [str(st["captures"]), "Captures"]
 	if ffa:

@@ -1,0 +1,620 @@
+extends SceneTree
+## LAB rule options (WP4, 05 Handoff/handoffs/LAB-BUILD-PLAN 2026-11-23.md): headless checks of
+##   A  gat_own_platform - the Googatling fires only over its own platform (Daniele 2026-11-23: "covers only its node area not
+##      beyond (or we have spawn kill)"), and the card's gat_start (a T1 Googatling next to each home);
+##   C  relay_set - map L09R (lab4: one retract between the homes is the only short way across; the way round passes a neutral
+##      Googatling T3 at the top centre),
+##      no archived relay kind (lift / tilt / remote / laser_relay) on any lab map;
+##   B  quota_tier - quota by tier (a launch scores its node tier), relays never launch, the match ends by quota;
+##   D  lab4 jobs 2 + 5 - unit_speed (x travel speed and door rate), gat_range / gat_power / gat_ammo, the cards' choice sheet;
+##   E  lab4 job 3 - card COUNT SIZE: count_on_screen (the count on each vat's screen, vat_count.gd) + hud_badge off, count_scale
+##      x1.0 / x1.15 / x1.3 (a real match scene: labels per node with the badge's text, colour follows the owner, badges hidden);
+##   and the options-off identity (L11P AI vs AI equals the run recorded on the untouched lab tip 232c7787).
+##   Godot --headless --path . --script res://tests/test_lab_rules.gd        Exit code 0 = all passed.
+
+const LabOverlay := preload("res://scripts/lab_overlay.gd")
+const LabCards := preload("res://scripts/lab_cards.gd")
+const LabMenu := preload("res://scripts/lab_menu.gd")
+const L09C := "res://maps4/L09C-clusters-9.json"
+const L11P := "res://maps4/L11P-grid-11.json"
+# L11P, AI vs AI, seed 5 (A Standard null / B Veteran ember), all three WP4 options off: recorded on the untouched lab tip
+# 232c7787 before WP4 (hash = the chained hash of every event's text). Re-recorded on ac3bc1c2 (lab4 job 1 re-baked the lab maps;
+# was B 185.3 s, 163 events, 1116204576) and equal there before and after lab4 jobs 2 + 5 (their options at their defaults).
+const L11P_BEFORE := {"winner": "B", "time": 390.7, "events": 581, "hash": 4257610216}
+const OPTS := ["gat_own_platform", "gat_start", "quota_tier", "relay_set"]
+
+var failures := 0
+var _parts_done := 0                                 # each part counts itself at its end (a script error aborts a part)
+
+
+func check(cond: bool, what: String) -> void:
+	print(("PASS  " if cond else "FAIL  ") + what)
+	if not cond:
+		failures += 1
+
+
+func _opts(on: Dictionary) -> void:
+	for k in OPTS:
+		Rules.lab_opts[k] = bool(on.get(k, false))
+	Rules.lab_opts["joints"] = bool(on.get("joints", true))
+
+
+func _sim(path: String, seed_value := 5) -> Sim:
+	var m := MapBuilder.load_map(path)
+	var seats := {}
+	for s in m["seats"]["1v1"]:
+		seats[int(s["node"])] = s["seat"]
+	var sim := Sim.new()
+	sim.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "ember"}, seed_value)
+	return sim
+
+
+func _ai_match(sim: Sim, limit_s := 900.0) -> void:
+	var sa := SeatAI.new("A", 2.0, "Standard")
+	var sb := SeatAI.new("B", 2.3, "Veteran")
+	var n := 0
+	while not sim.over and n < int(limit_s * 10.0):
+		sa.think(sim, 0.1)
+		sb.think(sim, 0.1)
+		sim.step(0.1)
+		n += 1
+
+
+func _events_hash(sim: Sim) -> int:
+	var h := 0
+	for e in sim.events:
+		h = hash([h, str(e)])
+	return h
+
+
+func _line_at(sim: Sim, seat: String, route: Array, target: int, head_d: float) -> Dictionary:
+	## A small enemy line walking `route` whose head is `head_d` m from node `target`'s centre (searched along its path).
+	var h := sim._new_horde(seat, 2.0, route)
+	h["units"] = 2.0
+	h["ordered"] = 2.0
+	h["streaming"] = false
+	h["speed"] = 0.0                                  # it stands where it is put (the relay checks step the sim)
+	var total: float = (h["cum"] as Array)[-1] if h.has("cum") else 100.0
+	var c: Vector3 = sim.nodes[target]["pos"]
+	var best_s := 0.0
+	var best_err := INF
+	var s := 0.0
+	while s <= total:
+		var err := absf(c.distance_to(Sim.sample(h, s)[0]) - head_d)
+		if err < best_err:
+			best_err = err
+			best_s = s
+		s += 0.05
+	h["s"] = best_s
+	sim.hordes.append(h)
+	return h
+
+
+func _shot(sim: Sim, gat: int, h: Dictionary) -> bool:
+	## Fire the Googatling once (0.1 s) at a board holding only `h`: did it hit it?
+	sim._bodies = {}
+	var before: float = h["units"]
+	sim._fire_machinegoon(sim.nodes[gat], 0.1)
+	return float(h["units"]) < before - 0.0001
+
+
+func _part_a() -> void:
+	# ------------------------------------------------------------ A: card start + own platform only
+	_opts({"gat_own_platform": true, "gat_start": true})
+	check(is_equal_approx(Sim.gat_reach(), Rules.R), "own platform: reach = platform radius %.1f m (got %.2f)" % [Rules.R, Sim.gat_reach()])
+	var sim := _sim(L09C)
+	var gats := sim.nodes.filter(func(n): return n["structure"] == "machinegoon")
+	check(gats.size() == 2, "gat_start: two Googatlings at the start on L09C (got %d)" % gats.size())
+	var by_seat := {}
+	for n in gats:
+		by_seat[n["owner"]] = n["id"]
+	check(by_seat.get("A", -1) == 1 and by_seat.get("B", -1) == 7, "gat_start: A on node 1, B on node 7 (mirror; got %s)" % str(by_seat))
+	var ga: int = by_seat.get("A", 1)
+	check(int(sim.nodes[ga]["tier"]) == 1 and float(sim.nodes[ga]["units"]) >= Sim.gat_cap(sim.nodes[ga]) - 0.01,
+			"gat_start: T1, full ammo (%.0f)" % float(sim.nodes[ga]["units"]))
+	# B lines: on the joint neighbour's platform (node 2, 7 m from the gun), on the deck 1-3 (8 m), on the gun's own platform (3 m)
+	for opt in [true, false]:
+		Rules.lab_opts["gat_own_platform"] = opt
+		var cases := [["neighbour platform (joint 2-1), 7 m", [2, 1], 7.0, not opt],
+				["deck 3-1, 8 m", [3, 1], 8.0, not opt],
+				["own platform, 3 m", [2, 1], 3.0, true]]
+		for cs in cases:
+			sim.hordes.clear()
+			var h := _line_at(sim, "B", cs[1], ga, cs[2])
+			var hd: float = (sim.nodes[ga]["pos"] as Vector3).distance_to(Sim.sample(h, h["s"])[0])
+			var hit := _shot(sim, ga, h)
+			check(hit == cs[3], "own_platform=%s: line on %s (head %.1f m) %s" % [opt, cs[0], hd, "hit" if cs[3] else "not hit"])
+	sim.hordes.clear()
+	Rules.lab_opts["gat_own_platform"] = true
+	check(LabOverlay.rules_line(sim).contains("gat: own platform"), "overlay: '%s'" % LabOverlay.rules_line(sim))
+	_opts({})
+	check(LabOverlay.rules_line(_sim(L09C)) == "", "overlay: no rule line with the options off")
+	check(is_equal_approx(Sim.gat_reach(), Rules.MACHINEGOON_RANGE), "option off: reach back to MACHINEGOON_RANGE")
+	_parts_done += 1
+
+
+func _relay_kill(sim: Sim, relay: int, route: Array, what: String) -> void:
+	## A owns `relay`; a B line stands mid-deck on `route` (11 m from the relay centre); A fires: the line falls.
+	sim.hordes.clear()
+	sim.nodes[relay]["owner"] = "A"
+	var h := _line_at(sim, "B", route, relay, 11.0)
+	var before: float = sim.fall_losses.get("B", 0.0)
+	check(sim.fire_relay(relay), "%s: A fires its relay %d" % [what, relay])
+	for i in range(int((Rules.RELAY_WARNING + Rules.RELAY_MOVE + 0.5) / 0.1)):
+		sim.step(0.1)
+	var fell: float = sim.fall_losses.get("B", 0.0) - before
+	check(fell > 0.0 and (not (h in sim.hordes) or float(h["units"]) < 2.0 - 0.0001),
+			"%s: the B line on the deck falls (%.2f units fell)" % [what, fell])
+
+
+func _part_c() -> void:
+	# ------------------------------------------------------------ C: relay set, map L09R
+	_opts({"relay_set": true, "gat_own_platform": true})
+	var path := LabCards.map_path("L09R")
+	check(path != "" and path in MapPool.battlefield(), "L09R baked and offered (%s)" % path)
+	var sim := _sim(path)
+	var plats := sim.nodes.filter(func(n): return n["node_kind"] != "relay")
+	check(plats.size() == 9, "L09R: 9 platforms + %d relay nodes (got %d platforms)" % [sim.nodes.size() - plats.size(), plats.size()])
+	var c: Dictionary = sim.nodes[2]
+	check(c["structure"] == "machinegoon" and int(c["tier"]) == 3 and c["owner"] == "",
+			"L09R centre: a neutral Googatling T3 (%s T%d owner '%s')" % [c["structure"], int(c["tier"]), c["owner"]])
+	check(sim.nodes[9]["relay"] == "retract" and sim.nodes.filter(func(n): return n["node_kind"] == "relay").size() == 1,
+			"L09R: one relay, node 9, a retract")
+	var ret := []
+	for ei in sim.edge_controller:
+		var g: Dictionary = sim.edges[ei]["geo"]
+		if sim.edges[ei]["retracts"] and float(g.get("L", 0.0)) - float(g.get("p0", 0.0)) - float(g.get("p1", 0.0)) >= 6.0:
+			ret.append(ei)
+	check(ret.size() == 2, "L09R: the relay retracts two decks >= 6 m, one to each home (got %d)" % ret.size())
+	# lab4 job 4 (Daniele on lab3: "all bridges are super easily avoidable"): home - relay - home is the only short way across;
+	# with the relay decks left out the way round (over the Googatling) is at least twice as long, walked and by route time.
+	var hA: int = sim.homes["A"]
+	var hB: int = sim.homes["B"]
+	var avoid := {}
+	for ei in ret:
+		avoid[ei] = true
+	var r1 := sim.find_route(hA, hB)
+	var r2 := sim.find_route(hA, hB, avoid)
+	var len1: float = sim.build_path(r1)["cum"][-1]
+	var len2: float = sim.build_path(r2)["cum"][-1]
+	print("L09R home to home: over the relay %s %.1f m (%.1f s), the way round %s %.1f m (%.1f s), x%.2f" % [str(r1), len1,
+			len1 / Rules.move_speed(), str(r2), len2, len2 / Rules.move_speed(), len2 / len1])
+	check(9 in r1 and not (9 in r2) and 2 in r2, "L09R: the short route crosses the relay, the way round passes the Googatling")
+	check(len2 >= 2.0 * len1, "L09R: the way round is at least twice the relay route (%.1f vs %.1f m)" % [len2, len1])
+	_relay_kill(sim, 9, [hB, 9], "RETRACT")
+	# no archived relay kind on any lab map; the guard turns one into a plain node
+	var bad := []
+	for p in MapPool.all():
+		if not p.get_file().substr(0, 4) in MapPool.LAB:
+			continue
+		var m := MapBuilder.load_map(p)
+		for n in m["nodes"]:
+			if str(n.get("relay")) in Rules.LAB_RELAY_ARCHIVED:
+				bad.append("%s node %d %s" % [p.get_file(), n["id"], n["relay"]])
+		for e in m["edges"]:
+			if str(e.get("proto")) in Rules.LAB_RELAY_ARCHIVED:
+				bad.append("%s deck %d-%d %s" % [p.get_file(), e["from"], e["to"], e["proto"]])
+	check(bad.is_empty(), "no lab map uses lift / tilt / remote / laser_relay %s" % str(bad))
+	var m2 := MapBuilder.load_map(path)
+	m2["nodes"][9]["relay"] = "laser_relay"
+	var seats := {0: "A", 4: "B"}
+	var s2 := Sim.new()
+	s2.setup(m2, MapBuilder.layout(m2), seats, {"A": "null", "B": "ember"}, 5)
+	check(s2.nodes[9]["relay"] == "", "relay_set guard: an archived kind plays as a plain node")
+	var s3 := _sim(path)
+	_ai_match(s3)
+	print("L09R AI vs AI (relay_set on): winner %s at %.1f s, %d events, relay fires %d, falls %d" % [s3.winner, s3.time, s3.events.size(),
+			s3.events.filter(func(e): return e["type"] == "relay_fired").size(), s3.events.filter(func(e): return e["type"] == "fall").size()])
+	check(s3.over, "L09R: an AI vs AI match ends")
+	_parts_done += 1
+
+
+func _collapse_all_but(sim: Sim, keep: Array) -> void:
+	## Marks every other platform as launched without scoring (a test shortcut; test_quota's).
+	for n in sim.nodes:
+		if not (n["id"] in keep):
+			sim.collapsed[n["id"]] = true
+
+
+func _qsim(path: String) -> Sim:
+	var sim := _sim(path, 3)
+	sim.last_stand_active = true                      # scoring only matters once the Last Stand runs
+	return sim
+
+
+func _part_b() -> void:
+	# ------------------------------------------------------------ B: quota by tier (port of the demo's tests/test_quota.gd)
+	_opts({"quota_tier": true, "gat_own_platform": true, "relay_set": true})
+	check(Rules.quota, "quota_tier on: Rules.quota")
+	var a := 0
+	var b := 4                                        # L11P homes
+	var sim := _qsim(L11P)
+	check(int(sim.nodes[a]["ring"]) == 0 and int(sim.nodes[b]["ring"]) == 0 and int(sim.nodes[5]["ring"]) == 2 and int(sim.nodes[2]["ring"]) == 1,
+			"launch order: the map's quota rings (homes 0 = last, centre 1, outer 2 = first)")
+	# 1. a launch pays its owner its tier at liftoff; neutral pays nobody
+	sim.nodes[1]["owner"] = "A"
+	sim.nodes[1]["units"] = 20.0
+	sim._drop_node(1)
+	check(sim.quota_of("A") == 1 and sim.quota_of("B") == 0, "T1 launch: A +1 (A %d, B %d)" % [sim.quota_of("A"), sim.quota_of("B")])
+	sim.nodes[2]["owner"] = "B"                       # the T2 centre
+	sim._drop_node(2)
+	check(sim.quota_of("B") == 2, "T2 launch: B +2 (B %d)" % sim.quota_of("B"))
+	sim.nodes[3]["owner"] = "A"
+	sim.nodes[3]["tier"] = 3
+	sim.nodes[3]["structure"] = "laser"               # a tower node scores its node tier
+	sim._drop_node(3)
+	check(sim.quota_of("A") == 4, "T3 laser node launch: A +3 (A %d)" % sim.quota_of("A"))
+	check(sim.events.any(func(e): return e["type"] == "launch" and e["node"] == 2 and e["seat"] == "B" and int(e["points"]) == 2),
+			"launch event names the owner and its points")
+	check(sim.fx_events.any(func(e): return e["type"] == "collapse" and bool(e.get("launch", false))), "the view gets a launch (not a plain collapse)")
+	check(sim.collapsed.get(1, false) and sim.nodes[1]["owner"] == "" and sim.nodes[1]["units"] == 0.0 and float(sim.fall_losses.get("A", 0.0)) >= 20.0,
+			"the platform is gone, its garrison splats (counted as fallen)")
+	sim._drop_node(6)
+	check(sim.quota_of("A") == 4 and sim.quota_of("B") == 2 and str(sim.quota_last_side) == "", "neutral launch pays nobody")
+	check(not sim.over, "no end with a 2-point lead and %d points on the board" % sim.quota_points_left())
+	check(LabOverlay.rules_line(sim).begins_with("quota A 4 - B 2, %d left" % sim.quota_left()), "overlay: '%s'" % LabOverlay.rules_line(sim))
+	check(sim.quota_readout().contains("A 4 · B 2"), "HUD readout: '%s'" % sim.quota_readout())
+	# 2. unreachable lead: lead > the points still on the board ends it; lead == points goes on
+	sim = _qsim(L11P)
+	_collapse_all_but(sim, [a, b, 1, 2])
+	var pts := sim.quota_points_left()
+	check(sim.quota_left() == 4 and pts == 2 * Rules.HOME_TIER + 1 + 2, "4 platforms left = %d points (homes T%d, T1, T2)" % [pts, Rules.HOME_TIER])
+	sim.quota = {"A": pts, "B": 0}
+	sim.step(0.05)
+	check(not sim.over, "lead %d = %d points left: the match goes on" % [pts, pts])
+	sim.quota = {"A": pts + 1, "B": 0}
+	sim.step(0.05)
+	check(sim.over and sim.winner == "A" and sim.quota_reason == "unreachable", "lead %d > %d points left: A wins on quota (winner '%s', %s)" % [pts + 1, pts, sim.winner, sim.quota_reason])
+	# 3. the last platform: a tie goes to its holder (its launch scores); nobody is eliminated while the launches run
+	sim = _qsim(L11P)
+	_collapse_all_but(sim, [b])
+	sim.nodes[a]["owner"] = ""                        # A holds nothing at all now
+	var hb := Sim.launch_points(sim.nodes[b])
+	sim.quota = {"A": 3 + hb, "B": 3}
+	sim.quota_last_side = "A"
+	sim.step(0.05)
+	check(not sim.over and not sim.eliminated.has("A"), "A holds nothing but keeps its points: not out during the launches")
+	sim._drop_node(b)
+	check(sim.over and sim.winner == "B" and sim.quota_reason == "final" and sim.quota_of("B") == 3 + hb,
+			"%d-%d after the last launch: its holder B wins (winner '%s', %s)" % [3 + hb, sim.quota_of("B"), sim.winner, sim.quota_reason])
+	# 4. a neutral last platform on a tie: DRAW
+	sim = _qsim(L11P)
+	_collapse_all_but(sim, [b])
+	sim.nodes[b]["owner"] = ""
+	sim.quota = {"A": 2, "B": 2}
+	sim._drop_node(b)
+	check(sim.over and sim.winner == "" and sim.draw_line != "", "2-2 with a neutral last platform: DRAW (winner '%s')" % sim.winner)
+	# 5. the Very Last Stand runs down to the last platform (its gap leaves QUOTA_END_SPARE)
+	sim = _qsim(L11P)
+	_collapse_all_but(sim, [a, b, 1])
+	sim.time = Rules.VERY_LAST_STAND_TIME
+	sim.very_last_stand_active = true
+	sim._vls_queue_next()
+	var want := (Rules.MATCH_HARD_END - Rules.QUOTA_END_SPARE - Rules.VERY_LAST_STAND_TIME) / 3.0
+	check(absf(sim.very_last_stand_gap - want) < 0.01, "VLS gap = time to the end minus the spare over 3 survivors (%.2f, want %.2f)" % [sim.very_last_stand_gap, want])
+	_collapse_all_but(sim, [b])
+	sim._vls_queue_next()
+	check(sim.last_stand_warn_node == b, "QUOTA: the last platform is queued to launch too")
+	# 6. relays never launch (L09R: 9 platforms, 1 relay)
+	var rpath := LabCards.map_path("L09R")
+	sim = _sim(rpath, 3)
+	check(sim.quota_left() == 9 and not Sim.launchable(sim.nodes[9]), "L09R: 9 platforms to launch, the relay never (%d)" % sim.quota_left())
+	sim.start_last_stand_now()
+	check(not sim.last_stand_order.any(func(id): return sim.nodes[id]["node_kind"] == "relay"), "relays are in no launch wave %s" % str(sim.last_stand_waves))
+	check(not sim._vls_surviving().has(9), "the relay is not in the Very Last Stand")
+	var q0 := sim.quota.duplicate()
+	sim.nodes[9]["owner"] = "A"
+	sim._drop_node(9)                                 # (should a relay ever be dropped by something else: no points)
+	check(sim.quota == q0 and not sim.events.any(func(e): return e["type"] == "launch" and e["node"] == 9), "a dropped relay scores nothing")
+	# 7. full AI matches with quota on: they end, every point is an owned launch at its tier, homes launch last, no relay launches
+	for path in [L11P, rpath]:
+		Rules.lab_opts["quota_tier"] = true
+		sim = _sim(path, 11)
+		_ai_match(sim, Rules.MATCH_HARD_END + 5.0)
+		var launches := sim.events.filter(func(e): return e["type"] == "launch")
+		var paid := 0
+		for e in launches:
+			if str(e["seat"]) != "":
+				paid += int(e["points"])
+		var total := 0
+		for k in sim.quota:
+			total += int(sim.quota[k])
+		var home_seen := false
+		var homes_last := true
+		for e in launches:
+			var home: bool = int(e["node"]) in sim.homes.values()
+			if home_seen and not home:
+				homes_last = false
+			home_seen = home_seen or home
+		var code: String = str(path).get_file().substr(0, 4)
+		print("%s AI vs AI quota on: winner '%s' at %.1f s, reason '%s', quota %s, %d launches" % [code, sim.winner, sim.time, sim.quota_reason, sim.quota, launches.size()])
+		check(sim.over, "%s: the quota match ends" % code)
+		check(total == paid, "%s: every quota point is an owned launch at its tier (%d = %d)" % [code, total, paid])
+		check(launches.all(func(e): return int(e["points"]) == Sim.launch_points(sim.nodes[int(e["node"])])), "%s: each launch paid its node tier" % code)
+		check(homes_last, "%s: the homes launch last" % code)
+		check(not launches.any(func(e): return sim.nodes[int(e["node"])]["node_kind"] == "relay"), "%s: no relay launched" % code)
+	# 8. quota OFF: a drop scores nothing, no launch; the plain lab maps keep no Last Stand
+	_opts({})
+	check(not Rules.quota, "quota_tier off: Rules.quota off")
+	sim = _qsim(L11P)
+	# (lab4 job 4: the check reads the rings from the map file. lab3 hard-coded home ring 1; lab4 job 1 built L11P into the zoom
+	# box, its homes moved inside the 18 m ellipse and the generator now gives them ring 0 - the same as their quota ring, so
+	# node 5 (own ring 1, quota ring 2) is what tells the two apart.)
+	var own := MapBuilder.load_map(L11P)
+	var own_ok := true
+	for n in own["nodes"]:
+		own_ok = own_ok and int(sim.nodes[int(n["id"])]["ring"]) == int(n["ring"])
+	check(own_ok and int(sim.nodes[5]["ring"]) == 1, "quota off: the map's own rings (node 5 ring %d, not its quota ring 2)" % int(sim.nodes[5]["ring"]))
+	sim.nodes[1]["owner"] = "A"
+	sim._drop_node(1)
+	check(sim.quota.is_empty() and not sim.fx_events.any(func(e): return bool(e.get("launch", false))), "quota OFF: no score, no launch")
+	_collapse_all_but(sim, [b])
+	sim.time = Rules.VERY_LAST_STAND_TIME
+	sim.very_last_stand_active = true
+	sim._vls_queue_next()
+	check(sim.last_stand_warn_node == -1, "quota OFF: the last platform never drops (unchanged)")
+	_parts_done += 1
+
+
+func _walked(speed: float, dt_total := 0.5) -> float:
+	## Metres a B line walks along deck 3-1 of L09C in dt_total s at lab option unit_speed = speed.
+	Rules.lab_opts["unit_speed"] = speed
+	var sim := _sim(L09C)
+	var h := sim._new_horde("B", 2.0, [3, 1])
+	h["units"] = 2.0
+	h["ordered"] = 2.0
+	h["streaming"] = false
+	h["s"] = 1.0
+	sim.hordes.append(h)
+	var s0: float = h["s"]
+	var n := 0
+	while n < int(round(dt_total / 0.05)):
+		sim.step(0.05)
+		n += 1
+	return float(h["s"]) - s0
+
+
+func _part_d() -> void:
+	# ------------------------------------------------------------ D: lab4 options (unit speed, Googatling range / power / ammo)
+	var saved: Dictionary = Rules.lab_opts.duplicate(true)
+	_opts({})
+	# unit_speed: travel speed and door rate scale together (spacing kept); 1.0 outside the lab
+	var base := _walked(1.0)
+	for sp in [0.9, 0.8]:
+		var d := _walked(sp)
+		check(absf(d / base - sp) < 0.005, "unit_speed x%.1f: walks %.3f m vs %.3f m in 0.5 s (ratio %.4f)" % [sp, d, base, d / base])
+		check(is_equal_approx(Rules.move_speed(), Rules.BRAWL_SPEED * sp) and is_equal_approx(Rules.exit_rate(), Rules.BRAWL_DOOR_RATE * sp)
+				and is_equal_approx(Rules.metres_per_unit(), Rules.BRAWL_SPEED / Rules.BRAWL_DOOR_RATE),
+				"unit_speed x%.1f: move_speed %.3f, door rate %.3f, spacing unchanged" % [sp, Rules.move_speed(), Rules.exit_rate()])
+	Rules.lab_opts["unit_speed"] = 1.0
+	var hop1: Vector2 = _sim(L09C).joint_hops()
+	Rules.lab_opts["unit_speed"] = 0.8
+	var hop8: Vector2 = _sim(L09C).joint_hops()
+	check(absf(hop8.x * 0.8 - hop1.x) < 0.01, "unit_speed x0.8: cluster hop %.2f s -> %.2f s (overlay readout follows)" % [hop1.x, hop8.x])
+	check(LabOverlay.rules_line(_sim(L09C)).contains("speed x0.8"), "overlay: '%s'" % LabOverlay.rules_line(_sim(L09C)))
+	Rules.lab = false
+	check(is_equal_approx(Rules.move_speed(), Rules.BRAWL_SPEED), "unit_speed ignored outside the lab build")
+	Rules.lab = true
+	Rules.lab_opts["unit_speed"] = 1.0
+	check(Rules.move_speed() == Rules.BRAWL_SPEED and Rules.exit_rate() == Rules.BRAWL_DOOR_RATE, "unit_speed x1.0 = BRAWL_SPEED exactly")
+	# gat_range: 6 / 8 / 10 m from the node centre (over gat_own_platform)
+	_opts({"gat_own_platform": true, "gat_start": true})
+	var sim := _sim(L09C)
+	var ga := 1
+	for cs in [[6.0, [[2, 1], 4.0, true], [[2, 1], 7.0, false], [[3, 1], 9.0, false]],
+			[8.0, [[2, 1], 4.0, true], [[2, 1], 7.0, true], [[3, 1], 9.0, false]],
+			[10.0, [[2, 1], 4.0, true], [[2, 1], 7.0, true], [[3, 1], 9.0, true]]]:
+		Rules.lab_opts["gat_range"] = cs[0]
+		check(is_equal_approx(Sim.gat_reach(), cs[0]), "gat_range %.0f: reach %.1f m" % [cs[0], Sim.gat_reach()])
+		for k in [1, 2, 3]:
+			var c: Array = cs[k]
+			sim.hordes.clear()
+			sim.nodes[ga]["units"] = Sim.gat_cap(sim.nodes[ga])
+			var h := _line_at(sim, "B", c[0], ga, c[1])
+			var hd: float = (sim.nodes[ga]["pos"] as Vector3).distance_to(Sim.sample(h, h["s"])[0])
+			check(_shot(sim, ga, h) == c[2], "gat_range %.0f: line head %.1f m %s" % [cs[0], hd, "hit" if c[2] else "not hit"])
+	Rules.lab_opts["gat_range"] = 8.0
+	check(LabOverlay.rules_line(sim).contains("reach 8 m"), "overlay: '%s'" % LabOverlay.rules_line(sim))
+	Rules.lab_opts["gat_range"] = 0.0
+	check(is_equal_approx(Sim.gat_reach(), Rules.R), "gat_range 0 (default): reach back to own platform %.1f m" % Sim.gat_reach())
+	# gat_power and gat_ammo: one 0.1 s shot at a big line on the gun's own platform
+	var shots := {}
+	for pw in [1.0, 1.5, 2.0]:
+		for am in [1.0, 0.5, 0.0]:
+			Rules.lab_opts["gat_power"] = pw
+			Rules.lab_opts["gat_ammo"] = am
+			sim.hordes.clear()
+			sim.nodes[ga]["units"] = Sim.gat_cap(sim.nodes[ga])
+			var g0: float = sim.nodes[ga]["units"]
+			var h := _line_at(sim, "B", [2, 1], ga, 3.0)
+			h["units"] = 100.0
+			var u0: float = h["units"]
+			_shot(sim, ga, h)
+			shots["%s/%s" % [pw, am]] = [u0 - float(h["units"]), g0 - float(sim.nodes[ga]["units"])]
+	var k1: float = shots["1.0/1.0"][0]
+	check(is_equal_approx(k1, 8.0 * 0.1) and is_equal_approx(shots["1.0/1.0"][1], k1),
+			"default x1 / 1 per kill: T1 kills %.2f in 0.1 s (MACHINEGOON_RATE 8/s), spends %.2f" % [k1, shots["1.0/1.0"][1]])
+	for pw in [1.5, 2.0]:
+		var kk: float = shots["%s/1.0" % pw][0]
+		check(is_equal_approx(kk, k1 * pw), "gat_power x%s: kills %.2f in 0.1 s (x%.2f)" % [pw, kk, kk / k1])
+	for am in [0.5, 0.0]:
+		for pw in [1.0, 2.0]:
+			var r: Array = shots["%s/%s" % [pw, am]]
+			check(is_equal_approx(r[1], r[0] * am), "gat_ammo %s (power x%s): kills %.2f, spends %.2f own units" % [am, pw, r[0], r[1]])
+	# empty garrison: 1 per kill does not fire; free ammo fires
+	for am in [1.0, 0.0]:
+		Rules.lab_opts["gat_power"] = 1.0
+		Rules.lab_opts["gat_ammo"] = am
+		sim.hordes.clear()
+		sim.nodes[ga]["units"] = 0.0
+		var h := _line_at(sim, "B", [2, 1], ga, 3.0)
+		check(_shot(sim, ga, h) == (am == 0.0), "gat_ammo %s, empty garrison: %s" % [am, "fires" if am == 0.0 else "silent"])
+	Rules.lab_opts["gat_ammo"] = 0.5
+	Rules.lab_opts["gat_power"] = 1.5
+	sim.hordes.clear()
+	var rl := LabOverlay.rules_line(sim)
+	check(rl.contains("power x1.5") and rl.contains("1 per 2 kills"), "overlay: '%s'" % rl)
+	# the cards: values[0] = today's behaviour; a pick lands in Rules.lab_opts
+	Rules.lab_opts = saved.duplicate(true)
+	LabMenu._defaults = saved.duplicate(true)
+	var hop := LabCards.find("hop")
+	var gat := LabCards.find("gat")
+	LabMenu.picks = {}
+	LabMenu.apply_card(gat)
+	check(is_equal_approx(Sim.gat_reach(), Rules.R) and Rules.lab_opt("gat_power") == 1.0 and Rules.lab_opt("gat_ammo") == 1.0,
+			"card gat, no pick: reach %.1f m, x1, 1 per kill (today's)" % Sim.gat_reach())
+	LabMenu.apply_card(hop)
+	check(Rules.lab_opt("unit_speed") == 1.0 and LabMenu.pick_tag(hop) == "x1.0", "card hop, no pick: x1.0")
+	LabMenu.picks = {"hop": {"unit_speed": 1}, "gat": {"gat_range": 2, "gat_power": 1, "gat_ammo": 1}}
+	LabMenu.apply_card(hop)
+	check(is_equal_approx(Rules.unit_speed(), 0.9) and LabMenu.pick_tag(hop) == "x0.9", "card hop, pick 2: x0.9 (%s)" % LabMenu.pick_tag(hop))
+	LabMenu.apply_card(gat)
+	check(is_equal_approx(Sim.gat_reach(), 10.0) and Rules.lab_opt("gat_power") == 1.5 and Rules.lab_opt("gat_ammo") == 0.5
+			and Rules.lab_opt("unit_speed") == 1.0, "card gat, picks: %s (hop's speed not carried over)" % LabMenu.pick_tag(gat))
+	LabMenu.picks = {}
+	LabMenu.reset_card()
+	LabMenu._defaults = {}
+	Rules.lab_opts = saved.duplicate(true)
+	_parts_done += 1
+
+
+func _identity() -> void:
+	# ------------------------------------------------------------ options off: L11P unchanged
+	_opts({})
+	var sim := _sim(L11P)
+	_ai_match(sim)
+	var got := {"winner": sim.winner, "time": snappedf(sim.time, 0.1), "events": sim.events.size(), "hash": _events_hash(sim)}
+	print("L11P options off: %s" % str(got))
+	check(got["winner"] == L11P_BEFORE["winner"] and is_equal_approx(got["time"], L11P_BEFORE["time"]) \
+			and got["events"] == L11P_BEFORE["events"] and got["hash"] == L11P_BEFORE["hash"],
+			"options off: L11P AI vs AI identical to the pre-WP4 run %s" % str(L11P_BEFORE))
+	_parts_done += 1
+
+
+func _init() -> void:
+	check(Rules.lab, "a lab build (VERSION %s)" % Rules.VERSION)
+	_part_a()
+	_part_c()
+	_part_b()
+	_part_d()
+	_identity()
+	_opts({"gat_own_platform": true, "relay_set": true})
+
+
+func _initialize() -> void:
+	_finish.call_deferred()                          # part E needs the main loop (a match scene)
+
+
+func _finish() -> void:
+	await _part_e()
+	check(_parts_done == 6, "every part ran to its end (A, C, B, D, identity, E: %d of 6)" % _parts_done)
+	print("test_lab_rules: %s" % ("ALL PASSED" if failures == 0 else "%d FAILED" % failures))
+	quit(1 if failures > 0 else 0)
+
+
+func _frames(n: int) -> void:
+	for i in range(n):
+		await process_frame
+
+
+func _launch(card: Dictionary) -> Node:
+	LabMenu.apply_card(card)
+	load("res://scripts/main.gd").relaunch = {"faction": "vex", "rival": "null", "mode": "1v1", "ai": "Standard",
+			"map": LabCards.map_path(str(card["map"]))}
+	change_scene_to_file("res://main.tscn")
+	await _frames(45)
+	return current_scene
+
+
+func _part_e() -> void:
+	# ------------------------------------------------------------ E: card COUNT SIZE (lab4 job 3)
+	var VatCount = load("res://scripts/vat_count.gd")      # (loaded here: it reaches Hud, which needs the autoloads)
+	var saved: Dictionary = Rules.lab_opts.duplicate(true)
+	check(not bool(Rules.lab_opt("count_on_screen")) and bool(Rules.lab_opt("hud_badge")) and Rules.lab_opt("count_scale") == 1.0,
+			"count options default off in the lab (no vat-screen count, HUD badge on, x1.0)")
+	Rules.lab = false
+	check(bool(Rules.lab_opt("hud_badge")) and not bool(Rules.lab_opt("count_on_screen")), "outside the lab: HUD badge on, no vat-screen count")
+	Rules.lab = true
+	var card := LabCards.find("count")
+	check(bool(card.get("live", false)) and str(card["map"]) == "L11C" and LabCards.map_path("L11C") != "",
+			"card COUNT SIZE live on L11C (%s)" % LabCards.map_path("L11C"))
+	var ch: Dictionary = (card.get("choices", []) as Array)[0] if not (card.get("choices", []) as Array).is_empty() else {}
+	check(ch.get("key", "") == "count_scale" and ch.get("values", []) == [1.0, 1.15, 1.3] and ch.get("names", []) == ["x1.0", "x1.15", "x1.3"],
+			"card COUNT SIZE: choice sheet x1.0 / x1.15 / x1.3")
+	LabMenu._defaults = saved.duplicate(true)
+	LabMenu.picks = {}
+	LabMenu.apply_card(card)
+	check(bool(Rules.lab_opt("count_on_screen")) and not bool(Rules.lab_opt("hud_badge")) and Rules.lab_opt("count_scale") == 1.0
+			and LabMenu.pick_tag(card) == "x1.0", "card count, no pick: on screen, badge off, x1.0")
+	var digit := {}
+	for k in [1, 0]:                                 # x1.15 first (Daniele's "+15 %"), then x1.0
+		LabMenu.picks = {"count": {"count_scale": k}}
+		var want: float = ch["values"][k]
+		var m: Node = await _launch(card)
+		var vc = m.get("vat_count")
+		check(vc != null, "x%s: the match has a VatCount" % str(want))
+		if vc == null:
+			continue
+		var sim = m.sim
+		var hud = m.hud
+		var nodes := 0
+		var ok_text := true
+		var ok_scale := true
+		for n in sim.nodes:
+			if n.get("node_kind", "") == "junction":
+				continue
+			nodes += 1
+			if not vc.screens.has(n["id"]):
+				ok_text = false
+				continue
+			var l: Label3D = vc.screens[n["id"]]["label"]
+			if l.text != vc.count_text(n) or (n["owner"] in ["", "A"] and l.text != str(Rules.shown(n["units"]))):
+				ok_text = false
+				print("  node %d: label '%s', badge text '%s', units %s" % [n["id"], l.text, vc.count_text(n), Rules.shown(n["units"])])
+			if not is_equal_approx(l.pixel_size * l.font_size, VatCount.EM * want):
+				ok_scale = false
+		check(nodes > 0 and vc.screens.size() == nodes and ok_text, "x%s: a vat-screen label per node (%d) with the node's count" % [str(want), nodes])
+		check(ok_scale and is_equal_approx(vc.digit_height_m(), VatCount.DIGIT_H * want),
+				"x%s: digit %.3f m (x%s of %.3f m)" % [str(want), vc.digit_height_m(), str(want), VatCount.DIGIT_H])
+		var shown := 0
+		for id in hud.badges:
+			if (hud.badges[id]["panel"] as Control).visible:
+				shown += 1
+		check(shown == 0, "x%s: every HUD count badge hidden (%d shown)" % [str(want), shown])
+		digit[k] = vc.digit_pt(m.cam)
+		# live: a count change and an owner change show on the screen
+		var nid := -1
+		for n in sim.nodes:
+			if n["owner"] == "" and vc.screens.has(n["id"]):
+				nid = n["id"]
+				break
+		if nid >= 0:
+			var n: Dictionary = sim.nodes[nid]
+			n["owner"] = "B"
+			n["units"] = 40.0
+			vc.sync()
+			var l: Label3D = vc.screens[nid]["label"]
+			var fc: Color = ((vc.screens[nid]["frame"] as MeshInstance3D).material_override as StandardMaterial3D).albedo_color
+			check(l.text == vc.count_text(n) and l.text in [str(Rules.shown(40.0)), ""] and fc == Rules.seat_color("B") and l.modulate == Rules.seat_color("B").lerp(Color.WHITE, 0.35),
+					"x%s: node %d taken by B with 40 units -> '%s', frame in B's seat colour" % [str(want), nid, l.text])
+		var hid: int = sim.nodes.filter(func(x): return x["owner"] == "A")[0]["id"]
+		var pv: Node3D = vc.screens[hid]["pivot"]
+		var vat: Node3D = m.vis[hid]["vat_node"]
+		check(pv.global_position.y > vat.global_position.y + 3.0 and pv.visible,
+				"x%s: home's screen on the tower (%.2f m above the vat base)" % [str(want), pv.global_position.y - vat.global_position.y])
+	check(digit.has(0) and digit.has(1) and digit[0] > 0.0 and absf(digit[1] / digit[0] - 1.15) < 0.03,
+			"digit pt at the aim: x1.0 %.1f pt, x1.15 %.1f pt (this window, not the 844 x 390 probe)" % [digit.get(0, 0.0), digit.get(1, 0.0)])
+	# options off (a card without the count): no VatCount, badges back
+	var plain := LabCards.find("clus-11")
+	LabMenu.picks = {}
+	var m2: Node = await _launch(plain)
+	var shown2 := 0
+	for id in m2.hud.badges:
+		if (m2.hud.badges[id]["panel"] as Control).visible:
+			shown2 += 1
+	check(m2.get("vat_count") == null and shown2 > 0, "card clus-11: no vat-screen count, %d HUD badges shown" % shown2)
+	LabMenu.picks = {}
+	LabMenu.reset_card()
+	LabMenu._defaults = {}
+	Rules.lab_opts = saved.duplicate(true)
+	_parts_done += 1

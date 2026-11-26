@@ -82,6 +82,7 @@ var forge_pulse: ForgePulse                        # a forge coming online: the 
 var skill_fx: SkillFx                              # Skills 2.0 in the world: every cast, lasting effect and end
 var scenery: Scenery
 var hud: Hud
+var vat_count: Node3D                               # LAB card COUNT SIZE (vat_count.gd), null otherwise
 var cam: Camera3D
 var cam_target := Vector3.ZERO
 var cam_dist := 90.0
@@ -142,6 +143,10 @@ var sun: DirectionalLight3D
 var touches := {}
 var margins := Vector4(16, 12, 16, 12)
 var _fitted_size := Vector2.ZERO
+var _fitted_ppp := 0.0                                 # LAB (lab4 job 6): UiKit.pt_per_px at the last layout
+var _fitted_ins := Vector4.ZERO                        # LAB: the safe-area insets at the last layout
+var _ins_check_t := 0.0
+var _hud_built_ppt := 0.0                              # LAB: UiKit.hud_px_per_pt the HUD was BUILT at (its fonts / sizes)
 var _tap_node := -1
 var _tap_time := 0.0
 var _press_pos := Vector2.ZERO
@@ -158,6 +163,9 @@ var _swallow_release := false
 var mode := "1v1"                             # 1v1 / 2v2 / FFA3-4 (the map's seats key; max 4 seats since 2026-11-18)
 var color_choice := "A"                       # your ownership colour: palette key or "faction"
 var menu_layer: CanvasLayer
+const LabMenu := preload("res://scripts/lab_menu.gd")         # LAB BUILD (Rules.lab): the test-card screen
+const LabOverlay := preload("res://scripts/lab_overlay.gd")   # LAB BUILD: the in-match debug readout
+const VatCountScript := preload("res://scripts/vat_count.gd")   # LAB card COUNT SIZE: counts on the vat screens
 static var relaunch := {}                     # survives a scene reload: Play again / Main menu
 static var last_map_path := ""                 # MAIN MENU remembers the last map played (0.19.0)
 # --- TUTORIAL (TUTORIAL-DESIGN.md §8): the lesson director, its coach overlay, the half-speed clock ---
@@ -232,6 +240,10 @@ func _ready() -> void:
 			map_explicit = true
 		elif arg == "--demo":
 			demo = true
+		elif arg.begins_with("--lab-card=") and Rules.lab:   # LAB (dev / headless runs): a test card's lab_opts, as its tap sets them
+			var lab_card: Dictionary = preload("res://scripts/lab_cards.gd").find(arg.substr(11))
+			if not lab_card.is_empty():
+				preload("res://scripts/lab_menu.gd").apply_card(lab_card)
 		elif arg.begins_with("--ai="):
 			ai_level = arg.substr(5)
 		elif arg.begins_with("--shots="):
@@ -328,7 +340,7 @@ func _ready() -> void:
 		start_tutorial(tut_id, tut_first)
 	elif map_explicit or demo or scenario != "" or not shots.is_empty():
 		_start_map(map_path)
-	elif TutorialDirector.first_launch_due(OS.get_cmdline_user_args(), Net.online() or Net.in_room() or Net.status != "" \
+	elif not LabMenu.wanted() and TutorialDirector.first_launch_due(OS.get_cmdline_user_args(), Net.online() or Net.in_room() or Net.status != "" \
 			or not Net.rejoin.is_empty()):
 		start_tutorial(TutorialDirector.FIRST_ID, true)   # TUTORIAL §7: the first launch opens the quick start (skippable)
 	else:
@@ -336,6 +348,12 @@ func _ready() -> void:
 			map_path = last_map_path
 		if not Net.in_room():                          # the menu, no room: a new build may reload the page
 			Net.set_busy(false)
+		if LabMenu.wanted() and not Net.in_room() and Net.status == "" and menu_open in ["", "lab"]:
+			var lab_menu := LabMenu.new()                # LAB BUILD: the test cards in front of HOME (lab_menu.gd; NORMAL MENU = HOME)
+			add_child(lab_menu)
+			lab_menu.setup(self)
+			menu_open = ""
+			return
 		menu_layer = Menu.new()
 		add_child(menu_layer)
 		(menu_layer as Menu).setup(self)
@@ -398,6 +416,8 @@ func _start_map(path: String) -> void:
 	_lm("map_json")
 	if not pitch_forced:                               # Alpha 18: each map's own camera angle (phone-fit probe)
 		cam_pitch = MapCamera.pitch_for(str(map.get("code", "")), str((map.get("tags", {}) as Dictionary).get("size", "")))
+		if _lab_cam_locked():
+			cam_pitch = Rules.LAB_CAM_PITCH
 	_base_pitch = cam_pitch
 	if not map["seats"].has(mode):                     # this map doesn't offer the mode: its first one
 		mode = "1v1" if map["seats"].has("1v1") else map["seats"].keys()[0]
@@ -435,6 +455,8 @@ func _start_map(path: String) -> void:
 		lo = lo.min(n["pos"])
 		hi = hi.max(n["pos"])
 	Rules.view_yaw = PI / 2.0 if (hi - lo).z > (hi - lo).x else 0.0
+	if _lab_cam_locked():                              # LAB ZOOM BOX: the box is in the map's own axes (x across, y = depth)
+		Rules.view_yaw = 0.0
 	# --- SERVER HOST (Alpha 21, the server session): the room server's match host runs the Sim, the AI and Net only.
 	# Nobody sees its screen, so no world, views, effects or HUD are built (_process has the matching block); the
 	# guests get everything from the Sim's snapshots and fx events. Keep this block whole when editing _start_map. ---
@@ -548,6 +570,8 @@ func _start_map(path: String) -> void:
 			sim.step(ff_dt)
 		sim.fx_events.clear()                           # the fast-forwarded bursts are stale by now
 		print("fast-forwarded to t=%.1f%s" % [sim.time, " (match already over)" if sim.over else ""])
+		if Rules.quota:                                 # QUOTA (lab dev helper): the score and the next launch
+			print("%s; next launch: node %d" % [sim.quota_readout(), sim.last_stand_warn_node])
 	if director:                                       # TUTORIAL: the lesson stages its board (tutorial.gd)
 		director.begin(sim, map, SEAT_FACTIONS[HUMAN])
 	if mission:                                        # CAMPAIGN: the mission stages its board (mission_director.gd)
@@ -576,6 +600,8 @@ func _start_map(path: String) -> void:
 	hud = Hud.new()
 	add_child(hud)
 	hud.setup(self)
+	if Rules.lab:                                      # lab4 job 6: the scale the HUD was built at (_on_resized rebuilds it)
+		_hud_built_ppt = UiKit.hud_px_per_pt(get_viewport().get_visible_rect().size, mobile)
 	if scenery and scenery.pit:
 		scenery.pit.build_mounts(hud)                 # ROUND 44 B4: the HUD sits on the painted mounts
 	if director:
@@ -585,6 +611,14 @@ func _start_map(path: String) -> void:
 		await _staged_frame("hud", 5)
 		_release_held()                                # the world is whole: every view runs from here
 	get_viewport().size_changed.connect(_on_resized)
+	if Rules.lab and thumb_path == "" and not Net.dedicated:   # LAB BUILD: the debug readout (lab_overlay.gd)
+		var lab_overlay := LabOverlay.new()
+		add_child(lab_overlay)
+		lab_overlay.setup(self)
+	if Rules.lab and bool(Rules.lab_opt("count_on_screen")) and not Net.dedicated:   # LAB card COUNT SIZE: counts on the vat screens
+		vat_count = VatCountScript.new()
+		add_child(vat_count)
+		vat_count.setup(self)
 	started = true
 	paused = false
 	_lm("started")
@@ -1002,6 +1036,8 @@ func to_menu(page := "") -> void:
 			"loadout": LOADOUTS.get(HUMAN, {})}
 	if page != "" and not online:                      # UI: "play" (CONTINUE) / "armies" (CHANGE LOADOUT)
 		relaunch["menu"] = page
+	if LabMenu.wanted() and LabMenu.card_id != "" and not online:   # LAB BUILD: a test card's match goes back to the LAB screen
+		relaunch["menu"] = "lab"
 	get_tree().reload_current_scene()
 
 
@@ -1019,11 +1055,51 @@ func _on_resized() -> void:
 		return
 	var vp := get_viewport().get_visible_rect().size
 	_fitted_size = vp
+	if Rules.lab:                                      # lab4 job 6: the pt size and insets this layout used; a HUD built at
+		_fitted_ppp = UiKit.pt_per_px(vp)              # another scale (a portrait or not-yet-settled page) is built again
+		_fitted_ins = UiKit.safe_insets(vp)
+		_ins_check_t = 0.0
+		var ppt := UiKit.hud_px_per_pt(vp, mobile)
+		if _hud_built_ppt > 0.0 and absf(ppt / _hud_built_ppt - 1.0) > 0.03:
+			_rebuild_hud()
 	RenderScale.sync()                                 # hotfix-02319: the scaled 3D's size first - the fit below measures through it
 	_apply_safe_area()
 	hud.layout(vp, margins)
 	combat.top_limit = hud.top_used() + 3.0 * 38.0 * hud.ui_scale   # the top bar and up to three toasts
 	_fit_camera()
+
+
+func _layout_stale(delta: float) -> bool:
+	## LAB (lab4 job 6, "first load after a rotation may lay out oversized"): on the web the page's real size in pt (CSS px,
+	## web/viewport-fix.js) and its safe-area insets can settle AFTER the canvas did (iOS finishes a rotation up to 1.2 s
+	## later), with no size_changed of their own: the layout is redone when either moves, not only when the canvas size does.
+	if not started or _fitted_ppp <= 0.0:
+		return false
+	var vp := get_viewport().get_visible_rect().size
+	if absf(UiKit.pt_per_px(vp) / _fitted_ppp - 1.0) > 0.005:
+		return true
+	_ins_check_t += delta
+	if _ins_check_t < 0.5:                             # the insets read the page's CSS: twice a second is plenty
+		return false
+	_ins_check_t = 0.0
+	return not UiKit.safe_insets(vp).is_equal_approx(_fitted_ins)
+
+
+func _rebuild_hud() -> void:
+	## LAB (lab4 job 6): the HUD bakes its fonts and piece sizes at setup (hud.setup -> pt()); layout() only moves them. A
+	## match started in portrait, or before the page's pt size settled, kept a HUD up to ~1.8x too big after the turn. When
+	## the HUD's px-per-pt moved by > 3 %, it is built again at the new scale (a view only: the match state lives in sim).
+	var old := hud
+	remove_child(old)
+	old.free()                                         # (its _exit_tree first: the new HUD sets the dark match theme again)
+	hud = Hud.new()
+	add_child(hud)
+	hud.setup(self)
+	if scenery and scenery.pit:
+		scenery.pit.build_mounts(hud)
+	if vat_count:
+		vat_count.hud = hud
+	_hud_built_ppt = UiKit.hud_px_per_pt(get_viewport().get_visible_rect().size, mobile)
 
 
 func _apply_safe_area() -> void:
@@ -1099,6 +1175,8 @@ func _fit_camera() -> void:
 	cam_pitch = _base_pitch                           # the start view stays exactly as it was
 	_start_fit = _fit_nodes(sim.nodes)
 	_start_fit[1] *= MapCamera.zoom_for(str(map.get("code", "")))   # Daniele 2026-11-13: "zoom in a bit" (per map, phone_fit)
+	if _lab_cam_locked():                             # LAB ZOOM BOX: one fixed camera on the map frame's centre (layout 0, 0);
+		_start_fit = [Vector3(0.0, 0.0, Rules.LAB_CAM_AIM_Z), Rules.LAB_CAM_DIST]   # the map is built into its box (Rules.LAB_BOX_*)
 	cam_target = _start_fit[0]
 	cam_dist = _start_fit[1]
 	if _fit_gone > 0 and scenario_focus == Vector3.INF:   # resized after a Last Stand zoom: keep the survivors framed
@@ -1118,6 +1196,12 @@ func _fit_camera() -> void:
 		hi = hi.max(n["pos"])
 	_map_half = ((hi - lo) / 2.0).abs() + Vector3(Rules.R, 0, Rules.R)
 	_place_camera()
+
+
+func _lab_cam_locked() -> bool:
+	## LAB ZOOM BOX (lab4): a lab map on a lab build with lab_opt("cam_lock") starts at Rules.LAB_CAM_* instead of its own fit.
+	## Scenario / thumbnail framings and the Last Stand survivor zoom are unchanged.
+	return Rules.lab_opt("cam_lock") == true and str(map.get("code", "")) in MapPool.LAB
 
 
 func _zoom_enabled() -> bool:
@@ -1783,7 +1867,7 @@ func _process(delta: float) -> void:
 		sim.fx_events.clear()
 		return
 	# --- end SERVER HOST ---
-	if get_viewport().get_visible_rect().size != _fitted_size:
+	if get_viewport().get_visible_rect().size != _fitted_size or (Rules.lab and _layout_stale(delta)):
 		_on_resized()
 	var dt := minf(delta, 0.05)
 	_flush_inspect()
@@ -2509,12 +2593,16 @@ func _node_at(p: Vector3, screen: Vector2 = Vector2(-1, -1)) -> int:
 			return b
 	if p == Vector3.INF:
 		return -1
+	var best := -1                                     # the NEAREST centre among the tap discs that hold p (touching
+	var best_d := INF                                  # platforms' discs overlap; was the lowest id, LAB WP3)
 	for n in sim.nodes:
 		if sim.collapsed.get(n["id"], false) or n.get("node_kind", "") == "junction":   # JUNCTION: not tappable
 			continue
-		if (n["pos"] as Vector3).distance_to(p) <= Rules.R + (2.5 if mobile else 1.0):
-			return n["id"]
-	return -1
+		var dn := (n["pos"] as Vector3).distance_to(p)
+		if dn <= Rules.R + (2.5 if mobile else 1.0) and dn < best_d:
+			best = n["id"]
+			best_d = dn
+	return best
 
 
 func _relay_button_at(p: Vector3, screen: Vector2) -> int:

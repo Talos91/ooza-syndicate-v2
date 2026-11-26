@@ -312,6 +312,22 @@ static func build(parent: Node3D, sim: Sim) -> Dictionary:
 	return vis
 
 
+static func joint_gate(sim: Sim, ei: int) -> MeshInstance3D:
+	## LAB JOINT (WP3, grey box): the visible link of two touching platforms - a lit strip across their contact point,
+	## square to the centre line (no pier, no deck).
+	var e: Dictionary = sim.edges[ei]
+	var d: Vector3 = ((sim.nodes[e["b"]]["pos"] - sim.nodes[e["a"]]["pos"]) as Vector3) * Vector3(1, 0, 1)
+	var gate := MeshInstance3D.new()
+	gate.name = "JointGate_%d" % ei
+	var box := BoxMesh.new()
+	box.size = Vector3(0.5, 0.1, 3.0)                 # 0.5 m along the link, 3 m across it
+	gate.mesh = box
+	gate.material_override = Mats.light_color(Color(0.92, 0.9, 0.78))
+	gate.position = sim.joint_point(ei) + Vector3(0, 0.06, 0)
+	gate.rotation = Vector3(0, Rules.heading(d.normalized()), 0)
+	return gate
+
+
 static var _light_slots := {}        # piece instance id -> [[MeshInstance3D, surface]]: its OS_Light surfaces (set_lights)
 
 
@@ -725,6 +741,8 @@ static func build3_paced(parent: Node3D, sim: Sim, map: Dictionary, pace: Callab
 			vis["edge_base"][i] = []
 			vis["edge_piers"][i] = []
 			vis["edge_conn"][i] = []
+			if e.get("joint", false):
+				parent.add_child(joint_gate(sim, i))
 			continue
 		var g: Dictionary = e["geo"]
 		var A := Vector3(g["A"][0], 0.0, g["A"][1])

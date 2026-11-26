@@ -21,6 +21,8 @@ func run_until(sim: Sim, cond: Callable, limit: float, dt := 0.05) -> float:
 
 func _init() -> void:
 	Rules.archived_on = true                          # 0.23.21: Mire / Anchor / Bypass are archived; their code is still tested
+	for k in ["gat_own_platform", "gat_start", "quota_tier", "relay_set"]:   # LAB WP4 rule options: this suite tests the real
+		Rules.lab_opts[k] = false                     # game's rules (tests/test_lab_rules.gd tests the options)
 	if "--only=two_doors" in OS.get_cmdline_user_args():      # TWO DOORS alone (quick)
 		_two_doors()
 		print("two_doors: %d failure(s)" % failures)
@@ -3037,6 +3039,8 @@ func _relays_proto() -> void:
 	# proto line only (POOL_GROUPS ["N", "P"]): the P maps ARE offered on 02 BATTLEFIELD here; the release line keeps them out
 	if Rules.demo:                                    # DEMO BUILD: the picker offers MapPool.DEMO (R-01) only
 		check(MapPool.battlefield().map(func(p): return p.get_file().substr(0, 4)) == MapPool.DEMO, "DEMO: the battlefield pool is R-01 only")
+	elif Rules.lab and not MapPool.LAB.is_empty():    # LAB BUILD: battlefield() is MapPool.LAB only (no G maps)
+		print("SKIP  RELAYS 3.0: kept P maps in the battlefield pool (lab build, battlefield() = MapPool.LAB %s)" % [MapPool.LAB])
 	else:
 		check(MapPool.battlefield().any(func(p): return MapBuilder.load_map(p).get("was", "").begins_with("P-")), "RELAYS 3.0: the kept P maps (G-07 / G-08 / G-09) are in the battlefield pool")
 

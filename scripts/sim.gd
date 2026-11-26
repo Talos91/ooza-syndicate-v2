@@ -68,7 +68,11 @@ var match_seed := 0                  # the setup seed (the 7:00 draw line is pic
 # STRUCTURES 2.1 (0.18.10) - see the STRUCTURES 2.1 block before _setup_skills for the whole contract
 var monsters: Array = []             # live monsters, see launch_monster()
 var _next_monster := 1
-var draw_line := ""                  # 7:00 with a neutral last platform: the DRAW call-out (Rules.DRAW_LINES)
+# LAST STAND = QUOTA (Rules.quota, lab option quota_tier): side (teams.get(seat, seat)) -> quota points; launches pay at liftoff
+var quota: Dictionary = {}
+var quota_last_side = ""             # the side that held the latest platform to launch ("" = neutral / none yet)
+var quota_reason := ""               # how a quota match ended: "unreachable" | "final" | "" (elimination, or not over)
+var draw_line := ""                # 7:00 with a neutral last platform: the DRAW call-out (Rules.DRAW_LINES)
 var _forge_seats: Dictionary = {}    # seats holding a completed forge last step ("forge_lost" events)
 # SKILLS 2.0 (0.18.7) - see the "skills" section at the end of this file for the API
 var abilities_on := true             # Rules.abilities_on at setup (the match setting)
@@ -95,6 +99,10 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 	match_seed = int(rng.seed)
 	factions = resolve_factions(seat_factions, seats.values() if not seats.is_empty() else seat_factions.keys(), match_seed)
 	_map_last_stand = map.get("lastStand", {})
+	var quota_rings: Dictionary = {}
+	if Rules.quota and _map_last_stand.get("quota") is Dictionary:   # QUOTA (lab): the map's launch order (rings + orders)
+		quota_rings = _map_last_stand["quota"].get("rings", {})
+		_map_last_stand = _map_last_stand["quota"]
 	v3 = map.has("layout")
 	if v3:
 		_ring_orders = _map_last_stand.get("orders", {})
@@ -104,6 +112,9 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 		if owner != "":
 			homes[owner] = id
 		var relay: String = n["relay"] if n.get("relay") != null else ""
+		if relay in Rules.LAB_RELAY_ARCHIVED and bool(Rules.lab_opt("relay_set")):   # LAB RELAY SET: archived kinds never play
+			push_warning("lab relay_set: node %d's %s relay is archived; it plays as a plain node" % [id, relay])
+			relay = ""
 		# a relay node has no vat (GAME-RULES sec6, centreHasNoVat): it is a modest neutral
 		# waypoint that must be fed from elsewhere, never a fortress at the map's centre
 		var neutral = n.get("neutral") if v3 else null
@@ -194,6 +205,8 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 		nodes[-1]["armour"] = cap0
 		nodes[-1]["armour_from"] = cap0
 		nodes[-1]["armour_cap"] = cap0
+	for k in quota_rings:                                # QUOTA (lab): outer platforms launch first, homes last
+		nodes[int(k)]["ring"] = int(quota_rings[k])
 	var geo: Array = map["layout"]["edges"] if v3 else []
 	for ek in range(map["edges"].size()):
 		var e: Dictionary = map["edges"][ek]
@@ -204,6 +217,13 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 		var retracts: bool = e.get("retracts", false) == true or st == "ret"   # maps 3.0 spells a retract "ret"
 		if st == "ret":
 			st = ""
+		# LAB JOINT (Daniele 2026-11-23, WP3; Rules.lab_opt("joints")): two touching platforms of a cluster, joined with no
+		# deck. It rides the plaza-link path (no deck, no pier, no relay, never breaks, no deck skill or effect targets it:
+		# every deck check already skips plaza links) plus "joint": true for its own path (vat -> contact point -> vat).
+		# With the option off the map is not offered (MapPool) and nothing here changes.
+		var joint: bool = v3 and e.get("joint", false) == true and Rules.lab_opt("joints") == true
+		if joint:
+			mods = 0.0
 		edges.append({"a": int(e["from"]), "b": int(e["to"]), "modules": mods,
 				"state": st, "retracts": retracts, "overpass": e.get("overpass", false) == true,
 				"geo": geo[ek] if v3 else {}, "plaza": false,
@@ -218,6 +238,9 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 				"belt": str(e["belt"]) if e.get("belt") != null else "",
 				"ferry": (e["ferry"] as Dictionary).duplicate() if e.get("ferry") is Dictionary else {},
 				"deck_m": float(e.get("deckMetres", 0.0)) if e.get("deckMetres") != null else 0.0})
+		if joint:
+			edges[-1]["plaza"] = true
+			edges[-1]["joint"] = true
 		var i := edges.size() - 1
 		adj[int(e["from"])].append([int(e["to"]), i])
 		adj[int(e["to"])].append([int(e["from"]), i])
@@ -274,7 +297,43 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			_ctrl_edges[edge_controller[i]] = []
 		_ctrl_edges[edge_controller[i]].append(i)
 	_setup_proto()
+	if bool(Rules.lab_opt("gat_start")):
+		_setup_lab_gat_start()
 	_setup_skills(seat_loadouts)
+
+
+func _setup_lab_gat_start() -> void:
+	## LAB card GOOGATLING (WP4, option gat_start; the map format has no owned start structure): each seat starts owning a
+	## full T1 Googatling on the platform next to its home - a joint neighbour when the home is in a cluster, else the nearest
+	## linked node; the lowest id wins a tie, so mirrored maps stay mirror-fair.
+	for seat in homes:
+		var home: int = homes[seat]
+		var pick := -1
+		var pick_joint := false
+		var pick_d := INF
+		for link in adj[home]:
+			var nb: int = link[0]
+			var m: Dictionary = nodes[nb]
+			if m["owner"] != "" or m["node_kind"] != "common":
+				continue
+			var j: bool = edges[link[1]].get("joint", false) == true
+			var d: float = (m["pos"] as Vector3).distance_to(nodes[home]["pos"])
+			if pick < 0 or (j and not pick_joint) or (j == pick_joint and (d < pick_d - 0.01 or (absf(d - pick_d) <= 0.01 and nb < pick))):
+				pick = nb
+				pick_joint = j
+				pick_d = d
+		if pick < 0:
+			continue
+		var n: Dictionary = nodes[pick]
+		n["owner"] = seat
+		n["structure"] = "machinegoon"
+		n["tier"] = 1
+		n["units"] = gat_cap(n)
+		_sync_legacy(n)
+		var cap := armour_cap(n)
+		n["armour"] = cap
+		n["armour_from"] = cap
+		n["armour_cap"] = cap
 
 
 var _map_last_stand: Dictionary = {}
@@ -405,8 +464,16 @@ func gat_rate(n: Dictionary) -> float:
 
 static func gat_fire_rate(n: Dictionary) -> float:
 	## GOOGAT: garrison units fired per second while a target is in range (= kills/s before Anchor).
+	## LAB option gat_power (lab4 job 5; Daniele: "feels not powerful enough"): x this rate (1.0 outside the lab).
 	var t: int = clampi(int(n["tier"]), 1, 3)
-	return float(Rules.MACHINEGOON_RATE.get(t, Rules.MACHINEGOON_RATE.get(str(t), 8.0)))
+	return float(Rules.MACHINEGOON_RATE.get(t, Rules.MACHINEGOON_RATE.get(str(t), 8.0))) * float(Rules.lab_opt("gat_power"))
+
+
+static func gat_ammo() -> float:
+	## LAB option gat_ammo (lab4 job 5; Daniele: "not sure about it shooting the troops inside or if it does shouldn t be a 1 to 1
+	## bu lower ratio"): own garrison units spent per unit killed. 1.0 = the real game (one unit per kill); 0.5 = one per two
+	## kills; 0 = free (it then fires with an empty garrison too).
+	return float(Rules.lab_opt("gat_ammo"))
 
 
 func _base_production(n: Dictionary) -> float:
@@ -797,9 +864,11 @@ func _fire_machinegoon(n: Dictionary, dt: float) -> void:
 	## every seat (Daniele 2026-11-06: "neutral shoot all").
 	if is_disrupted(n["id"]):
 		return
-	if float(n["units"]) <= 0.0001:
+	var ammo := gat_ammo()                                              # LAB gat_ammo: units spent per kill (1.0 = the real game)
+	if ammo > 0.0 and float(n["units"]) <= 0.0001:
 		return
-	var targets := _hordes_in_range(n, Rules.MACHINEGOON_RANGE)
+	var reach := gat_reach()
+	var targets := _hordes_in_range(n, reach)
 	if targets.is_empty():
 		return
 	var c: Vector3 = n["pos"]
@@ -810,14 +879,27 @@ func _fire_machinegoon(n: Dictionary, dt: float) -> void:
 		if d < best_d:
 			best_d = d
 			best = h
-	var fire: float = minf(gat_fire_rate(n) * dt, float(n["units"]))   # the garrison caps the burst: empty = trickle
+	var fire: float = gat_fire_rate(n) * dt
+	if ammo > 0.0:
+		fire = minf(fire, float(n["units"]) / ammo)                      # the garrison caps the burst: empty = trickle
 	var mult := _cannon_mult(best)                                      # Anchor halves these too (Daniele, 2026-09-27)
 	var kill: float = minf(fire * mult, best["units"])
-	n["units"] = maxf(0.0, float(n["units"]) - (kill / mult if mult > 0.0 else fire))
-	var at := _hit_point(n, best, Rules.MACHINEGOON_RANGE)
+	n["units"] = maxf(0.0, float(n["units"]) - (kill / mult if mult > 0.0 else fire) * ammo)
+	var at := _hit_point(n, best, reach)
 	var hid: int = best["id"]
 	_structure_kill(n, best, kill, "machinegoon")
 	n["shot"] = {"t": time, "target_horde": hid, "kills": kill, "pos": at, "trickle": fire < gat_fire_rate(n) * dt * 0.99}
+
+
+static func gat_reach() -> float:
+	## How far a Googatling reaches from its node centre. LAB option gat_own_platform (Daniele 2026-11-23: "covers only its node
+	## area not beyond (or we have spawn kill)"): only the bodies on its own platform (within Rules.R, the rim), never a
+	## neighbour platform or a deck. Off (and in the real game): MACHINEGOON_RANGE. LAB option gat_range (lab4 job 5; Daniele: "its
+	## range is too little to really make a difference"), when > 0, is the reach in metres (over both).
+	var r := float(Rules.lab_opt("gat_range"))
+	if r > 0.0:
+		return r
+	return Rules.R if bool(Rules.lab_opt("gat_own_platform")) else Rules.MACHINEGOON_RANGE
 
 
 func _structure_kill(n: Dictionary, h: Dictionary, kill: float, why: String) -> void:
@@ -1461,7 +1543,7 @@ func edge_cost(ei: int) -> float:
 	var e: Dictionary = edges[ei]
 	if not v3:
 		return e["modules"] * Rules.MODULE_SECONDS
-	if e["plaza"]:
+	if e["plaza"] and not e.get("joint", false):     # (LAB JOINT: its baked L, 0 m rim to rim: the walk is on the platforms)
 		return (nodes[e["a"]]["pos"] as Vector3).distance_to(nodes[e["b"]]["pos"]) / Rules.move_speed()
 	return float(e["geo"]["L"]) / Rules.move_speed()
 
@@ -1528,6 +1610,8 @@ func exit_of(ei: int, node_id: int) -> Vector3:
 	## maps 3.0: where edge ei leaves node_id's footprint (the baked rim exit); plaza links leave a
 	## socket at the tower's footprint toward the other socket.
 	var e: Dictionary = edges[ei]
+	if e.get("joint", false):                         # LAB JOINT: both ends leave by the contact point
+		return joint_point(ei)
 	if e["plaza"]:
 		var o: Vector3 = nodes[_other_end(ei, node_id)]["pos"]
 		var p: Vector3 = nodes[node_id]["pos"]
@@ -1535,6 +1619,29 @@ func exit_of(ei: int, node_id: int) -> Vector3:
 	var g: Dictionary = e["geo"]
 	var q: Array = g["A"] if e["a"] == node_id else g["B"]
 	return Vector3(q[0], _lift_end_y(ei, node_id), q[1])
+
+
+func joint_point(ei: int) -> Vector3:
+	## LAB JOINT: where the two touching platforms meet (the baked contact point, midway between the centres).
+	var e: Dictionary = edges[ei]
+	var q: Array = e["geo"]["A"]
+	return Vector3(q[0], ((nodes[e["a"]]["pos"] as Vector3).y + (nodes[e["b"]]["pos"] as Vector3).y) * 0.5, q[1])
+
+
+func joint_hops() -> Vector2:
+	## LAB JOINT: [shortest, longest] vat-to-vat walk across one joint, in seconds at the move speed (both directions of
+	## every joint: the doors differ); (-1, -1) on a map without joints. The overlay's "hop" and test_lab_joints read it.
+	var lo := INF
+	var hi := -INF
+	for ei in range(edges.size()):
+		if not edges[ei].get("joint", false):
+			continue
+		for r in [[edges[ei]["a"], edges[ei]["b"]], [edges[ei]["b"], edges[ei]["a"]]]:
+			var cum: PackedFloat32Array = build_path(r)["cum"]
+			var t: float = cum[cum.size() - 1] / Rules.move_speed()
+			lo = minf(lo, t)
+			hi = maxf(hi, t)
+	return Vector2(lo, hi) if lo <= hi else Vector2(-1.0, -1.0)
 
 
 const CROSSING_OVER_H := 4.0       # EXP Crossing over lane: the span's height (build_connectors_exp.py H = OVER_H)
@@ -1650,10 +1757,12 @@ func _build_path3(route: Array) -> Dictionary:
 	var ex0 := exit_of(_edge_index(route[0], route[1]), route[0])
 	var y0 := Vector3.UP * node_y(route[0])          # a lift platform: walk at its level
 	var d0 := (((ex0 - a0["pos"]) as Vector3) * Vector3(1, 0, 1)).normalized()
+	var joint0: bool = edges[_edge_index(route[0], route[1])].get("joint", false)
 	var a_exit := Rules.exit_angle(atan2(d0.z, d0.x))   # the front door (DOOR_EXITS: or the back, if nearer)
 	add.call(a0["pos"] + _door_dir(a_exit) * Rules.EXIT_R + y0, 1)
-	for p in _arc(a0["pos"], a_exit, atan2(d0.z, d0.x), ring):
-		add.call(p + y0, 1)
+	if not joint0:                                    # LAB JOINT: out of the vat straight to the contact point
+		for p in _arc(a0["pos"], a_exit, atan2(d0.z, d0.x), ring):
+			add.call(p + y0, 1)
 	add.call(ex0, 1)
 	for i in range(route.size() - 1):
 		var b: Dictionary = nodes[route[i + 1]]
@@ -1695,8 +1804,9 @@ func _build_path3(route: Array) -> Dictionary:
 			node_spans.append({"node": route[i + 1], "s0": node_s0, "s1": _length(pts)})
 		else:                                         # Alpha 11: round the ring to the front door, then in
 			var a_door := Rules.entry_angle(atan2(din.z, din.x))   # TWO_DOORS: or the back door, if nearer
-			for p in _arc(b["pos"], atan2(din.z, din.x), a_door, ring):
-				add.call(p + yb, 1)
+			if not e.get("joint", false):             # LAB JOINT: from the contact point straight to the vat
+				for p in _arc(b["pos"], atan2(din.z, din.x), a_door, ring):
+					add.call(p + yb, 1)
 			add.call(b["pos"] + _door_dir(a_door) * Rules.EXIT_R + yb, 1)
 	var cum := PackedFloat32Array([0.0])
 	for k in range(1, pts.size()):
@@ -1910,6 +2020,8 @@ func step(dt: float) -> void:
 	time += dt
 	_step_last_stand(dt)
 	_step_very_last_stand(dt)
+	if Rules.quota and not over and last_stand_active:
+		_check_quota_end()
 	if time >= match_hard_end and not over:
 		_force_end()
 	if over:
@@ -2180,6 +2292,8 @@ func _begin_break(ei: int, node_id: int) -> void:
 	## THE WAVE: node_id dropped - its deck ei starts breaking from that end (or, already breaking from the other
 	## end, from both). A deck that is not there (closed relay state, demolished, already gone) has nothing to break.
 	var e: Dictionary = edges[ei]
+	if e.get("joint", false):                             # LAB JOINT: no deck to break (it goes with its platforms)
+		return
 	var end := "a" if e["a"] == node_id else "b"
 	if breaking.has(ei):
 		breaking[ei]["f" + end] = true
@@ -2667,6 +2781,8 @@ func _plan_waves(order: Array) -> Array:
 			if gone.get(n["id"], false) or last_stand_keep.has(n["id"]):
 				continue
 			if n["ring"] == r:
+				if Rules.quota and not launchable(n):        # QUOTA: relays never launch (nor fall)
+					continue
 				if n["relay"] != "":
 					if not n["id"] in held:
 						held.append(n["id"])
@@ -2728,6 +2844,8 @@ func _hub_edges() -> Dictionary:
 func _islands(gone: Dictionary) -> Array:
 	## Surviving nodes cut off from the surviving map's main part (the one holding the most of the last
 	## ring, then the most nodes), over fixed decks and plaza links only.
+	if Rules.quota:                                   # QUOTA (lab): a cut-off platform stands and launches in its turn
+		return []                                     # (relays never launch; nothing falls for being an island)
 	var comp := {}
 	var groups := []
 	for n in nodes:
@@ -2986,7 +3104,7 @@ func _step_very_last_stand(dt: float) -> void:
 			return
 		_start_very_last_stand()
 		return
-	if last_stand_warn_node >= 0 or _vls_surviving().size() <= 1:
+	if last_stand_warn_node >= 0 or _vls_surviving().size() <= (0 if Rules.quota else 1):
 		return
 	_vls_queue_next()
 
@@ -3048,7 +3166,7 @@ func _vls_surviving() -> Array:
 	## The platforms the Very Last Stand still has to drop (a launcher too since the turret: Daniele 2026-11-06).
 	var out := []
 	for n in nodes:
-		if not collapsed.get(n["id"], false):
+		if not collapsed.get(n["id"], false) and not (Rules.quota and n["node_kind"] == "relay"):   # QUOTA: relays stay
 			out.append(n["id"])
 	return out
 
@@ -3073,7 +3191,7 @@ func _vls_pick(gone: Dictionary) -> int:
 	## strand something, the least-stranding one (the island rule from _drop_sequence).
 	var survivors := []
 	for n in nodes:
-		if not gone.get(n["id"], false):
+		if not gone.get(n["id"], false) and not (Rules.quota and n["node_kind"] == "relay"):   # QUOTA: relays stay
 			survivors.append(n["id"])
 	var candidates := []
 	for id in survivors:
@@ -3106,13 +3224,15 @@ func _vls_pick(gone: Dictionary) -> int:
 
 func _vls_queue_next() -> void:
 	var survivors := _vls_surviving()
-	if survivors.size() <= 1:
+	if survivors.size() <= (0 if Rules.quota else 1):   # QUOTA: the last platform launches too (and scores)
 		last_stand_warn_node = -1
 		last_stand_warn_t = 0.0
 		last_stand_warn = {}
 		last_stand_queue = []
 		return
 	very_last_stand_gap = vls_gap_override if vls_gap_override > 0.0 else maxf(0.0, (_hard_end() - time) / float(survivors.size() - 1))
+	if Rules.quota and vls_gap_override <= 0.0:          # QUOTA: every survivor launches, the last one QUOTA_END_SPARE before the end
+		very_last_stand_gap = maxf(0.0, (_hard_end() - Rules.QUOTA_END_SPARE - time) / float(survivors.size()))
 	var gone := collapsed.duplicate()
 	var id := _vls_pick(gone)
 	var batch := [id]
@@ -3269,6 +3389,14 @@ func _drop_node(id: int) -> void:
 	## breaks outward from this end segment by segment (_begin_break / _step_breaks); bodies on a deck fall
 	## with their segment (_check_missing_decks), so a line walking away can still reach the far pier.
 	var n: Dictionary = nodes[id]
+	var launch: bool = Rules.quota and launchable(n)    # QUOTA: the platform launches; its owner scores its tier at liftoff
+	if launch:
+		var side = side_of(str(n["owner"]))
+		quota_last_side = side
+		if str(n["owner"]) != "":
+			quota[side] = int(quota.get(side, 0)) + launch_points(n)
+		events.append({"t": time, "type": "launch", "node": id, "seat": str(n["owner"]), "points": launch_points(n),
+				"quota": int(quota.get(side, 0)) if str(n["owner"]) != "" else 0})
 	for k in n.get("load", {}):              # LAUNCHER TURRET: what it was loading falls with it (no salvo)
 		if not bool(n["load"][k].get("decoy", false)):
 			fall_losses[k] = fall_losses.get(k, 0.0) + float(n["load"][k]["units"])
@@ -3314,13 +3442,17 @@ func _drop_node(id: int) -> void:
 		if lo <= hi:
 			_cut_range(h, lo, hi)
 	events.append({"t": time, "type": "collapse", "node": id, "from": old})
-	fx_events.append({"type": "collapse", "node": id, "from": old})   # the view pours the old owner's goo
+	fx_events.append({"type": "collapse", "node": id, "from": old, "launch": launch,   # the view pours the old owner's goo
+			"quota": int(quota.get(side_of(old), 0)) if launch and old != "" else 0})   # (QUOTA: flies it to orbit)
 	for link in adj[id]:                                # its decks break outward from here, segment by segment
 		_begin_break(link[1], id)
 	for m in monsters:                                  # a monster on the platform or its decks falls
 		if m["state"] == "walking" and _monster_touches(m, id):
 			_monster_fall(m)
-	_check_eliminations()                               # LINES KEEP YOU ALIVE (0.18.10): no more line kill
+	if launch and not over:                             # QUOTA: the score first - a side whose own launch is its last
+		_check_quota_end()                              # platform still banks the points (the last launch decides)
+	if not (Rules.quota and last_stand_active):         # (QUOTA: once the launches run, the quota decides, not who is left)
+		_check_eliminations()                           # LINES KEEP YOU ALIVE (0.18.10): no more line kill
 
 
 func _alive_seats() -> Dictionary:
@@ -3369,6 +3501,9 @@ func _force_end() -> void:
 	## still-neutral last platform is a DRAW with a call-out line (draw_line, Rules.DRAW_LINES, picked by the
 	## match seed). If several platforms somehow remain (the VLS could not finish), the strongest side (team
 	## total) wins; its strongest seat is named the winner.
+	if Rules.quota:
+		_quota_end(true)
+		return
 	over = true
 	var left := _vls_surviving()
 	if left.size() == 1:
@@ -3401,8 +3536,12 @@ func _force_end() -> void:
 
 func _check_end() -> void:
 	var alive := _alive_seats()                       # (once per step: audit B3)
-	if time > 1.0:
+	if time > 1.0 and not (Rules.quota and last_stand_active):   # QUOTA: during the launches the quota decides the match
 		_check_eliminations(alive)
+	elif Rules.quota and last_stand_active:           # (a side with nothing left still holds its points: nobody is out)
+		alive = {}
+		for s in factions:
+			alive[s] = true
 	for s in eliminated:
 		alive.erase(s)
 	var sides := {}                                   # team modes: one side per team
@@ -3413,6 +3552,111 @@ func _check_end() -> void:
 		winner = sides.values()[0] if sides.size() == 1 else ""
 		events.append({"t": time, "type": "end", "winner": winner})
 		finished.emit(winner)
+
+
+# ---------------------------------------------------------- LAST STAND = QUOTA (Rules.quota; demo bd016a0d, lab tier points)
+func side_of(seat: String):
+	## The side a seat scores for: its team in a team mode, else itself ("" = neutral).
+	return teams.get(seat, seat) if seat != "" else ""
+
+
+func quota_of(seat: String) -> int:
+	## The quota of the seat's side (team mates share it).
+	return int(quota.get(side_of(seat), 0)) if seat != "" else 0
+
+
+static func launchable(n: Dictionary) -> bool:
+	## QUOTA: does this node launch? Not a junction (no owner, never scores) and not a relay (Daniele 2026-11-23: "relays
+	## shouldn t launch (as some pas break if they do)": a relay never launches nor falls in a quota match).
+	return not str(n["node_kind"]) in ["junction", "relay"]
+
+
+static func launch_points(n: Dictionary) -> int:
+	## QUOTA BY TIER (Daniele 2026-11-23: "launch i agree should be 1 point per tier"): T1 1 ... T4 4; a node holding a tower /
+	## forge scores its node tier.
+	return clampi(int(n["tier"]), 1, 4)
+
+
+func quota_left() -> int:
+	## Platforms still to launch.
+	var k := 0
+	for n in nodes:
+		if launchable(n) and not collapsed.get(n["id"], false):
+			k += 1
+	return k
+
+
+func quota_points_left() -> int:
+	## The points still on the board: every platform still to launch, at its tier (what a trailing side could still gain).
+	var k := 0
+	for n in nodes:
+		if launchable(n) and not collapsed.get(n["id"], false):
+			k += launch_points(n)
+	return k
+
+
+func quota_readout() -> String:
+	## The HUD's score line (Hud._quota_sync): "QUOTA  A 5 · B 3  ·  4 LAUNCHES LEFT (9 PTS)" - both sides' points, the
+	## launches and the points still on the board.
+	return "QUOTA  A %d · B %d  ·  %d LAUNCHES LEFT (%d PTS)" % [quota_of("A"), quota_of("B"), quota_left(), quota_points_left()]
+
+
+func quota_standing() -> Dictionary:
+	## {"sides": [side, ...] still in the match, best first; "lead": leader minus the best other side; "left": platforms to
+	## launch; "points": the points still on the board}.
+	var sides := {}
+	for s in factions.keys():
+		if not eliminated.has(s):
+			sides[side_of(s)] = true
+	var order: Array = sides.keys()
+	order.sort_custom(func(a, b): return int(quota.get(a, 0)) > int(quota.get(b, 0)))
+	var lead := 0
+	if order.size() >= 2:
+		lead = int(quota.get(order[0], 0)) - int(quota.get(order[1], 0))
+	return {"sides": order, "lead": lead, "left": quota_left(), "points": quota_points_left()}
+
+
+func _check_quota_end() -> void:
+	## A lead nobody can catch ends it (FFA: the leader against every other side); so does the last launch.
+	var st := quota_standing()
+	if (st["sides"] as Array).size() < 2:
+		return                                        # one side left: elimination (_check_end) decides
+	if int(st["lead"]) > int(st["points"]) or int(st["left"]) == 0:
+		_quota_end(false)
+
+
+func _quota_end(forced: bool) -> void:
+	## The quota decides: the most wins; a tie goes to the side that held the last platform to launch, if it is one of
+	## the tied sides; otherwise (a neutral last platform) a DRAW with a call-out line.
+	var st := quota_standing()
+	var order: Array = st["sides"]
+	over = true
+	quota_reason = "unreachable" if int(st["left"]) > 0 else "final"
+	var best = order[0] if not order.is_empty() else ""
+	if int(st["lead"]) <= 0 and order.size() >= 2:
+		var top := int(quota.get(order[0], 0))
+		var tied := order.filter(func(x): return int(quota.get(x, 0)) == top)
+		best = quota_last_side if (str(quota_last_side) != "" and quota_last_side in tied) else ""
+	winner = _side_seat(best) if str(best) != "" else ""
+	if winner == "":
+		draw_line = str(Rules.DRAW_LINES[absi(match_seed) % Rules.DRAW_LINES.size()])
+		events.append({"t": time, "type": "draw", "line": draw_line})
+		fx_events.append({"type": "draw", "line": draw_line})
+	events.append({"t": time, "type": "end", "winner": winner, "forced": forced, "draw": winner == "", "quota": quota.duplicate(),
+			"reason": quota_reason})
+	finished.emit(winner)
+
+
+func _side_seat(side) -> String:
+	## The seat named the winner for a side: itself, or the team's strongest seat still in the match.
+	var best := ""
+	for s in factions.keys():
+		if str(side_of(s)) != str(side):
+			continue
+		if best == "" or (eliminated.has(best) and not eliminated.has(s)) \
+				or (eliminated.has(best) == eliminated.has(s) and seat_strength(s) > seat_strength(best)):
+			best = s
+	return best
 
 
 func seat_strength(seat: String) -> float:

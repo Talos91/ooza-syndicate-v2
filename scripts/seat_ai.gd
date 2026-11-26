@@ -296,6 +296,13 @@ func _drops_soon(sim: Sim, node_id: int) -> bool:
 
 
 # ------------------------------------------------------------------ Last Stand
+func _quota_doomed(sim: Sim, node_id: int) -> float:
+	## QUOTA (Rules.quota): seconds to a warned platform's liftoff, -1 if it is not warned (or quota is off).
+	if not Rules.quota or not sim.last_stand_active or not sim.is_warned(node_id):
+		return -1.0
+	return sim.drop_in(node_id) if sim.v3 or sim.very_last_stand_active else sim.last_stand_warn_t
+
+
 func _evacuate(sim: Sim) -> void:
 	## Every node of the warned wave empties toward the nearest safe node - on a maps 3.0 ring only once its own
 	## drop is near (2026-09-27: the adaptive gap spaces a ring's drops up to 20 s apart; Sim.drop_in is its
@@ -312,7 +319,13 @@ func _evacuate(sim: Sim) -> void:
 					var trip := _trip(sim, doomed["id"], target) if route.size() >= 2 else 0.0
 					if left > trip + period + Rules.AI_EVAC_MARGIN:
 						continue                              # not yet: it falls later in the ring
-				if not _send(sim, doomed["id"], target, 1.0).is_empty():
+				var frac := 1.0
+				if Rules.quota:                                # QUOTA: a token guard stays to hold it at liftoff (it pays the owner)
+					var keep := Rules.QUOTA_AI_KEEP * Rules.SCALE + _incoming(sim, doomed["id"], true) * 1.1
+					if doomed["units"] <= keep + 2.0 * Rules.SCALE:
+						continue
+					frac = clampf(1.0 - keep / float(doomed["units"]), 0.1, 1.0)
+				if not _send(sim, doomed["id"], target, frac).is_empty():
 					_busy[doomed["id"]] = true
 
 
@@ -511,7 +524,8 @@ func _attack(sim: Sim, answer_only := false) -> void:
 	for target in sim.nodes:
 		if target["node_kind"] == "junction":   # JUNCTION: never a target, a source, a team call or a route end
 			continue
-		if sim.allied(target["owner"], seat) or sim.collapsed.get(target["id"], false) or _drops_soon(sim, target["id"]):
+		var doomed_t := _quota_doomed(sim, target["id"])   # QUOTA: a warned platform is worth taking before it launches
+		if sim.allied(target["owner"], seat) or sim.collapsed.get(target["id"], false) or (_drops_soon(sim, target["id"]) and doomed_t < 0.0):
 			continue
 		var called: bool = calls.has(target["id"])
 		if answer_only and not called:
@@ -545,6 +559,10 @@ func _attack(sim: Sim, answer_only := false) -> void:
 		donors.sort_custom(func(a, b): return a["travel"] < b["travel"])
 		if donors.size() > int(cfg["coordination"]):
 			donors.resize(int(cfg["coordination"]))
+		if doomed_t >= 0.0:                               # QUOTA: only donors whose line lands before the liftoff
+			donors = donors.filter(func(d): return float(d["travel"]) + Rules.QUOTA_AI_ARRIVE < doomed_t)
+			if donors.is_empty():
+				continue
 		var available := 0.0
 		var travel := 0.0
 		for d in donors:
@@ -582,6 +600,8 @@ func _attack(sim: Sim, answer_only := false) -> void:
 			score -= Rules.AI_RELAY_RISK                  # its only way in crosses a deck a rival can change
 		if sim.last_stand_active and sim.is_final(target["id"]):
 			score += 20.0                                 # the last ring is where the match is decided
+		if doomed_t >= 0.0:
+			score += Rules.QUOTA_AI_BONUS * float(Sim.launch_points(target)) / 2.0   # QUOTA: its tier in points at liftoff
 		if focus != "" and target["owner"] == focus:
 			score += float(cfg.get("focus", 0.0))         # the team's common enemy
 		if called or (own_call and _ally_attacking(sim, target["id"])):
