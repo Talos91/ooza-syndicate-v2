@@ -172,10 +172,11 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			"armour_from": 1.0,     # ... its value at armour_t0 (match time) - armour is recomputed from these, never summed
 			"armour_t0": 0.0,
 		})
-		if relay == "ferry":                              # the ferry node takes no structure in v1
-			nodes[-1]["buildable"] = []
-		if relay == "laser_relay":                        # LASER RELAY (Daniele 2026-11-09, WIP: "a relay that can only hold a
-			nodes[-1]["buildable"] = ["laser"]            # laser, no other function"): replaces the round-R lift nodes; it moves
+		# 0.25.3 HOTFIX (Daniele 2026-11-27: "old laser nodes that can t change to forge ... some maps that don t have optons to
+		# build relay structures"): the ferry's console and the laser relay hold a laser OR a forge, like every relay's player
+		# pie (the ferry took no structure in v1; the laser relay a laser only). No monster hub: players build none since 11-13.
+		if relay in ["ferry", "laser_relay"]:             # LASER RELAY (Daniele 2026-11-09, WIP: "a relay that can only hold a
+			nodes[-1]["buildable"] = ["laser", "forge"]   # laser, no other function"): replaces the round-R lift nodes; it moves
 															# no deck, is never fired, holds a laser only (relay prices / tiers,
 															# falls like any relay node)
 		if relay == "launcher":                           # 2026-11-06 (Daniele: "it should occupy the relay building slot"): the

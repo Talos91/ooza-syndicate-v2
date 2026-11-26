@@ -1400,6 +1400,13 @@ func _build(sim: Sim) -> void:
 				and n["units"] >= sim.upgrade_cost(n) + reserve and _order(sim.upgrade(n["id"], seat)):
 			_invest_after = sim.time + float(cfg["invest"])
 			return
+	# 0.25.3 HOTFIX: a node a sinkhole emptied (a T1 vat / googat destroyed) gets its vat back first - same price as the player's
+	for n in owned:
+		if n["relay"] == "" and n["structure"] == "" and n["build_kind"] == "" and "vat" in n["buildable"] \
+				and not _drops_soon(sim, n["id"]) and n["units"] >= sim.build_cost(n, "vat") + _reserve(sim, n) \
+				and _order(sim.build(n["id"], seat, "vat")):
+			_invest_after = sim.time + float(cfg["invest"])
+			return
 	var vats :=owned.filter(func(n): return Sim.has_vat(n))
 	if int(cfg["relays"]) >= 2:                           # level 2+: a busy front relay's laser comes first
 		if _build_relay_slot(sim, owned, true):

@@ -1129,10 +1129,15 @@ func sync(dt: float, cam: Camera3D) -> void:
 			next = "NEXT DROP %d s" % int(ceil(sim.last_stand_warn_t))
 		elif sim.last_stand_next < pending:
 			next = "NEXT DROP %d s" % int(ceil(maxf(sim._next_wave_at - sim.time, 0.0)))
+		elif sim.vls_enabled and sim.time < Rules.VERY_LAST_STAND_TIME:
+			# 0.25.3 HOTFIX (Daniele 2026-11-27: "last stand that end in nothing"): the ring collapse is done but the Very Last
+			# Stand still comes - say when, instead of CONQUEST DECIDES over a minute where nothing falls
+			next = "VERY LAST STAND in %d s" % int(ceil(Rules.VERY_LAST_STAND_TIME - sim.time))
 		else:
 			next = "CONQUEST DECIDES"
-		# the method and how it falls only while the announcement pulses (HUD_LS_PULSE s); then just the next drop
-		status_label.text = ("LAST STAND · %s · %s" % [sim.last_stand_method.to_upper(), _ls_how]) if _ls_pulse > 0.0 and _ls_how != "" 				else "LAST STAND · %s" % next
+		# how it falls only while the announcement pulses (HUD_LS_PULSE s); then just the next drop. 0.25.3 HOTFIX (Daniele
+		# 2026-11-27: "still outward and inward wording on screen"): the line no longer names the method (INWARD / OUTWARD)
+		status_label.text = ("LAST STAND · %s" % _ls_how) if _ls_pulse > 0.0 and _ls_how != "" else (next if next.begins_with("VERY") else "LAST STAND · %s" % next)
 	elif Rules.last_stand and not sim.over and sim.time > Rules.LAST_STAND_TIME - 15.0 and sim.time < Rules.LAST_STAND_TIME and not (sim.v3 and (sim._map_last_stand.get("methods", []) as Array).is_empty()):
 		# mirrors sim._step_last_stand: no countdown when the Last Stand is off, over, or the map has none
 		status_label.text = "LAST STAND in %d s" % int(ceil(Rules.LAST_STAND_TIME - sim.time))
@@ -1242,8 +1247,8 @@ func _badges(cam: Camera3D) -> bool:
 			if Rules.is_proto(n["relay"]):                # RELAYS 3.0: OPEN 3 / A>B / UP / EXIT 2 / AIM 7 / ARMED 5
 				st = sim.proto_tag(n["id"])
 			what = Rules.RELAY_GLYPH[n["relay"]] + (("OUT" if st == "out" else "IN" if st == "retract" else st.to_upper()) if shows("relay") else "")
-			if n["relay"] == "laser_relay":                     # LASER RELAY: ⊛LASER while its laser stands
-				what = Rules.RELAY_GLYPH["laser_relay"] + ("LASER" if n["structure"] == "laser" and shows("relay") else "")
+			if n["relay"] == "laser_relay":                     # LASER RELAY: ⊛LASER / ⊛FORGE while one stands (0.25.3: a forge too)
+				what = Rules.RELAY_GLYPH["laser_relay"] + (str(n["structure"]).to_upper() if n["structure"] in ["laser", "forge"] and shows("relay") else "")
 			if n["relay"] == "launcher":                  # LAUNCHER TURRET: its tier first (➶T2 LOAD 40/100)
 				what = Rules.RELAY_GLYPH["launcher"] + "T%d " % int(n["tier"]) + (st.to_upper() if shows("relay") else "")
 		elif n["structure"] == "machinegoon":
@@ -2043,6 +2048,12 @@ func _inspector_actions(n: Dictionary) -> void:
 			_add_action("UPGRADE", "UPGRADE T%d" % (n["tier"] + 1), sim.upgrade_cost(n), "upgrade", id)
 		if shows("machinegoon"):
 			_add_action("VAT", "VAT", sim.build_cost(n, "vat"), "build", id, {"kind": "vat"})
+	elif n["structure"] == "" and n["build_kind"] == "" and "vat" in n["buildable"]:
+		# 0.25.3 HOTFIX (Daniele 2026-11-27: "if a sinkhole happen can t rebuild"): a sinkhole that destroys a T1 vat / googat
+		# leaves an empty socket the pie had no slice for - rebuild the vat (its restore price) or a googat here
+		_add_action("VAT", "VAT", sim.build_cost(n, "vat"), "build", id, {"kind": "vat"})
+		if "machinegoon" in n["buildable"] and shows("machinegoon"):
+			_add_action("MACHINEGOON", BUILD_LABEL["machinegoon"], sim.build_cost(n, "machinegoon"), "build", id, {"kind": "machinegoon"})
 	if sim.allied_units(n) > 0.0001 and shows("eject") and inspector_actions.size() < 3:   # max 3 slices (Daniele 2026-11-13)
 		_add_action("EJECT", "EJECT", 0, "eject", id)
 
@@ -2560,8 +2571,8 @@ func _structure_word(n: Dictionary) -> String:
 	## The card's title (ui-node): what stands here; the tier sits in its own chip.
 	if n["relay"] == "launcher":
 		return "LAUNCHER"
-	if n["relay"] == "laser_relay":                           # LASER RELAY (2026-11-09): one title, the laser is its only building
-		return "LASER RELAY"
+	if n["relay"] == "laser_relay":                           # LASER RELAY (2026-11-09): one title; 0.25.3: + FORGE when it holds one
+		return "LASER RELAY" + (" + FORGE" if n["structure"] == "forge" else "")
 	if n["relay"] != "":
 		return "%s RELAY" % str(n["relay"]).to_upper() + (" + %s" % STRUCT_LABEL.get(n["structure"], str(n["structure"]).to_upper()) if n["structure"] != "" else "")
 	if n["structure"] == "machinegoon":
@@ -2718,7 +2729,7 @@ func _structure_line(n: Dictionary) -> String:
 	if n["relay"] == "launcher":
 		return "LAUNCHER T%d" % int(n["tier"])
 	if n["relay"] == "laser_relay":
-		return "LASER RELAY" + ("" if n["structure"] == "laser" else " (empty socket)")
+		return "LASER RELAY" + ("" if n["structure"] == "laser" else (" + FORGE" if n["structure"] == "forge" else " (empty socket)"))
 	if n["relay"] != "":
 		return "%s RELAY" % n["relay"].to_upper() + (" + %s" % STRUCT_LABEL.get(n["structure"], str(n["structure"]).to_upper()) if n["structure"] != "" else " (empty socket)")
 	if n["structure"] == "machinegoon":
@@ -3241,7 +3252,7 @@ func _build_end() -> void:
 	var kicker: String = line[0]
 	if ffa and not won and not draw:                   # an FFA loss says where you finished instead
 		kicker = "FINISHED %s OF %d" % [MatchScreens.ordinal(int(placed.get(human, seats.size()))).to_upper(), seats.size()]
-	var sub := where + "  ·  " + (("Last Stand: %s" % sim.last_stand_method.to_upper()) if sim.last_stand_active else "decided before the Last Stand")
+	var sub := where + "  ·  " + ("decided in the Last Stand" if sim.last_stand_active else "decided before the Last Stand")   # 0.25.3: no INWARD / OUTWARD
 	if not won and not draw and seats.size() > 2:     # who took it, when it wasn't a plain duel
 		sub = "Won by %s  ·  %s" % [_who_line(winner), sub]
 	sub = _versus_line(seats) + "\n" + sub           # HUD pass: who played - a human by name, an AI by faction and level
