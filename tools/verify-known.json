@@ -1,0 +1,67 @@
+{
+ "_about": "Known failures for godot-verify-push. Seen on main f1b184cc (0.25.2) 2026-11-27, full run (test_ai_curve skipped: release rule 2026-11-11), WP0 merge worker. A known entry = pre-existing on main, not a pass; fix owners in each note. Old-map failures are not blockers (AGENTS.md TEST RULE 2026-11-06).",
+ "game_dir": ".",
+ "pck_max_bytes": 100000000,
+ "timeouts": {"test_ai_coop": 2000, "test_ai_curve": 2000},
+ "args": {
+  "test_ui_nav": ["--resolution", "1136x640", "--", "--mobile", "--no-notice", "--no-account"],
+  "test_ui_sweep": ["--resolution", "1136x640", "--", "--mobile", "--no-notice", "--no-account"]
+ },
+ "known": {
+  "test_map_pool": {
+   "fails": ["re:^FAIL  N-(04|24): ", "FAIL  an unbiased 1v1 map (N-01) is still offered", "re:^FAILURES \\(\\d+ failed\\)$"],
+   "note": "old maps N-04 / N-24 / N-01 (TEST RULE): not blockers; main 1a716645..f1b184cc"
+  },
+  "test_maps4": {
+   "fails": ["re:^FAIL  (E-09|G-11|G-15|N-17|R-05|R-11|R-15|R-16): "],
+   "note": "19 old-map fails (relay buttons over platforms / decks, N-17 deck heights): TEST RULE, not blockers; maps are rebaked in 3.0 WP2"
+  },
+  "test_round_r": {
+   "fails": ["FAIL G-03: 1 neutral machinegoons (got 0)", "re:^FAIL G-04: laser relays", "re:^FAIL R-02: gatehouse \\d+ has 5 decks \\(got 4\\)$", "FAILED"],
+   "errors": ["re:Out of bounds get index '0' \\(on base: 'Array'\\)"],
+   "note": "round-R map expectations vs the cleanup's map set (main f1b184cc); WP1 owns this suite"
+  },
+  "test_proto_debug": {
+   "fails": ["FAIL  MY PRODUCTION x10 makes 10x in 1 s (4.38 vs 4.38)", "re:^FAIL  a proto build \\([0-9.]+\\) has the flag on$", "FAIL  the match started"],
+   "note": "3 identical FAILs on main since 0.25.2 (release-0.25.2 report); WP1 owns this suite"
+  },
+  "test_sim": {
+   "errors": ["re:Compile Error: Identifier not found: Net$", "re:Compile Error: Failed to compile depended scripts\\.$", "re:Invalid access to property or key 'seats' on a base object of type 'Dictionary'", "re:Nonexistent function '_edge_index' in base 'Nil'", "re:Trying to return value of type \"Nil\" from a function whose return type is \"Dictionary\""],
+   "note": "7 SCRIPT ERRORs under -s (no Net autoload, PROJECT.md autoload rule); the same 7 on lab 61c2eb6e; the suite prints its PASS lines"
+  },
+  "test_net": {
+   "errors": ["re:Compile Error: Identifier not found: Net$", "re:Compile Error: Failed to compile depended scripts\\.$"],
+   "note": "Net autoload missing under -s; main 1a716645..f1b184cc"
+  },
+  "test_match_report": {
+   "errors": ["re:Compile Error: Identifier not found: Net$", "re:Compile Error: Failed to compile depended scripts\\.$"],
+   "note": "Net autoload missing under -s"
+  },
+  "test_ui_kit": {
+   "errors": ["re:Compile Error: Identifier not found: Net$", "re:Compile Error: Failed to compile depended scripts\\.$"],
+   "note": "hud.gd names the Net autoload, which does not exist under -s; the suite still prints PASS (PROJECT.md autoload rule)"
+  },
+  "test_ui_tap": {
+   "fails": ["FAIL  a second tap while the first is being answered does nothing (got 0)", "FAIL  a swipe scrolls the list and presses nothing (scroll 0, presses 0)", "FAIL  a tap that wobbles 5 px still presses it (got 0)", "FAIL  one still tap presses a page button once (got 0)", "FAIL  one tap presses a button inside a scrolling list (got 0)"],
+   "errors": ["re:Compile Error: Identifier not found: Net$", "re:Compile Error: Failed to compile depended scripts\\.$"],
+   "note": "Net autoload missing under -s, so no taps register; main f1b184cc"
+  },
+  "test_ui_nav": {
+   "errors": ["re:Invalid assignment of property or key 'content_margin_left' with value of type 'float' on a base object of type 'Nil'"],
+   "note": "REAL BUG, not noise (WP0 2026-11-27): menu.gd _toggle (line 4586) casts the button stylebox to StyleBoxFlat, but since 0.24.5 secondary / selected buttons use MenuSkin StyleBoxTexture -> null; _toggle stops there, so every ON / OFF toggle loses its check box and tooltip (18 per run). Owner: WP4 (menu.gd); drop this entry with the fix"
+  },
+  "test_ui_sweep": {
+   "fails": ["re:^FAIL  [a-z_]+: .* - off the screen at \\("],
+   "errors": ["re:Invalid assignment of property or key 'content_margin_left' with value of type 'float' on a base object of type 'Nil'"],
+   "note": "359 'off the screen' FAILs headless at 1136x640 + the 18 menu.gd:4586 errors (see test_ui_nav); main f1b184cc; WP4 owns"
+  },
+  "test_kit_hd": {
+   "fails": ["re:^FAIL  (desktop|phone): \\S+ resolves to (kit_hd|kit_hd/skins|light kit)$", "re:^FAILURES \\(\\d+ failed\\)$"],
+   "note": "93 FAILs: the kit_hd / skins packs are not in the tree (no skins.pck since the 0.25.2 cleanup); main f1b184cc"
+  },
+  "test_preempt": {"nonblocking": true, "note": "needs the live room server at this build's version (exit 2 / FAILs otherwise); proven by the Release room checks"},
+  "test_rematch": {"nonblocking": true, "note": "live room server; SKIP exit 2 without --host-arg=--match-end"},
+  "test_room_limits": {"nonblocking": true, "note": "live room server; SKIP exit 2 without --host-arg=--idle-close"},
+  "test_dedicated": {"nonblocking": true, "note": "live room server at this build's version; SKIP exit 2 on a version mismatch (e.g. 0.30.0-* vs live 0.25.2)"}
+ }
+}
