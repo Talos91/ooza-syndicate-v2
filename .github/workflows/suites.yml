@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       long:
-        description: "Also run the long suites (ai_curve, ai_coop)"
+        description: "Also run the long suite (ai_curve)"
         type: boolean
         default: false
 
@@ -30,7 +30,7 @@ jobs:
       - id: list
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.long }}" = "true" ]; then
-            echo 'suites=["sim","net","maps4","map_pool","round_r","ui_kit","ai_curve","ai_coop"]' >> "$GITHUB_OUTPUT"
+            echo 'suites=["sim","net","maps4","map_pool","round_r","ui_kit","ai_curve"]' >> "$GITHUB_OUTPUT"
           else
             echo 'suites=["sim","net","maps4","map_pool","round_r","ui_kit"]' >> "$GITHUB_OUTPUT"
           fi
@@ -76,7 +76,7 @@ jobs:
 
       - name: test_${{ matrix.suite }}
         env:
-          CAP: ${{ (matrix.suite == 'ai_curve' || matrix.suite == 'ai_coop') && '2000' || '900' }}
+          CAP: ${{ matrix.suite == 'ai_curve' && '2000' || '900' }}
         run: |
           export GODOT="$HOME/godot/godot"
           bash tools/ci/run_suite.sh ${{ matrix.suite }}

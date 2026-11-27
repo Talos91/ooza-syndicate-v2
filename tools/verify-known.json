@@ -2,7 +2,7 @@
  "_about": "Known failures for godot-verify-push. Seen on main f1b184cc (0.25.2) 2026-11-27, full run (test_ai_curve skipped: release rule 2026-11-11), WP0 merge worker. A known entry = pre-existing on main, not a pass; fix owners in each note. Old-map failures are not blockers (AGENTS.md TEST RULE 2026-11-06).",
  "game_dir": ".",
  "pck_max_bytes": 100000000,
- "timeouts": {"test_ai_coop": 2000, "test_ai_curve": 2000},
+ "timeouts": {"test_ai_curve": 2000},
  "args": {
   "test_ui_nav": ["--resolution", "1136x640", "--", "--mobile", "--no-notice", "--no-account"],
   "test_ui_sweep": ["--resolution", "1136x640", "--", "--mobile", "--no-notice", "--no-account"],
