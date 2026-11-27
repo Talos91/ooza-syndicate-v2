@@ -5,7 +5,9 @@ extends Node
 ## during the upgrade (the blueprint cost), plus the sim's production while paused.
 ## Run WINDOWED, off-screen and silent (add --mobile for the phone path's low detail):
 ##   Godot --path . --resolution 812x375 --audio-driver Dummy --position -6000,-6000 res://tests/vat_column_shots.tscn -- \
-##       out=<dir> --craters=2 --floor=lab5 [--mobile]
+##       out=<dir> --craters=2 --floor=lab5 [--mobile] [map=L09P]
+## OOZE 3.0 (WP3, 2026-11-27): map=<code> picks the map (default R-01); a SIDE shot per mark (a dev camera level with the
+## deck, beside the node) shows platform, column and structure together: the blueprint must stay on the structure.
 
 const MAIN := "res://main.tscn"
 const MARKS := [0.0, 0.08, 0.2, 0.4, 0.6, 0.8, 0.95]
@@ -81,6 +83,8 @@ func _home(inst: Node) -> void:
 func _foot_shot(inst: Node, wl: WorldLayer, id: int, file: String) -> void:
 	## a dev camera low over the floor, looking at the tube's foot and its crater (the game camera sees it only
 	## between platforms): the doors, the module out of the pit, the dock
+	if wl.pipes == null:                              # (a map with no pit tubes: no foot to look at)
+		return
 	var tb: Dictionary = {}
 	for t in wl._tubes:
 		if t["id"] == id:
@@ -94,6 +98,29 @@ func _foot_shot(inst: Node, wl: WorldLayer, id: int, file: String) -> void:
 	inst.add_child(cam)
 	cam.global_position = mid + side * 13.0 + Vector3(0, 6.5, 0)
 	cam.look_at(mid + Vector3(0, 1.0, 0), Vector3.UP)
+	var was := inst.get_viewport().get_camera_3d()
+	cam.make_current()
+	await _frames(2)
+	await _shot(inst, file)
+	if was:
+		was.make_current()
+	cam.queue_free()
+
+
+func _side_shot(inst: Node, at: Vector3, file: String) -> void:
+	## a dev camera beside the node, a little over its deck: platform, the column under it and the structure in one frame
+	var cam := Camera3D.new()
+	cam.fov = 50.0
+	inst.add_child(cam)
+	var c := Vector3.ZERO                             # from outside the map (away from its centre), level with the deck
+	var sim: Sim = inst.sim
+	for nd in sim.nodes:
+		c += nd["pos"] / float(sim.nodes.size())
+	var out := ((at - c) * Vector3(1, 0, 1)).normalized()
+	if out.length() < 0.5:
+		out = Vector3(0, 0, 1)
+	cam.global_position = at + out * 19.0 + out.cross(Vector3.UP) * 6.0 + Vector3(0, 2.5, 0)
+	cam.look_at(at + Vector3(0, -1.5, 0), Vector3.UP)
 	var was := inst.get_viewport().get_camera_3d()
 	cam.make_current()
 	await _frames(2)
@@ -170,7 +197,7 @@ func _run() -> void:
 	var args := _args()
 	var out := str(args.get("out", "user://vat_column"))
 	DirAccess.make_dir_recursive_absolute(out)
-	load("res://scripts/main.gd").relaunch = {"faction": "vex", "rival": "ember", "mode": "1v1", "map": "res://maps4/" + _map_file("R-01")}
+	load("res://scripts/main.gd").relaunch = {"faction": "vex", "rival": "ember", "mode": "1v1", "map": "res://maps4/" + _map_file(str(args.get("map", "R-01")))}
 	var inst: Node = (load(MAIN) as PackedScene).instantiate()
 	inst.demo = false
 	get_tree().root.add_child(inst)
@@ -197,9 +224,13 @@ func _run() -> void:
 	var n: Dictionary = sim.nodes[id]
 	n["tier"] = 1
 	await _frames(10)
+	for d in inst.find_children("*", "Control", true, false):   # (an empty profile's first-run data dialog, over the first shot)
+		if d.name.to_lower().contains("consent"):
+			(d as Control).visible = false
 	_home(inst)
 	await _frames(30)
 	await _foot_shot(inst, wl, id, "%s/T1-foot-before.png" % out)
+	await _side_shot(inst, n["pos"], "%s/T1-side-before.png" % out)
 	var idle := await _perf("idle (no upgrade)", 240)
 	if "trace" in args:                               # trace=1: no shots, every frame's time across both upgrades
 		await _trace(inst, sim, n, id)
@@ -227,6 +258,7 @@ func _run() -> void:
 				await _frames(2)
 				await _shot(inst, "%s/%s-zoom-%02d.png" % [out, tag, int(MARKS[shot_i] * 100)])
 				await _foot_shot(inst, wl, id, "%s/%s-foot-%02d.png" % [out, tag, int(MARKS[shot_i] * 100)])
+				await _side_shot(inst, at, "%s/%s-side-%02d.png" % [out, tag, int(MARKS[shot_i] * 100)])
 				_home(inst)
 				shot_i += 1
 			if p > 0.6 and not up_card:                  # the compact inspector card while paused
@@ -258,5 +290,6 @@ func _run() -> void:
 		await _frames(2)
 		await _shot(inst, "%s/%s-zoom-after.png" % [out, tag])
 		await _foot_shot(inst, wl, id, "%s/%s-foot-after.png" % [out, tag])
+		await _side_shot(inst, at, "%s/%s-side-after.png" % [out, tag])
 	print("VAT_COLUMN started %d docked %d cancelled %d" % [col.started, col.docked, col.cancelled])
 	get_tree().quit(0)

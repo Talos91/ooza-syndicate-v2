@@ -362,6 +362,8 @@ func _v3_platforms() -> void:
 			nest += MapBuilder.deep_tag(n, sim.nodes)       # relay-v3-column: the column's one foot at this node's floor depth
 		var p := MapBuilder.piece("Relay_Node_Ring_v3" if ring else nest)
 		p.name = "Platform_Relay_v3_%d" % n["id"]
+		if (plat as Node).has_method("mount"):        # Ooze 3.0: in a slot platform, the relay pedestal follows Rules.R too
+			p.scale = Vector3.ONE * Slots3.k()
 		(plat as Node).add_child(p)
 		_v3_plats[n["id"]] = p
 
@@ -378,7 +380,7 @@ func _v3_relay_models(n: Dictionary, plat: Node3D) -> void:
 	var nm: String = {"launcher": _cannon_name(int(n["tier"])), "lift": "Relay_Lift_Base_v3", "tilt": "Relay_Tilt_v3"}.get(str(n["relay"]), "")
 	if nm == "" or not _kit(nm):
 		return
-	var p := MapBuilder.piece(nm)
+	var p: Node3D = Slots3.make(nm) if Slots3.owns(nm) else MapBuilder.piece(nm)   # Ooze 3.0: the launcher's cannon = its relay-special slot
 	p.name = "%s_%d" % [nm, id]
 	add_child(p)
 	p.position = n["pos"]
@@ -423,7 +425,7 @@ func _cannon_retier(n: Dictionary, r: Dictionary) -> void:
 	r["tier"] = int(n["tier"])
 	if not _kit(nm) or old.name.begins_with(nm + "_"):
 		return
-	var p := MapBuilder.piece(nm)
+	var p: Node3D = Slots3.make(nm) if Slots3.owns(nm) else MapBuilder.piece(nm)
 	p.name = "%s_%d" % [nm, id]
 	add_child(p)
 	p.position = old.position

@@ -33,7 +33,12 @@ const RING_PAD := 0.25           # m added on top
 const RING_W := 0.05             # the torus' half-thickness over its radius
 const EMPTY_GLASS := Color(0.05, 0.075, 0.1)
 const DOCK_S := 0.4              # s: the dock after the fill reached the top
-const LOWER_SHARE := 0.5         # the fill's progress share for entrance + tube (the rest: the structure)
+const LOWER_SHARE := 0.5         # (legacy, STRUCTURE_ONLY false) the fill's share for entrance + tube (the rest: the structure)
+## OOZE 3.0 (Daniele 2026-11-27): "vats keep producing while upgrading, and the upgrade animation plays on the structure only
+## (not the node / platform underneath)". STRUCTURE_ONLY: the blueprint, the reveal and the ring cover only what stands above
+## the deck (the structure's slot, y > deck top) and fill over the whole build; the entrance, the column / tube under the
+## platform and the platform stay as they are (solid, goo flowing). The legacy path (entrance + sleeve) stays behind the flag.
+const STRUCTURE_ONLY := true
 
 var wl: WorldLayer
 var sim: Sim
@@ -88,7 +93,7 @@ func _warm() -> void:
 	var made := []
 	var reals := []
 	for key in keys:
-		var src := MapBuilder.piece(key)
+		var src: Node3D = Slots3.make(key)                # the structure's slot, as the game places it
 		reals.append(src)
 		_warm_node.add_child(src)
 		MapBuilder.apply_owner([src], keys[key])
@@ -191,6 +196,10 @@ func _start(i: int, tb: Dictionary, n: Dictionary) -> Dictionary:
 	var up := {"phase": "fill", "y_base": 0.0, "from": from, "to": to, "owner": n["owner"], "mat": m, "copies": [],
 			"plat": entry.get("platform"), "vat_src": null, "vat_copy": null, "y_mid": 0.0, "y_top": 0.0,
 			"t_dock": 0.0, "reveal": [], "vat_real": null, "pooled": []}
+	if STRUCTURE_ONLY:
+		_start_structure(up, entry, seat)
+		_fill_step(up, tb, n)
+		return up
 	# the new tier's entrance, in blueprint (above the ring) and in its real material (below it)
 	var ent_mesh: Mesh = (wl._ent_mms[to] as MultiMesh).mesh
 	var ent := MeshInstance3D.new()
@@ -252,6 +261,27 @@ func _start(i: int, tb: Dictionary, n: Dictionary) -> Dictionary:
 	wl._sock_lit(tb, tb["base"])
 	_vat_copy(up, entry)
 	_fill_step(up, tb, n)
+	return up
+
+
+func _start_structure(up: Dictionary, entry: Dictionary, seat: Color) -> Dictionary:
+	## OOZE 3.0: the structure's blueprint only (the ring, the blueprint ghost above it, the real look below it); nothing
+	## under the deck changes, so the column keeps its goo and the entrance stays lit.
+	var ring := MeshInstance3D.new()
+	ring.mesh = _ring()
+	var rm := _ring_mat()
+	rm.albedo_color = seat.lerp(Color.WHITE, 0.3)
+	ring.material_override = rm
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(ring)
+	up["ring"] = ring
+	up["ring_mat"] = rm
+	up["seat"] = seat
+	up["copies"].append(ring)
+	up["r_ent"] = 1.0
+	up["ent_top"] = -INF
+	_vat_copy(up, entry)
+	(up["mat"] as ShaderMaterial).set_shader_parameter("y_bot", float(up["y_base"]))
 	return up
 
 
@@ -345,6 +375,16 @@ func _fill_step(up: Dictionary, tb: Dictionary, n: Dictionary) -> void:
 	var y_mid: float = up["y_mid"]
 	var y_top: float = up["y_top"]
 	var fy: float
+	if STRUCTURE_ONLY:                                # the structure only: deck top -> its top over the whole build
+		fy = lerpf(float(up["y_base"]), y_top, p)
+		_reveal_step(up, tb, fy, maxf(p, LOWER_SHARE) if p < 1.0 else p)
+		var ms: ShaderMaterial = up["mat"]
+		ms.set_shader_parameter("y_top", y_top)
+		ms.set_shader_parameter("fill_y", fy + (0.3 if p >= 1.0 else 0.0))
+		ms.set_shader_parameter("done", 1.0 if p >= 1.0 else 0.0)
+		ms.set_shader_parameter("t", _t)
+		ms.set_shader_parameter("strength", clampf(p * 12.0, 0.35, 1.0))
+		return
 	if p < LOWER_SHARE:
 		fy = lerpf(wl.floor_y, y_mid, p / LOWER_SHARE)
 	else:
@@ -506,7 +546,15 @@ func _real_copy(src: Node3D, up: Dictionary, parent: Node = null) -> Node3D:
 
 
 func _end(i: int, up: Dictionary, tb: Dictionary, done: bool) -> void:
-	if done:
+	if done and STRUCTURE_ONLY:
+		docked += 1
+		var v0 = vis[tb["id"]].get("vat_node")         # a spark burst round the structure's foot as it turns solid
+		if v0 is Node3D and is_instance_valid(v0):
+			var at0 := (v0 as Node3D).global_position + Vector3(0, 0.3, 0)
+			for j in range(6 if not wl._low else 3):
+				var a := randf() * TAU
+				wl._add_drop(at0 + Vector3(cos(a), 0, sin(a)) * float(up.get("r_vat", 2.0)), Vector3(cos(a) * 2.0, randf_range(1.5, 3.0), sin(a) * 2.0), tb["base"])
+	elif done:
 		docked += 1
 		for k in range(4):                            # a spark burst at the base's corner sockets as the column turns solid
 			var c := WorldTubes.corner_dir(k) * (WorldTubes.APOTHEM + WorldTubes.SOCK_D)
@@ -524,7 +572,8 @@ func _end(i: int, up: Dictionary, tb: Dictionary, done: bool) -> void:
 	var v = vis[tb["id"]].get("vat_node")
 	if v is Node3D and is_instance_valid(v):
 		(v as Node3D).visible = true
-	tb["holo"] = false
 	_showing.erase(int(tb["id"]))
-	wl._sock_lit(tb, tb["base"] if (tb["mi"] as MeshInstance3D).visible else Color(0, 0, 0, 0))
+	if tb.get("holo", false):                         # (legacy path only: STRUCTURE_ONLY never hides the entrance)
+		tb["holo"] = false
+		wl._sock_lit(tb, tb["base"] if (tb["mi"] as MeshInstance3D).visible else Color(0, 0, 0, 0))
 	_ups.erase(i)

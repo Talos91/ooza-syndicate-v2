@@ -798,8 +798,8 @@ func _tubes_step(dt: float) -> void:
 		if drain > 0.0:
 			top_c.a *= 1.0 - drain
 			bot_c.a *= 1.0 - drain
-		if VatColumn.upgrading(n):                    # VAT COLUMN 2 / R4: the lift stays EMPTY glass while the upgrade builds
-			top_c.a = 0.0
+		if VatColumn.upgrading(n) and not VatColumn.STRUCTURE_ONLY:   # VAT COLUMN 2 / R4 (legacy): the lift EMPTY while the upgrade builds;
+			top_c.a = 0.0                             # Ooze 3.0: the vat keeps producing, the column keeps its goo
 			bot_c.a = 0.0
 		var sp: float = tb["inv"]
 		if tb["pushing"]:
