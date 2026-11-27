@@ -73,7 +73,7 @@ func _strait() -> void:
 	var ys_st := []
 	for n in lifts:
 		check(s.controlled_edges(n["id"]).is_empty(), "R-01: laser relay %d drives no deck" % n["id"])
-		check(n["buildable"] == ["laser"] and n["structure"] == "laser", "R-01: laser relay %d holds a laser, only a laser (%s / %s)" % [n["id"], n["buildable"], n["structure"]])
+		check(n["buildable"] == ["laser", "forge"] and n["structure"] == "laser", "R-01: laser relay %d holds its laser, may swap to a forge (0.25.3) (%s / %s)" % [n["id"], n["buildable"], n["structure"]])
 		check(s.relay_fixed(n["id"]) and s.relay_states(n).is_empty(), "R-01: laser relay %d is never fired" % n["id"])
 		n["owner"] = "A"
 		check(not s.fire_relay(n["id"]), "R-01: firing laser relay %d is refused" % n["id"])
@@ -280,7 +280,7 @@ func _wave2() -> void:
 			match str(n["relay"]):
 				"laser_relay":                        # LASER RELAY (2026-11-09): the old lifts, never fired
 					got[0] += 1
-					check(s.controlled_edges(n["id"]).is_empty() and n["buildable"] == ["laser"], "%s: laser relay %d holds only a laser, drives no deck" % [code, n["id"]])
+					check(s.controlled_edges(n["id"]).is_empty() and n["buildable"] == ["laser", "forge"], "%s: laser relay %d holds a laser or a forge (0.25.3), drives no deck" % [code, n["id"]])
 				"lift":
 					got[0] += 100                         # (no lift may be left)
 				"rotation":
@@ -541,6 +541,9 @@ func _play(code: String) -> void:
 
 
 func _init() -> void:
+	# OOZE 3.0 (WP1): the round-R / pool-G maps are 0.25 maps (not in the 3.0 build); they keep their 0.25 relay kinds (laser
+	# relays), which the 3.0 relay set archives - this suite checks them under the 0.25 rule.
+	Rules.RELAY_SET = false
 	_strait()
 	_pinwheel()
 	_gates()

@@ -1,27 +1,20 @@
 extends SceneTree
-## LAB rule options (WP4, 05 Handoff/handoffs/LAB-BUILD-PLAN 2026-11-23.md): headless checks of
-##   A  gat_own_platform - the Googatling fires only over its own platform (Daniele 2026-11-23: "covers only its node area not
-##      beyond (or we have spawn kill)"), and the card's gat_start (a T1 Googatling next to each home);
-##   C  relay_set - map L09R (lab4: one retract between the homes is the only short way across; the way round passes a neutral
-##      Googatling T3 at the top centre),
-##      no archived relay kind (lift / tilt / remote / laser_relay) on any lab map;
-##   B  quota_tier - quota by tier (a launch scores its node tier), relays never launch, the match ends by quota;
-##   D  lab4 jobs 2 + 5 - unit_speed (x travel speed and door rate), gat_range / gat_power / gat_ammo, the cards' choice sheet;
-##   E  lab4 job 3 - card COUNT SIZE: count_on_screen (the count on each vat's screen, vat_count.gd) + hud_badge off, count_scale
-##      x1.0 / x1.15 / x1.3 (a real match scene: labels per node with the badge's text, colour follows the owner, badges hidden);
-##   and the options-off identity (L11P AI vs AI equals the run recorded on the untouched lab tip 232c7787).
-##   Godot --headless --path . --script res://tests/test_lab_rules.gd        Exit code 0 = all passed.
+## OOZE 3.0 RULES (WP1, plan 05 Handoff/handoffs/3.0-ARCHITECTURE-PLAN 2026-11-27.md sec 2.2; Daniele's Desk answers 2026-11-27).
+## Was tests/test_lab_rules.gd (the lab4 rule options); the lab options are the game now, read from Rules static vars, and the
+## lab cards / overlay / count-size UI checks went with the lab UI (WP4 / WP6 own those files). Headless checks of
+##   A  the Googatling: reach = its own platform (Rules.GAT_REACH = R 7.6), never a neighbour platform or a deck;
+##   C  the relay set - map L09R (one retract between the homes; the way round passes a neutral Googatling T3), no archived kind;
+##   B  the quota is the Last Stand - a launch scores its node tier, relays never launch, the match ends by quota (and the
+##      legacy ring collapse still runs with Rules.quota = false);
+##   D  unit speed x0.75 (travel speed and door rate), Googatling reach / power / ammo (1 unit per 3 kills);
+##   F  3.0 node categories (normal / SPECIAL T4 / relay laser-or-juicer / relay special), vats produce while upgrading, the
+##      sinkhole rebuild (player and AI), no INWARD / OUTWARD Last Stand state, edge_kind, lab off + the lab_opt shim;
+##   and determinism (L11P AI vs AI twice = the same events).
+##   Godot --headless --path . --script res://tests/test_rules3.gd        Exit code 0 = all passed.
 
-const LabOverlay := preload("res://scripts/lab_overlay.gd")
-const LabCards := preload("res://scripts/lab_cards.gd")
-const LabMenu := preload("res://scripts/lab_menu.gd")
 const L09C := "res://maps4/L09C-clusters-9.json"
+const L09R := "res://maps4/L09R-relay-9.json"
 const L11P := "res://maps4/L11P-grid-11.json"
-# L11P, AI vs AI, seed 5 (A Standard null / B Veteran ember), all three WP4 options off: recorded on the untouched lab tip
-# 232c7787 before WP4 (hash = the chained hash of every event's text). Re-recorded on ac3bc1c2 (lab4 job 1 re-baked the lab maps;
-# was B 185.3 s, 163 events, 1116204576) and equal there before and after lab4 jobs 2 + 5 (their options at their defaults).
-const L11P_BEFORE := {"winner": "B", "time": 390.7, "events": 581, "hash": 4257610216}
-const OPTS := ["gat_own_platform", "gat_start", "quota_tier", "relay_set"]
 
 var failures := 0
 var _parts_done := 0                                 # each part counts itself at its end (a script error aborts a part)
@@ -33,19 +26,37 @@ func check(cond: bool, what: String) -> void:
 		failures += 1
 
 
+func _rules3() -> void:
+	## The 3.0 defaults (what rules.gd ships).
+	Rules.quota = true
+	Rules.JOINTS = true
+	Rules.RELAY_SET = true
+	Rules.GAT_REACH = Rules.R
+	Rules.GAT_POWER = 1.0
+	Rules.GAT_AMMO = 1.0 / 3.0
+	Rules.UNIT_SPEED = 0.75
+	Rules.VAT_UPGRADE_PAUSES = false
+
+
 func _opts(on: Dictionary) -> void:
-	for k in OPTS:
-		Rules.lab_opts[k] = bool(on.get(k, false))
-	Rules.lab_opts["joints"] = bool(on.get("joints", true))
+	## The old lab option names, mapped onto the 3.0 rule vars (unnamed = the 0.25 game). joints default on.
+	Rules.GAT_REACH = Rules.R if bool(on.get("gat_own_platform", false)) else Rules.MACHINEGOON_RANGE
+	Rules.quota = bool(on.get("quota_tier", false))
+	Rules.RELAY_SET = bool(on.get("relay_set", false))
+	Rules.JOINTS = bool(on.get("joints", true))
 
 
-func _sim(path: String, seed_value := 5) -> Sim:
+func _sim(path: String, seed_value := 5, loadouts := {}) -> Sim:
 	var m := MapBuilder.load_map(path)
+	return _sim_m(m, seed_value, loadouts)
+
+
+func _sim_m(m: Dictionary, seed_value := 5, loadouts := {}) -> Sim:
 	var seats := {}
 	for s in m["seats"]["1v1"]:
 		seats[int(s["node"])] = s["seat"]
 	var sim := Sim.new()
-	sim.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "ember"}, seed_value)
+	sim.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "ember"}, seed_value, {}, loadouts)
 	return sim
 
 
@@ -98,38 +109,35 @@ func _shot(sim: Sim, gat: int, h: Dictionary) -> bool:
 	return float(h["units"]) < before - 0.0001
 
 
+func _gun(sim: Sim, id: int, seat := "A", tier := 1) -> void:
+	var n: Dictionary = sim.nodes[id]
+	n["owner"] = seat
+	n["structure"] = "machinegoon"
+	n["tier"] = tier
+	n["units"] = Sim.gat_cap(n)
+
+
 func _part_a() -> void:
-	# ------------------------------------------------------------ A: card start + own platform only
-	_opts({"gat_own_platform": true, "gat_start": true})
-	check(is_equal_approx(Sim.gat_reach(), Rules.R), "own platform: reach = platform radius %.1f m (got %.2f)" % [Rules.R, Sim.gat_reach()])
+	# ------------------------------------------------------------ A: the Googatling covers its own platform only (3.0 default)
+	# (L09C is baked at R 6: its joint platforms overlap at R 7.6 until WP2 rebakes, so distances are taken from Rules.R)
+	_rules3()
+	check(is_equal_approx(Sim.gat_reach(), Rules.R) and is_equal_approx(Rules.R, 7.6), "3.0: reach = own platform radius %.1f m (got %.2f)" % [Rules.R, Sim.gat_reach()])
 	var sim := _sim(L09C)
-	var gats := sim.nodes.filter(func(n): return n["structure"] == "machinegoon")
-	check(gats.size() == 2, "gat_start: two Googatlings at the start on L09C (got %d)" % gats.size())
-	var by_seat := {}
-	for n in gats:
-		by_seat[n["owner"]] = n["id"]
-	check(by_seat.get("A", -1) == 1 and by_seat.get("B", -1) == 7, "gat_start: A on node 1, B on node 7 (mirror; got %s)" % str(by_seat))
-	var ga: int = by_seat.get("A", 1)
-	check(int(sim.nodes[ga]["tier"]) == 1 and float(sim.nodes[ga]["units"]) >= Sim.gat_cap(sim.nodes[ga]) - 0.01,
-			"gat_start: T1, full ammo (%.0f)" % float(sim.nodes[ga]["units"]))
-	# B lines: on the joint neighbour's platform (node 2, 7 m from the gun), on the deck 1-3 (8 m), on the gun's own platform (3 m)
-	for opt in [true, false]:
-		Rules.lab_opts["gat_own_platform"] = opt
-		var cases := [["neighbour platform (joint 2-1), 7 m", [2, 1], 7.0, not opt],
-				["deck 3-1, 8 m", [3, 1], 8.0, not opt],
-				["own platform, 3 m", [2, 1], 3.0, true]]
-		for cs in cases:
-			sim.hordes.clear()
-			var h := _line_at(sim, "B", cs[1], ga, cs[2])
-			var hd: float = (sim.nodes[ga]["pos"] as Vector3).distance_to(Sim.sample(h, h["s"])[0])
-			var hit := _shot(sim, ga, h)
-			check(hit == cs[3], "own_platform=%s: line on %s (head %.1f m) %s" % [opt, cs[0], hd, "hit" if cs[3] else "not hit"])
+	var ga := 1
+	_gun(sim, ga)
+	for cs in [["neighbour platform (joint 2-1), R + 1 m", [2, 1], Rules.R + 1.0, false],
+			["deck 3-1, R + 1.5 m", [3, 1], Rules.R + 1.5, false],
+			["own platform, 3 m", [2, 1], 3.0, true],
+			["own platform, R - 0.5 m", [3, 1], Rules.R - 0.5, true]]:
+		sim.hordes.clear()
+		var h := _line_at(sim, "B", cs[1], ga, cs[2])
+		var hd: float = (sim.nodes[ga]["pos"] as Vector3).distance_to(Sim.sample(h, h["s"])[0])
+		var hit := _shot(sim, ga, h)
+		check(hit == cs[3], "3.0 Googatling: line on %s (head %.1f m) %s" % [cs[0], hd, "hit" if cs[3] else "not hit"])
 	sim.hordes.clear()
-	Rules.lab_opts["gat_own_platform"] = true
-	check(LabOverlay.rules_line(sim).contains("gat: own platform"), "overlay: '%s'" % LabOverlay.rules_line(sim))
 	_opts({})
-	check(LabOverlay.rules_line(_sim(L09C)) == "", "overlay: no rule line with the options off")
-	check(is_equal_approx(Sim.gat_reach(), Rules.MACHINEGOON_RANGE), "option off: reach back to MACHINEGOON_RANGE")
+	check(is_equal_approx(Sim.gat_reach(), Rules.MACHINEGOON_RANGE), "legacy (GAT_REACH = MACHINEGOON_RANGE): reach 10 m")
+	_rules3()
 	_parts_done += 1
 
 
@@ -150,8 +158,7 @@ func _relay_kill(sim: Sim, relay: int, route: Array, what: String) -> void:
 func _part_c() -> void:
 	# ------------------------------------------------------------ C: relay set, map L09R
 	_opts({"relay_set": true, "gat_own_platform": true})
-	var path := LabCards.map_path("L09R")
-	check(path != "" and path in MapPool.battlefield(), "L09R baked and offered (%s)" % path)
+	var path := L09R                                  # (which maps the pickers offer is WP2's: MapPool)
 	var sim := _sim(path)
 	var plats := sim.nodes.filter(func(n): return n["node_kind"] != "relay")
 	check(plats.size() == 9, "L09R: 9 platforms + %d relay nodes (got %d platforms)" % [sim.nodes.size() - plats.size(), plats.size()])
@@ -225,7 +232,7 @@ func _qsim(path: String) -> Sim:
 func _part_b() -> void:
 	# ------------------------------------------------------------ B: quota by tier (port of the demo's tests/test_quota.gd)
 	_opts({"quota_tier": true, "gat_own_platform": true, "relay_set": true})
-	check(Rules.quota, "quota_tier on: Rules.quota")
+	check(Rules.quota, "quota on: Rules.quota")
 	var a := 0
 	var b := 4                                        # L11P homes
 	var sim := _qsim(L11P)
@@ -252,7 +259,6 @@ func _part_b() -> void:
 	sim._drop_node(6)
 	check(sim.quota_of("A") == 4 and sim.quota_of("B") == 2 and str(sim.quota_last_side) == "", "neutral launch pays nobody")
 	check(not sim.over, "no end with a 2-point lead and %d points on the board" % sim.quota_points_left())
-	check(LabOverlay.rules_line(sim).begins_with("quota A 4 - B 2, %d left" % sim.quota_left()), "overlay: '%s'" % LabOverlay.rules_line(sim))
 	check(sim.quota_readout().contains("A 4 · B 2"), "HUD readout: '%s'" % sim.quota_readout())
 	# 2. unreachable lead: lead > the points still on the board ends it; lead == points goes on
 	sim = _qsim(L11P)
@@ -296,7 +302,7 @@ func _part_b() -> void:
 	sim._vls_queue_next()
 	check(sim.last_stand_warn_node == b, "QUOTA: the last platform is queued to launch too")
 	# 6. relays never launch (L09R: 9 platforms, 1 relay)
-	var rpath := LabCards.map_path("L09R")
+	var rpath := L09R
 	sim = _sim(rpath, 3)
 	check(sim.quota_left() == 9 and not Sim.launchable(sim.nodes[9]), "L09R: 9 platforms to launch, the relay never (%d)" % sim.quota_left())
 	sim.start_last_stand_now()
@@ -308,7 +314,7 @@ func _part_b() -> void:
 	check(sim.quota == q0 and not sim.events.any(func(e): return e["type"] == "launch" and e["node"] == 9), "a dropped relay scores nothing")
 	# 7. full AI matches with quota on: they end, every point is an owned launch at its tier, homes launch last, no relay launches
 	for path in [L11P, rpath]:
-		Rules.lab_opts["quota_tier"] = true
+		_rules3()                                     # the 3.0 game: quota, unit speed x0.75, Googatling 1 per 3 kills
 		sim = _sim(path, 11)
 		_ai_match(sim, Rules.MATCH_HARD_END + 5.0)
 		var launches := sim.events.filter(func(e): return e["type"] == "launch")
@@ -335,7 +341,7 @@ func _part_b() -> void:
 		check(not launches.any(func(e): return sim.nodes[int(e["node"])]["node_kind"] == "relay"), "%s: no relay launched" % code)
 	# 8. quota OFF: a drop scores nothing, no launch; the plain lab maps keep no Last Stand
 	_opts({})
-	check(not Rules.quota, "quota_tier off: Rules.quota off")
+	check(not Rules.quota, "legacy Rules.quota = false: the ring collapse")
 	sim = _qsim(L11P)
 	# (lab4 job 4: the check reads the rings from the map file. lab3 hard-coded home ring 1; lab4 job 1 built L11P into the zoom
 	# box, its homes moved inside the 18 m ellipse and the generator now gives them ring 0 - the same as their quota ring, so
@@ -357,8 +363,8 @@ func _part_b() -> void:
 
 
 func _walked(speed: float, dt_total := 0.5) -> float:
-	## Metres a B line walks along deck 3-1 of L09C in dt_total s at lab option unit_speed = speed.
-	Rules.lab_opts["unit_speed"] = speed
+	## Metres a B line walks along deck 3-1 of L09C in dt_total s at Rules.UNIT_SPEED = speed.
+	Rules.UNIT_SPEED = speed
 	var sim := _sim(L09C)
 	var h := sim._new_horde("B", 2.0, [3, 1])
 	h["units"] = 2.0
@@ -375,54 +381,45 @@ func _walked(speed: float, dt_total := 0.5) -> float:
 
 
 func _part_d() -> void:
-	# ------------------------------------------------------------ D: lab4 options (unit speed, Googatling range / power / ammo)
-	var saved: Dictionary = Rules.lab_opts.duplicate(true)
-	_opts({})
-	# unit_speed: travel speed and door rate scale together (spacing kept); 1.0 outside the lab
+	# ------------------------------------------------------------ D: unit speed, Googatling reach / power / ammo
+	_rules3()
+	check(Rules.UNIT_SPEED == 0.75 and is_equal_approx(Rules.move_speed(), Rules.BRAWL_SPEED * 0.75)
+			and is_equal_approx(Rules.exit_rate(), Rules.BRAWL_DOOR_RATE * 0.75),
+			"3.0 unit speed x0.75 (Daniele 11-27): move %.3f m/s, door %.2f units/s" % [Rules.move_speed(), Rules.exit_rate()])
 	var base := _walked(1.0)
-	for sp in [0.9, 0.8]:
+	for sp in [0.75, 0.9]:
 		var d := _walked(sp)
-		check(absf(d / base - sp) < 0.005, "unit_speed x%.1f: walks %.3f m vs %.3f m in 0.5 s (ratio %.4f)" % [sp, d, base, d / base])
-		check(is_equal_approx(Rules.move_speed(), Rules.BRAWL_SPEED * sp) and is_equal_approx(Rules.exit_rate(), Rules.BRAWL_DOOR_RATE * sp)
-				and is_equal_approx(Rules.metres_per_unit(), Rules.BRAWL_SPEED / Rules.BRAWL_DOOR_RATE),
-				"unit_speed x%.1f: move_speed %.3f, door rate %.3f, spacing unchanged" % [sp, Rules.move_speed(), Rules.exit_rate()])
-	Rules.lab_opts["unit_speed"] = 1.0
+		check(absf(d / base - sp) < 0.005, "UNIT_SPEED x%.2f: walks %.3f m vs %.3f m in 0.5 s (ratio %.4f)" % [sp, d, base, d / base])
+		check(is_equal_approx(Rules.metres_per_unit(), Rules.BRAWL_SPEED / Rules.BRAWL_DOOR_RATE),
+				"UNIT_SPEED x%.2f: spacing unchanged" % sp)
+	Rules.UNIT_SPEED = 1.0
 	var hop1: Vector2 = _sim(L09C).joint_hops()
-	Rules.lab_opts["unit_speed"] = 0.8
-	var hop8: Vector2 = _sim(L09C).joint_hops()
-	check(absf(hop8.x * 0.8 - hop1.x) < 0.01, "unit_speed x0.8: cluster hop %.2f s -> %.2f s (overlay readout follows)" % [hop1.x, hop8.x])
-	check(LabOverlay.rules_line(_sim(L09C)).contains("speed x0.8"), "overlay: '%s'" % LabOverlay.rules_line(_sim(L09C)))
-	Rules.lab = false
-	check(is_equal_approx(Rules.move_speed(), Rules.BRAWL_SPEED), "unit_speed ignored outside the lab build")
-	Rules.lab = true
-	Rules.lab_opts["unit_speed"] = 1.0
-	check(Rules.move_speed() == Rules.BRAWL_SPEED and Rules.exit_rate() == Rules.BRAWL_DOOR_RATE, "unit_speed x1.0 = BRAWL_SPEED exactly")
-	# gat_range: 6 / 8 / 10 m from the node centre (over gat_own_platform)
-	_opts({"gat_own_platform": true, "gat_start": true})
+	Rules.UNIT_SPEED = 0.75
+	var hop75: Vector2 = _sim(L09C).joint_hops()
+	check(absf(hop75.x * 0.75 - hop1.x) < 0.01, "UNIT_SPEED x0.75: cluster hop %.2f s -> %.2f s" % [hop1.x, hop75.x])
+	# reach: 5 / 8 / 10 m from the node centre
 	var sim := _sim(L09C)
 	var ga := 1
-	for cs in [[6.0, [[2, 1], 4.0, true], [[2, 1], 7.0, false], [[3, 1], 9.0, false]],
+	_gun(sim, ga)
+	for cs in [[5.0, [[2, 1], 4.0, true], [[2, 1], 7.0, false], [[3, 1], 9.0, false]],
 			[8.0, [[2, 1], 4.0, true], [[2, 1], 7.0, true], [[3, 1], 9.0, false]],
 			[10.0, [[2, 1], 4.0, true], [[2, 1], 7.0, true], [[3, 1], 9.0, true]]]:
-		Rules.lab_opts["gat_range"] = cs[0]
-		check(is_equal_approx(Sim.gat_reach(), cs[0]), "gat_range %.0f: reach %.1f m" % [cs[0], Sim.gat_reach()])
+		Rules.GAT_REACH = cs[0]
+		check(is_equal_approx(Sim.gat_reach(), cs[0]), "GAT_REACH %.0f: reach %.1f m" % [cs[0], Sim.gat_reach()])
 		for k in [1, 2, 3]:
 			var c: Array = cs[k]
 			sim.hordes.clear()
 			sim.nodes[ga]["units"] = Sim.gat_cap(sim.nodes[ga])
 			var h := _line_at(sim, "B", c[0], ga, c[1])
 			var hd: float = (sim.nodes[ga]["pos"] as Vector3).distance_to(Sim.sample(h, h["s"])[0])
-			check(_shot(sim, ga, h) == c[2], "gat_range %.0f: line head %.1f m %s" % [cs[0], hd, "hit" if c[2] else "not hit"])
-	Rules.lab_opts["gat_range"] = 8.0
-	check(LabOverlay.rules_line(sim).contains("reach 8 m"), "overlay: '%s'" % LabOverlay.rules_line(sim))
-	Rules.lab_opts["gat_range"] = 0.0
-	check(is_equal_approx(Sim.gat_reach(), Rules.R), "gat_range 0 (default): reach back to own platform %.1f m" % Sim.gat_reach())
-	# gat_power and gat_ammo: one 0.1 s shot at a big line on the gun's own platform
+			check(_shot(sim, ga, h) == c[2], "GAT_REACH %.0f: line head %.1f m %s" % [cs[0], hd, "hit" if c[2] else "not hit"])
+	Rules.GAT_REACH = Rules.R
+	# power and ammo: one 0.1 s shot at a big line on the gun's own platform
 	var shots := {}
-	for pw in [1.0, 1.5, 2.0]:
-		for am in [1.0, 0.5, 0.0]:
-			Rules.lab_opts["gat_power"] = pw
-			Rules.lab_opts["gat_ammo"] = am
+	for pw in [1.0, 1.5]:
+		for am in [1.0, 1.0 / 3.0, 0.0]:
+			Rules.GAT_POWER = pw
+			Rules.GAT_AMMO = am
 			sim.hordes.clear()
 			sim.nodes[ga]["units"] = Sim.gat_cap(sim.nodes[ga])
 			var g0: float = sim.nodes[ga]["units"]
@@ -430,191 +427,169 @@ func _part_d() -> void:
 			h["units"] = 100.0
 			var u0: float = h["units"]
 			_shot(sim, ga, h)
-			shots["%s/%s" % [pw, am]] = [u0 - float(h["units"]), g0 - float(sim.nodes[ga]["units"])]
+			shots["%s/%s" % [pw, snappedf(am, 0.01)]] = [u0 - float(h["units"]), g0 - float(sim.nodes[ga]["units"])]
 	var k1: float = shots["1.0/1.0"][0]
 	check(is_equal_approx(k1, 8.0 * 0.1) and is_equal_approx(shots["1.0/1.0"][1], k1),
-			"default x1 / 1 per kill: T1 kills %.2f in 0.1 s (MACHINEGOON_RATE 8/s), spends %.2f" % [k1, shots["1.0/1.0"][1]])
-	for pw in [1.5, 2.0]:
-		var kk: float = shots["%s/1.0" % pw][0]
-		check(is_equal_approx(kk, k1 * pw), "gat_power x%s: kills %.2f in 0.1 s (x%.2f)" % [pw, kk, kk / k1])
-	for am in [0.5, 0.0]:
-		for pw in [1.0, 2.0]:
-			var r: Array = shots["%s/%s" % [pw, am]]
-			check(is_equal_approx(r[1], r[0] * am), "gat_ammo %s (power x%s): kills %.2f, spends %.2f own units" % [am, pw, r[0], r[1]])
-	# empty garrison: 1 per kill does not fire; free ammo fires
-	for am in [1.0, 0.0]:
-		Rules.lab_opts["gat_power"] = 1.0
-		Rules.lab_opts["gat_ammo"] = am
+			"x1 / 1 per kill: T1 kills %.2f in 0.1 s (MACHINEGOON_RATE 8/s), spends %.2f" % [k1, shots["1.0/1.0"][1]])
+	check(is_equal_approx(shots["1.5/1.0"][0], k1 * 1.5), "GAT_POWER x1.5: kills %.2f in 0.1 s" % shots["1.5/1.0"][0])
+	var r3: Array = shots["1.0/0.33"]
+	check(is_equal_approx(r3[0], k1) and absf(r3[1] - r3[0] / 3.0) < 0.0001,
+			"3.0 ammo (Daniele 11-27 '1 unit per 3 kills'): kills %.2f, spends %.3f own units" % [r3[0], r3[1]])
+	var r0: Array = shots["1.0/0.0"]
+	check(is_equal_approx(r0[1], 0.0), "GAT_AMMO 0: free (spends %.2f)" % r0[1])
+	for am in [1.0 / 3.0, 0.0]:
+		Rules.GAT_POWER = 1.0
+		Rules.GAT_AMMO = am
 		sim.hordes.clear()
 		sim.nodes[ga]["units"] = 0.0
 		var h := _line_at(sim, "B", [2, 1], ga, 3.0)
-		check(_shot(sim, ga, h) == (am == 0.0), "gat_ammo %s, empty garrison: %s" % [am, "fires" if am == 0.0 else "silent"])
-	Rules.lab_opts["gat_ammo"] = 0.5
-	Rules.lab_opts["gat_power"] = 1.5
-	sim.hordes.clear()
-	var rl := LabOverlay.rules_line(sim)
-	check(rl.contains("power x1.5") and rl.contains("1 per 2 kills"), "overlay: '%s'" % rl)
-	# the cards: values[0] = today's behaviour; a pick lands in Rules.lab_opts
-	Rules.lab_opts = saved.duplicate(true)
-	LabMenu._defaults = saved.duplicate(true)
-	var hop := LabCards.find("hop")
-	var gat := LabCards.find("gat")
-	LabMenu.picks = {}
-	LabMenu.apply_card(gat)
-	check(is_equal_approx(Sim.gat_reach(), Rules.R) and Rules.lab_opt("gat_power") == 1.0 and Rules.lab_opt("gat_ammo") == 1.0,
-			"card gat, no pick: reach %.1f m, x1, 1 per kill (today's)" % Sim.gat_reach())
-	LabMenu.apply_card(hop)
-	check(Rules.lab_opt("unit_speed") == 1.0 and LabMenu.pick_tag(hop) == "x1.0", "card hop, no pick: x1.0")
-	LabMenu.picks = {"hop": {"unit_speed": 1}, "gat": {"gat_range": 2, "gat_power": 1, "gat_ammo": 1}}
-	LabMenu.apply_card(hop)
-	check(is_equal_approx(Rules.unit_speed(), 0.9) and LabMenu.pick_tag(hop) == "x0.9", "card hop, pick 2: x0.9 (%s)" % LabMenu.pick_tag(hop))
-	LabMenu.apply_card(gat)
-	check(is_equal_approx(Sim.gat_reach(), 10.0) and Rules.lab_opt("gat_power") == 1.5 and Rules.lab_opt("gat_ammo") == 0.5
-			and Rules.lab_opt("unit_speed") == 1.0, "card gat, picks: %s (hop's speed not carried over)" % LabMenu.pick_tag(gat))
-	LabMenu.picks = {}
-	LabMenu.reset_card()
-	LabMenu._defaults = {}
-	Rules.lab_opts = saved.duplicate(true)
+		check(_shot(sim, ga, h) == (am == 0.0), "GAT_AMMO %.2f, empty garrison: %s" % [am, "fires" if am == 0.0 else "silent"])
+	_rules3()
 	_parts_done += 1
 
 
-func _identity() -> void:
-	# ------------------------------------------------------------ options off: L11P unchanged
-	_opts({})
-	var sim := _sim(L11P)
-	_ai_match(sim)
-	var got := {"winner": sim.winner, "time": snappedf(sim.time, 0.1), "events": sim.events.size(), "hash": _events_hash(sim)}
-	print("L11P options off: %s" % str(got))
-	check(got["winner"] == L11P_BEFORE["winner"] and is_equal_approx(got["time"], L11P_BEFORE["time"]) \
-			and got["events"] == L11P_BEFORE["events"] and got["hash"] == L11P_BEFORE["hash"],
-			"options off: L11P AI vs AI identical to the pre-WP4 run %s" % str(L11P_BEFORE))
+func _determinism() -> void:
+	# ------------------------------------------------------------ L11P AI vs AI twice under the 3.0 rules: the same match
+	# (replaces lab4's options-off golden replay: the 3.0 sizes and rules changed every event, a fixed hash would only freeze them)
+	_rules3()
+	var got := []
+	for k in range(2):
+		var sim := _sim(L11P)
+		_ai_match(sim, Rules.MATCH_HARD_END + 5.0)
+		got.append({"winner": sim.winner, "time": snappedf(sim.time, 0.1), "events": sim.events.size(), "hash": _events_hash(sim),
+				"reason": sim.quota_reason})
+	print("L11P 3.0 AI vs AI: %s" % str(got[0]))
+	check(got[0] == got[1], "L11P AI vs AI twice: identical (%s)" % str(got[1]))
+	_parts_done += 1
+
+
+func _special_map() -> Dictionary:
+	## L09C with its centre (node 4) a map-placed neutral T4: setup makes it a SPECIAL node.
+	var m := MapBuilder.load_map(L09C)
+	for n in m["nodes"]:
+		if int(n["id"]) == 4:
+			n["neutral"] = {"tier": 4}
+	return m
+
+
+func _part_f() -> void:
+	# ------------------------------------------------------------ F: 3.0 node categories, upgrades, sinkhole rebuild, Last Stand
+	_rules3()
+	# lab off + the shim
+	check(not Rules.lab, "3.0: Rules.lab is false (VERSION %s)" % Rules.VERSION)
+	check(Rules.lab_opt("quota_tier") == true and Rules.lab_opt("joints") == true and Rules.lab_opt("relay_set") == true
+			and is_equal_approx(float(Rules.lab_opt("gat_ammo")), 1.0 / 3.0) and is_equal_approx(float(Rules.lab_opt("unit_speed")), 0.75)
+			and is_equal_approx(float(Rules.lab_opt("gat_range")), Rules.R) and Rules.lab_opt("count_on_screen") == true
+			and Rules.lab_opt("hud_badge") == false and Rules.lab_opt("cam_lock") == true and Rules.lab_opt("gat_start") == false,
+			"lab_opt shim answers the 3.0 values")
+	# SPECIAL: always a T4 vat, indestructible, irreplaceable
+	var sl := {"A": {"active": "sinkhole"}, "B": {"active": "sinkhole"}}
+	var sim := _sim_m(_special_map(), 5, sl)
+	var sp: Dictionary = sim.nodes[4]
+	check(Sim.node_category(sp) == "special" and int(sp["tier"]) == 4 and sp["structure"] == "vat" and sp["buildable"] == ["vat"],
+			"SPECIAL: a map T4 is its own category, a T4 vat, builds only its vat (%s T%d %s)" % [Sim.node_category(sp), int(sp["tier"]), str(sp["buildable"])])
+	sp["owner"] = "B"
+	sp["units"] = 500.0
+	check(sim.can_build(4, "B", "machinegoon") != "", "SPECIAL: irreplaceable - no Googatling (%s)" % sim.can_build(4, "B", "machinegoon"))
+	check(sim.can_build(4, "B", "laser") != "" and sim.can_build(4, "B", "forge") != "", "SPECIAL: no relay structure either")
+	check(sim.can_upgrade(4, "B") != "", "SPECIAL: no tier above T4 (%s)" % sim.can_upgrade(4, "B"))
+	check(sim.cast_check("A", "active", 4) != "", "SPECIAL: a Sinkhole is refused (%s)" % sim.cast_check("A", "active", 4))
+	sim._sinkhole("A", sp)
+	check(int(sp["tier"]) == 4 and sp["structure"] == "vat", "SPECIAL: indestructible even when a Sinkhole lands (T%d %s)" % [int(sp["tier"]), sp["structure"]])
+	sim._land_classic(sp, "A", 600.0)
+	check(sp["owner"] == "A" and int(sp["tier"]) == 4 and sp["structure"] == "vat" and Sim.node_category(sp) == "special",
+			"SPECIAL: captured, it stays a T4 vat of its category (owner %s T%d %s)" % [sp["owner"], int(sp["tier"]), sp["structure"]])
+	check(sim.can_build(4, "A", "machinegoon") != "", "SPECIAL: the capturer cannot turn it into another structure")
+	# NORMAL: a vat or a Googatling, T1-T3, never T4
+	var nn: Dictionary = sim.nodes[3]
+	nn["owner"] = "A"
+	nn["units"] = 900.0
+	nn["tier"] = 3
+	nn["structure"] = "vat"
+	check(Sim.node_category(nn) == "normal" and nn["buildable"] == ["vat", "machinegoon"], "NORMAL: vat or Googatling (%s)" % str(nn["buildable"]))
+	check(sim.can_upgrade(3, "A") != "" and not sim.upgrade(3, "A") and int(nn["tier"]) == 3,
+			"NORMAL: a T3 vat cannot go to T4 (%s)" % sim.can_upgrade(3, "A"))
+	nn["structure"] = "machinegoon"
+	check(sim.can_upgrade(3, "A") != "", "NORMAL: a T3 Googatling cannot go to T4 either")
+	nn["structure"] = "vat"
+	# vats produce while upgrading (Daniele 11-27)
+	nn["tier"] = 1
+	nn["units"] = float(sim.upgrade_cost(nn)) + 20.0      # (well under the T1 cap, so production shows)
+	check(sim.upgrade(3, "A") and nn["build_kind"] == "vat" and not Sim.vat_paused(nn), "a vat upgrade starts; the vat is not paused")
+	var u0: float = nn["units"]
+	for i in range(20):
+		sim.step(0.05)
+	check(float(nn["units"]) > u0 + 0.01 and nn["build_kind"] == "vat",
+			"a vat under upgrade gains units (%.2f -> %.2f in 1 s, still upgrading)" % [u0, float(nn["units"])])
+	Rules.VAT_UPGRADE_PAUSES = true
+	var u1: float = nn["units"]
+	for i in range(20):
+		sim.step(0.05)
+	check(absf(float(nn["units"]) - u1) < 0.001, "legacy VAT_UPGRADE_PAUSES = true: paused (%.2f -> %.2f)" % [u1, float(nn["units"])])
+	Rules.VAT_UPGRADE_PAUSES = false
+	# RELAY: a laser or a juicer only
+	var rs := _sim(L09R)
+	var rn: Dictionary = rs.nodes[9]
+	rn["owner"] = "A"
+	rn["units"] = 900.0
+	check(Sim.node_category(rn) == "relay" and rn["buildable"] == ["laser", "forge"], "RELAY: offers laser or juicer only (%s)" % str(rn["buildable"]))
+	check(rs.can_build(9, "A", "monster_hub") != "" and rs.can_build(9, "A", "vat") != "" and rs.can_build(9, "A", "machinegoon") != "",
+			"RELAY: no monster hub, vat or Googatling (%s)" % rs.can_build(9, "A", "monster_hub"))
+	check(rs.can_build(9, "A", "laser") == "" and rs.can_build(9, "A", "forge") == "", "RELAY: laser and juicer both buildable")
+	check(Sim.STRUCTURE_NAMES["forge"] == "Juicer" and rs.can_build(9, "A", "monster_hub").contains("Juicer"),
+			"the forge is called Juicer ('%s')" % rs.can_build(9, "A", "monster_hub"))
+	var ln := {"node_kind": "relay", "relay": "launcher"}
+	check(Sim.node_category(ln) == "relay_special", "RELAY SPECIAL: the launcher's slot is its own category")
+	# a node can be rebuilt after a sinkhole (player, then AI)
+	var ks := _sim(L09C, 5, sl)
+	var kn: Dictionary = ks.nodes[3]
+	kn["owner"] = "B"
+	kn["tier"] = 1
+	kn["structure"] = "vat"
+	kn["units"] = 30.0
+	ks._sinkhole("A", kn)
+	check(kn["structure"] == "" and kn["owner"] == "B", "Sinkhole: a T1 vat is destroyed, the node stays B's")
+	kn["units"] = 200.0
+	check(ks.can_build(3, "B", "vat") == "" and ks.build(3, "B", "vat"), "SINKHOLE REBUILD: the owner builds the vat again (%s)" % ks.can_build(3, "B", "vat"))
+	for i in range(int(Rules.BUILD_SECONDS / 0.1) + 2):
+		ks.step(0.1)
+	check(kn["structure"] == "vat" and int(kn["tier"]) == 1, "SINKHOLE REBUILD: the vat stands again (%s T%d)" % [kn["structure"], int(kn["tier"])])
+	ks._sinkhole("A", kn)
+	kn["units"] = 200.0
+	var ai := SeatAI.new("B", 2.0, "Standard")
+	for i in range(60):
+		ai.think(ks, 0.1)
+		ks.step(0.1)
+		if kn["build_kind"] != "" or kn["structure"] != "":
+			break
+	check(kn["build_kind"] == "vat_restore" or kn["structure"] == "vat", "SINKHOLE REBUILD: the AI rebuilds its emptied node (%s / %s)" % [kn["build_kind"], kn["structure"]])
+	# Last Stand = the quota: no INWARD / OUTWARD state
+	var ls := _sim(L11P)
+	ls.start_last_stand_now()
+	check(ls.last_stand_active and ls.last_stand_method == "quota", "Last Stand: the quota names it, no method (got '%s')" % ls.last_stand_method)
+	check(ls.events.any(func(e): return e["type"] == "last_stand" and e["method"] == "quota"), "the last_stand event says quota")
+	# edge kinds (the one read for special bridges)
+	var es := _sim(L09C)
+	var kinds := {}
+	for ei in range(es.edges.size()):
+		kinds[es.edge_kind(ei)] = kinds.get(es.edge_kind(ei), 0) + 1
+	check(kinds.has("joint") and kinds.has("deck") and kinds.size() == 2, "edge_kind on L09C: joints and decks only %s" % str(kinds))
+	check(es.nodes.all(func(n): return n.has("edge_rule") and n["edge_rule"] == ""), "nodes carry an empty edge_rule (hook, ignored now)")
+	Rules.JOINTS = false
+	var es2 := _sim(L09C)
+	check(not range(es2.edges.size()).any(func(ei): return es2.edge_kind(ei) == "joint"), "JOINTS false (legacy): no joint edge")
+	_rules3()
 	_parts_done += 1
 
 
 func _init() -> void:
-	check(Rules.lab, "a lab build (VERSION %s)" % Rules.VERSION)
 	_part_a()
 	_part_c()
 	_part_b()
 	_part_d()
-	_identity()
-	_opts({"gat_own_platform": true, "relay_set": true})
-
-
-func _initialize() -> void:
-	_finish.call_deferred()                          # part E needs the main loop (a match scene)
-
-
-func _finish() -> void:
-	await _part_e()
-	check(_parts_done == 6, "every part ran to its end (A, C, B, D, identity, E: %d of 6)" % _parts_done)
-	print("test_lab_rules: %s" % ("ALL PASSED" if failures == 0 else "%d FAILED" % failures))
+	_part_f()
+	_determinism()
+	_rules3()
+	check(_parts_done == 6, "every part ran to its end (A, C, B, D, F, determinism: %d of 6)" % _parts_done)
+	print("test_rules3: %s" % ("ALL PASSED" if failures == 0 else "%d FAILED" % failures))
 	quit(1 if failures > 0 else 0)
-
-
-func _frames(n: int) -> void:
-	for i in range(n):
-		await process_frame
-
-
-func _launch(card: Dictionary) -> Node:
-	LabMenu.apply_card(card)
-	load("res://scripts/main.gd").relaunch = {"faction": "vex", "rival": "null", "mode": "1v1", "ai": "Standard",
-			"map": LabCards.map_path(str(card["map"]))}
-	change_scene_to_file("res://main.tscn")
-	await _frames(45)
-	return current_scene
-
-
-func _part_e() -> void:
-	# ------------------------------------------------------------ E: card COUNT SIZE (lab4 job 3)
-	var VatCount = load("res://scripts/vat_count.gd")      # (loaded here: it reaches Hud, which needs the autoloads)
-	var saved: Dictionary = Rules.lab_opts.duplicate(true)
-	check(not bool(Rules.lab_opt("count_on_screen")) and bool(Rules.lab_opt("hud_badge")) and Rules.lab_opt("count_scale") == 1.0,
-			"count options default off in the lab (no vat-screen count, HUD badge on, x1.0)")
-	Rules.lab = false
-	check(bool(Rules.lab_opt("hud_badge")) and not bool(Rules.lab_opt("count_on_screen")), "outside the lab: HUD badge on, no vat-screen count")
-	Rules.lab = true
-	var card := LabCards.find("count")
-	check(bool(card.get("live", false)) and str(card["map"]) == "L11C" and LabCards.map_path("L11C") != "",
-			"card COUNT SIZE live on L11C (%s)" % LabCards.map_path("L11C"))
-	var ch: Dictionary = (card.get("choices", []) as Array)[0] if not (card.get("choices", []) as Array).is_empty() else {}
-	check(ch.get("key", "") == "count_scale" and ch.get("values", []) == [1.0, 1.15, 1.3] and ch.get("names", []) == ["x1.0", "x1.15", "x1.3"],
-			"card COUNT SIZE: choice sheet x1.0 / x1.15 / x1.3")
-	LabMenu._defaults = saved.duplicate(true)
-	LabMenu.picks = {}
-	LabMenu.apply_card(card)
-	check(bool(Rules.lab_opt("count_on_screen")) and not bool(Rules.lab_opt("hud_badge")) and Rules.lab_opt("count_scale") == 1.0
-			and LabMenu.pick_tag(card) == "x1.0", "card count, no pick: on screen, badge off, x1.0")
-	var digit := {}
-	for k in [1, 0]:                                 # x1.15 first (Daniele's "+15 %"), then x1.0
-		LabMenu.picks = {"count": {"count_scale": k}}
-		var want: float = ch["values"][k]
-		var m: Node = await _launch(card)
-		var vc = m.get("vat_count")
-		check(vc != null, "x%s: the match has a VatCount" % str(want))
-		if vc == null:
-			continue
-		var sim = m.sim
-		var hud = m.hud
-		var nodes := 0
-		var ok_text := true
-		var ok_scale := true
-		for n in sim.nodes:
-			if n.get("node_kind", "") == "junction":
-				continue
-			nodes += 1
-			if not vc.screens.has(n["id"]):
-				ok_text = false
-				continue
-			var l: Label3D = vc.screens[n["id"]]["label"]
-			if l.text != vc.count_text(n) or (n["owner"] in ["", "A"] and l.text != str(Rules.shown(n["units"]))):
-				ok_text = false
-				print("  node %d: label '%s', badge text '%s', units %s" % [n["id"], l.text, vc.count_text(n), Rules.shown(n["units"])])
-			if not is_equal_approx(l.pixel_size * l.font_size, VatCount.EM * want):
-				ok_scale = false
-		check(nodes > 0 and vc.screens.size() == nodes and ok_text, "x%s: a vat-screen label per node (%d) with the node's count" % [str(want), nodes])
-		check(ok_scale and is_equal_approx(vc.digit_height_m(), VatCount.DIGIT_H * want),
-				"x%s: digit %.3f m (x%s of %.3f m)" % [str(want), vc.digit_height_m(), str(want), VatCount.DIGIT_H])
-		var shown := 0
-		for id in hud.badges:
-			if (hud.badges[id]["panel"] as Control).visible:
-				shown += 1
-		check(shown == 0, "x%s: every HUD count badge hidden (%d shown)" % [str(want), shown])
-		digit[k] = vc.digit_pt(m.cam)
-		# live: a count change and an owner change show on the screen
-		var nid := -1
-		for n in sim.nodes:
-			if n["owner"] == "" and vc.screens.has(n["id"]):
-				nid = n["id"]
-				break
-		if nid >= 0:
-			var n: Dictionary = sim.nodes[nid]
-			n["owner"] = "B"
-			n["units"] = 40.0
-			vc.sync()
-			var l: Label3D = vc.screens[nid]["label"]
-			var fc: Color = ((vc.screens[nid]["frame"] as MeshInstance3D).material_override as StandardMaterial3D).albedo_color
-			check(l.text == vc.count_text(n) and l.text in [str(Rules.shown(40.0)), ""] and fc == Rules.seat_color("B") and l.modulate == Rules.seat_color("B").lerp(Color.WHITE, 0.35),
-					"x%s: node %d taken by B with 40 units -> '%s', frame in B's seat colour" % [str(want), nid, l.text])
-		var hid: int = sim.nodes.filter(func(x): return x["owner"] == "A")[0]["id"]
-		var pv: Node3D = vc.screens[hid]["pivot"]
-		var vat: Node3D = m.vis[hid]["vat_node"]
-		check(pv.global_position.y > vat.global_position.y + 3.0 and pv.visible,
-				"x%s: home's screen on the tower (%.2f m above the vat base)" % [str(want), pv.global_position.y - vat.global_position.y])
-	check(digit.has(0) and digit.has(1) and digit[0] > 0.0 and absf(digit[1] / digit[0] - 1.15) < 0.03,
-			"digit pt at the aim: x1.0 %.1f pt, x1.15 %.1f pt (this window, not the 844 x 390 probe)" % [digit.get(0, 0.0), digit.get(1, 0.0)])
-	# options off (a card without the count): no VatCount, badges back
-	var plain := LabCards.find("clus-11")
-	LabMenu.picks = {}
-	var m2: Node = await _launch(plain)
-	var shown2 := 0
-	for id in m2.hud.badges:
-		if (m2.hud.badges[id]["panel"] as Control).visible:
-			shown2 += 1
-	check(m2.get("vat_count") == null and shown2 > 0, "card clus-11: no vat-screen count, %d HUD badges shown" % shown2)
-	LabMenu.picks = {}
-	LabMenu.reset_card()
-	LabMenu._defaults = {}
-	Rules.lab_opts = saved.duplicate(true)
-	_parts_done += 1

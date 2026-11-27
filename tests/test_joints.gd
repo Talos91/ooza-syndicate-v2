@@ -1,14 +1,15 @@
 extends SceneTree
 ## LAB JOINT edges (WP3, 05 Handoff/handoffs/LAB-BUILD-PLAN 2026-11-23.md; Daniele 2026-11-23: "a cluster is two or three
 ## platforms joined directly"): headless check of the cluster maps L09C / L11C / L13C and of the plain maps with the option off.
-##   Godot --headless --path . --script res://tests/test_lab_joints.gd        Exit code 0 = all passed.
-## A lab build only (Rules.lab: VERSION "...-lab<n>"): Rules.lab_opt("joints") is what turns joints on.
+##   Godot --headless --path . --script res://tests/test_joints.gd        Exit code 0 = all passed.
+## OOZE 3.0 (WP1; was tests/test_lab_joints.gd): joints are a rule now, Rules.JOINTS (default true; false = the 0.25 game). Which
+## maps the pickers offer is WP2's (MapPool), so the "offered" checks left with the lab pool; the lab overlay's counts are
+## counted here; the L11P golden replay became "joints on = joints off" on a map without joints (the 3.0 sizes and rules
+## changed every event).
 
-const LabOverlay := preload("res://scripts/lab_overlay.gd")
 const CLUSTER_MAPS := ["res://maps4/L09C-clusters-9.json", "res://maps4/L11C-clusters-11.json", "res://maps4/L13C-clusters-13.json"]
 # L11P, AI vs AI, seed 5 (A Standard null / B Veteran ember): recorded on the untouched lab tip 22134b70 before WP3 (B at 185.3 s,
 # 163 events); re-recorded for lab4 (L11P rebuilt into the zoom box, same graph) with joints off AND on agreeing
-const L11P_BEFORE := {"winner": "B", "time": 390.7, "events": 581}
 
 var failures := 0
 
@@ -46,18 +47,12 @@ func _joint(sim: Sim, a: int, b: int) -> int:
 
 
 func _init() -> void:
-	check(Rules.lab, "a lab build (VERSION %s)" % Rules.VERSION)
-	for k in ["gat_own_platform", "gat_start", "quota_tier", "relay_set"]:   # WP4 rule options off: this suite checks joints
-		Rules.lab_opts[k] = false                     # against the pre-WP3 run (tests/test_lab_rules.gd checks the options)
-	Rules.lab_opts["joints"] = true
+	check(not Rules.lab and Rules.JOINTS, "3.0: joints are a rule (Rules.JOINTS), not a lab option")
 
 	# ------------------------------------------------------------ the maps
-	for path in CLUSTER_MAPS:
-		check(path in MapPool.battlefield(), "%s offered with joints on" % path.get_file())
 	var m9 := MapBuilder.load_map(CLUSTER_MAPS[0])
-	check(LabOverlay.joint_count(m9) == 8, "L09C: 8 joints (got %d)" % LabOverlay.joint_count(m9))
-	var dr := LabOverlay.deck_range(m9)
-	check(dr.x >= 6.0, "overlay deck range leaves joints out: shortest %.2f m >= 6 (longest %.2f)" % [dr.x, dr.y])
+	var nj: int = (m9["edges"] as Array).filter(func(e): return e.get("joint", false) == true).size()
+	check(nj == 8, "L09C: 8 joints (got %d)" % nj)
 
 	# ------------------------------------------------------------ a joint hop: vat -> contact -> vat, straight
 	var sim := _sim(CLUSTER_MAPS[0])
@@ -153,21 +148,19 @@ func _init() -> void:
 		print("      %s: over=%s winner=%s at %.1f s, captures %d" % [path_c.get_file(), s.over, s.winner, s.time, caps])
 		check(s.over and s.winner != "", "%s: AI vs AI ends with a winner" % path_c.get_file())
 
-	# ------------------------------------------------------------ option off: the plain maps as before, joint maps not offered
+	# ------------------------------------------------------------ JOINTS off: a map without joints plays the same
+	var runs := []
 	for opt in [false, true]:
-		Rules.lab_opts["joints"] = opt
+		Rules.JOINTS = opt
 		var s := _sim("res://maps4/L11P-grid-11.json")
 		_ai_match(s, 600.0)
+		runs.append([s.winner, snappedf(s.time, 0.1), s.events.size()])
 		print("      L11P joints=%s: winner %s at %.1f s, %d events" % [opt, s.winner, s.time, s.events.size()])
-		check(s.winner == L11P_BEFORE["winner"] and absf(s.time - L11P_BEFORE["time"]) < 0.05 and s.events.size() == L11P_BEFORE["events"],
-				"L11P (joints %s) plays exactly as before WP3: winner %s at %.1f s, %d events" % [opt, L11P_BEFORE["winner"], L11P_BEFORE["time"], L11P_BEFORE["events"]])
-	Rules.lab_opts["joints"] = false
-	var bf := MapPool.battlefield()
-	check(not bf.any(func(p): return p.get_file().substr(0, 4) in MapPool.LAB_JOINT) and bf.size() == MapPool.LAB.size() - MapPool.LAB_JOINT.size(),
-			"joints off: the cluster maps are not offered (%d maps)" % bf.size())
+	check(runs[0] == runs[1], "L11P (no joints) plays the same with JOINTS off and on %s" % str(runs[1]))
+	Rules.JOINTS = false
 	var off := _sim(CLUSTER_MAPS[0])
-	check(not off.edges.any(func(e): return e.get("joint", false)), "joints off: the sim makes no joint edge")
-	Rules.lab_opts["joints"] = true
+	check(not off.edges.any(func(e): return e.get("joint", false)), "JOINTS off: the sim makes no joint edge")
+	Rules.JOINTS = true
 
-	print("test_lab_joints: %d failure(s)" % failures)
+	print("test_joints: %d failure(s)" % failures)
 	quit(1 if failures else 0)

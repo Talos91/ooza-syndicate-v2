@@ -112,8 +112,8 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 		if owner != "":
 			homes[owner] = id
 		var relay: String = n["relay"] if n.get("relay") != null else ""
-		if relay in Rules.LAB_RELAY_ARCHIVED and bool(Rules.lab_opt("relay_set")):   # LAB RELAY SET: archived kinds never play
-			push_warning("lab relay_set: node %d's %s relay is archived; it plays as a plain node" % [id, relay])
+		if relay in Rules.LAB_RELAY_ARCHIVED and Rules.RELAY_SET:   # 3.0 RELAY SET (was lab relay_set): archived kinds never play
+			push_warning("3.0 relay set: node %d's %s relay is archived; it plays as a plain node" % [id, relay])
 			relay = ""
 		# a relay node has no vat (GAME-RULES sec6, centreHasNoVat): it is a modest neutral
 		# waypoint that must be fed from elsewhere, never a fortress at the map's centre
@@ -139,7 +139,8 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			"category": n.get("category", "normal"), "center": n.get("center", false), "relay": relay,
 			"ring": int(n.get("ring", 0)) if n.get("ring") != null else 0,
 			"plaza": int(n["plaza"]) if n.get("plaza") != null else -1,
-			"node_kind": kind,       # "common" / "relay" / "special" (fixed at setup); JUNCTION: "junction"
+			"node_kind": kind,       # "common" / "relay" / "special" (fixed at setup); JUNCTION: "junction". 3.0 names: node_category()
+			"edge_rule": str(n.get("edgeRule", "")) if n.get("edgeRule") != null else "",   # 3.0 HOOK: a node's special-bridge rule (next round; ignored now)
 			"junction": junction,   # JUNCTION: the piece (Junction_X / T / Y / L / K / Fork, Curve_45 / 90; "" on a platform)
 			"junction_yaw": float(n.get("junctionYaw", 0.0)) if junction != "" else 0.0,   # JUNCTION: degrees, ccw seen from above
 			"lane": str(n.get("lane", "")),   # EXP Crossing: "over" on the raised lane's node (walked up its ramps, over its span)
@@ -183,10 +184,11 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			"armour_from": 1.0,     # ... its value at armour_t0 (match time) - armour is recomputed from these, never summed
 			"armour_t0": 0.0,
 		})
-		if relay == "ferry":                              # the ferry node takes no structure in v1
-			nodes[-1]["buildable"] = []
-		if relay == "laser_relay":                        # LASER RELAY (Daniele 2026-11-09, WIP: "a relay that can only hold a
-			nodes[-1]["buildable"] = ["laser"]            # laser, no other function"): replaces the round-R lift nodes; it moves
+		# 0.25.3 HOTFIX (Daniele 2026-11-27: "old laser nodes that can t change to forge ... some maps that don t have optons to
+		# build relay structures"): the ferry's console and the laser relay hold a laser OR a forge, like every relay's player
+		# pie (the ferry took no structure in v1; the laser relay a laser only). No monster hub: players build none since 11-13.
+		if relay in ["ferry", "laser_relay"]:             # LASER RELAY (Daniele 2026-11-09, WIP: "a relay that can only hold a
+			nodes[-1]["buildable"] = ["laser", "forge"]   # laser, no other function"): replaces the round-R lift nodes; it moves
 															# no deck, is never fired, holds a laser only (relay prices / tiers,
 															# falls like any relay node)
 		if relay == "launcher":                           # 2026-11-06 (Daniele: "it should occupy the relay building slot"): the
@@ -217,11 +219,11 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 		var retracts: bool = e.get("retracts", false) == true or st == "ret"   # maps 3.0 spells a retract "ret"
 		if st == "ret":
 			st = ""
-		# LAB JOINT (Daniele 2026-11-23, WP3; Rules.lab_opt("joints")): two touching platforms of a cluster, joined with no
+		# LAB JOINT (Daniele 2026-11-23, WP3; 3.0: Rules.JOINTS): two touching platforms of a cluster, joined with no
 		# deck. It rides the plaza-link path (no deck, no pier, no relay, never breaks, no deck skill or effect targets it:
 		# every deck check already skips plaza links) plus "joint": true for its own path (vat -> contact point -> vat).
 		# With the option off the map is not offered (MapPool) and nothing here changes.
-		var joint: bool = v3 and e.get("joint", false) == true and Rules.lab_opt("joints") == true
+		var joint: bool = v3 and (e.get("joint", false) == true or str(e.get("kind", "")) == "joint") and Rules.JOINTS   # 3.0 JOINTS
 		if joint:
 			mods = 0.0
 		edges.append({"a": int(e["from"]), "b": int(e["to"]), "modules": mods,
@@ -238,6 +240,7 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 				"belt": str(e["belt"]) if e.get("belt") != null else "",
 				"ferry": (e["ferry"] as Dictionary).duplicate() if e.get("ferry") is Dictionary else {},
 				"deck_m": float(e.get("deckMetres", 0.0)) if e.get("deckMetres") != null else 0.0})
+		edges[-1]["kind"] = "joint" if joint else ("plaza" if edges[-1]["plaza"] else "deck")   # 3.0: read through edge_kind()
 		if joint:
 			edges[-1]["plaza"] = true
 			edges[-1]["joint"] = true
@@ -297,8 +300,6 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			_ctrl_edges[edge_controller[i]] = []
 		_ctrl_edges[edge_controller[i]].append(i)
 	_setup_proto()
-	if bool(Rules.lab_opt("gat_start")):
-		_setup_lab_gat_start()
 	_setup_skills(seat_loadouts)
 
 
@@ -316,7 +317,7 @@ func _setup_lab_gat_start() -> void:
 			var m: Dictionary = nodes[nb]
 			if m["owner"] != "" or m["node_kind"] != "common":
 				continue
-			var j: bool = edges[link[1]].get("joint", false) == true
+			var j: bool = edge_kind(link[1]) == "joint"
 			var d: float = (m["pos"] as Vector3).distance_to(nodes[home]["pos"])
 			if pick < 0 or (j and not pick_joint) or (j == pick_joint and (d < pick_d - 0.01 or (absf(d - pick_d) <= 0.01 and nb < pick))):
 				pick = nb
@@ -419,6 +420,38 @@ static func vat_cost(n: Dictionary) -> int:
 	return Rules.VAT_COST.get(n["tier"], 0) if n["tier"] < Rules.VAT_MAX_UPGRADE else 0
 
 
+# ---------------------------------------------------------------- OOZE 3.0 categories and edge kinds (WP1)
+static func node_category(n: Dictionary) -> String:
+	## 3.0 node category (Daniele 2026-11-27; Rules.NODE_CATEGORIES): "normal" (a vat or a Googatling, T1-T3), "special" (a
+	## T4 vat: indestructible, irreplaceable), "relay" (a laser or a juicer), "relay_special" (the launcher's slot; no launcher
+	## in 0.30.0); "junction" for a deck junction (legacy maps).
+	match str(n["node_kind"]):
+		"special":
+			return "special"
+		"relay":
+			return "relay_special" if n["relay"] == "launcher" else "relay"
+		"junction":
+			return "junction"
+	return "normal"
+
+
+static func is_special(n: Dictionary) -> bool:
+	## A SPECIAL node: always a T4 vat - no power lowers or removes it, no build replaces it, a capture keeps its tier.
+	return str(n["node_kind"]) == "special"
+
+
+static func edge_kind_of(e: Dictionary) -> String:
+	## The one read of an edge's role (plan sec 2.2 hook): "deck" (a bridge), "joint" (touching platforms, no deck) or, on
+	## legacy maps, "plaza" (a plaza link). New roles (toll, tar, lock) add a kind and a branch here, never a new flag.
+	if e.get("joint", false) == true:
+		return "joint"
+	return str(e.get("kind", "plaza" if e.get("plaza", false) else "deck"))
+
+
+func edge_kind(ei: int) -> String:
+	return edge_kind_of(edges[ei])
+
+
 static func vat_paused(n: Dictionary) -> bool:
 	## VAT COLUMN (Daniele, 2026-11-07): a vat whose upgrade (blueprint) is filling makes nothing until it is done.
 	return Rules.VAT_UPGRADE_PAUSES and n["build_kind"] == "vat" and n["structure"] == "vat"
@@ -466,14 +499,14 @@ static func gat_fire_rate(n: Dictionary) -> float:
 	## GOOGAT: garrison units fired per second while a target is in range (= kills/s before Anchor).
 	## LAB option gat_power (lab4 job 5; Daniele: "feels not powerful enough"): x this rate (1.0 outside the lab).
 	var t: int = clampi(int(n["tier"]), 1, 3)
-	return float(Rules.MACHINEGOON_RATE.get(t, Rules.MACHINEGOON_RATE.get(str(t), 8.0))) * float(Rules.lab_opt("gat_power"))
+	return float(Rules.MACHINEGOON_RATE.get(t, Rules.MACHINEGOON_RATE.get(str(t), 8.0))) * Rules.GAT_POWER
 
 
 static func gat_ammo() -> float:
 	## LAB option gat_ammo (lab4 job 5; Daniele: "not sure about it shooting the troops inside or if it does shouldn t be a 1 to 1
 	## bu lower ratio"): own garrison units spent per unit killed. 1.0 = the real game (one unit per kill); 0.5 = one per two
 	## kills; 0 = free (it then fires with an empty garrison too).
-	return float(Rules.lab_opt("gat_ammo"))
+	return Rules.GAT_AMMO                                 # 3.0: 1 unit per 3 kills (Daniele 11-27)
 
 
 func _base_production(n: Dictionary) -> float:
@@ -578,7 +611,7 @@ func has_hub(seat: String) -> bool:
 	return false
 
 
-const STRUCTURE_NAMES := {"vat": "Vat", "machinegoon": "Googatling", "laser": "Laser tower", "forge": "Forge",
+const STRUCTURE_NAMES := {"vat": "Vat", "machinegoon": "Googatling", "laser": "Laser tower", "forge": Rules.JUICER,
 		"monster_hub": "Monster hub"}
 
 
@@ -601,7 +634,7 @@ func can_build(node_id: int, seat: String, kind: String) -> String:
 	if not kind in n["buildable"]:
 		match n["node_kind"]:
 			"relay":
-				return "A relay holds a Laser tower, a Forge or a Monster hub"
+				return "A relay holds a Laser tower or a %s" % Rules.JUICER
 			"special":
 				return "A special node holds only its vat"
 		return "A node holds a vat or a Googatling"
@@ -896,10 +929,8 @@ static func gat_reach() -> float:
 	## area not beyond (or we have spawn kill)"): only the bodies on its own platform (within Rules.R, the rim), never a
 	## neighbour platform or a deck. Off (and in the real game): MACHINEGOON_RANGE. LAB option gat_range (lab4 job 5; Daniele: "its
 	## range is too little to really make a difference"), when > 0, is the reach in metres (over both).
-	var r := float(Rules.lab_opt("gat_range"))
-	if r > 0.0:
-		return r
-	return Rules.R if bool(Rules.lab_opt("gat_own_platform")) else Rules.MACHINEGOON_RANGE
+	## 3.0 (Daniele 11-27): Rules.GAT_REACH = its own platform, R 7.6 m (0.25: MACHINEGOON_RANGE 10 m).
+	return Rules.GAT_REACH
 
 
 func _structure_kill(n: Dictionary, h: Dictionary, kill: float, why: String) -> void:
@@ -1543,7 +1574,7 @@ func edge_cost(ei: int) -> float:
 	var e: Dictionary = edges[ei]
 	if not v3:
 		return e["modules"] * Rules.MODULE_SECONDS
-	if e["plaza"] and not e.get("joint", false):     # (LAB JOINT: its baked L, 0 m rim to rim: the walk is on the platforms)
+	if e["plaza"] and edge_kind_of(e) != "joint":     # (LAB JOINT: its baked L, 0 m rim to rim: the walk is on the platforms)
 		return (nodes[e["a"]]["pos"] as Vector3).distance_to(nodes[e["b"]]["pos"]) / Rules.move_speed()
 	return float(e["geo"]["L"]) / Rules.move_speed()
 
@@ -1610,7 +1641,7 @@ func exit_of(ei: int, node_id: int) -> Vector3:
 	## maps 3.0: where edge ei leaves node_id's footprint (the baked rim exit); plaza links leave a
 	## socket at the tower's footprint toward the other socket.
 	var e: Dictionary = edges[ei]
-	if e.get("joint", false):                         # LAB JOINT: both ends leave by the contact point
+	if edge_kind_of(e) == "joint":                    # LAB JOINT: both ends leave by the contact point
 		return joint_point(ei)
 	if e["plaza"]:
 		var o: Vector3 = nodes[_other_end(ei, node_id)]["pos"]
@@ -1634,7 +1665,7 @@ func joint_hops() -> Vector2:
 	var lo := INF
 	var hi := -INF
 	for ei in range(edges.size()):
-		if not edges[ei].get("joint", false):
+		if edge_kind(ei) != "joint":
 			continue
 		for r in [[edges[ei]["a"], edges[ei]["b"]], [edges[ei]["b"], edges[ei]["a"]]]:
 			var cum: PackedFloat32Array = build_path(r)["cum"]
@@ -1757,7 +1788,7 @@ func _build_path3(route: Array) -> Dictionary:
 	var ex0 := exit_of(_edge_index(route[0], route[1]), route[0])
 	var y0 := Vector3.UP * node_y(route[0])          # a lift platform: walk at its level
 	var d0 := (((ex0 - a0["pos"]) as Vector3) * Vector3(1, 0, 1)).normalized()
-	var joint0: bool = edges[_edge_index(route[0], route[1])].get("joint", false)
+	var joint0: bool = edge_kind(_edge_index(route[0], route[1])) == "joint"
 	var a_exit := Rules.exit_angle(atan2(d0.z, d0.x))   # the front door (DOOR_EXITS: or the back, if nearer)
 	add.call(a0["pos"] + _door_dir(a_exit) * Rules.EXIT_R + y0, 1)
 	if not joint0:                                    # LAB JOINT: out of the vat straight to the contact point
@@ -1804,7 +1835,7 @@ func _build_path3(route: Array) -> Dictionary:
 			node_spans.append({"node": route[i + 1], "s0": node_s0, "s1": _length(pts)})
 		else:                                         # Alpha 11: round the ring to the front door, then in
 			var a_door := Rules.entry_angle(atan2(din.z, din.x))   # TWO_DOORS: or the back door, if nearer
-			if not e.get("joint", false):             # LAB JOINT: from the contact point straight to the vat
+			if edge_kind_of(e) != "joint":            # LAB JOINT: from the contact point straight to the vat
 				for p in _arc(b["pos"], atan2(din.z, din.x), a_door, ring):
 					add.call(p + yb, 1)
 			add.call(b["pos"] + _door_dir(a_door) * Rules.EXIT_R + yb, 1)
@@ -2292,7 +2323,7 @@ func _begin_break(ei: int, node_id: int) -> void:
 	## THE WAVE: node_id dropped - its deck ei starts breaking from that end (or, already breaking from the other
 	## end, from both). A deck that is not there (closed relay state, demolished, already gone) has nothing to break.
 	var e: Dictionary = edges[ei]
-	if e.get("joint", false):                             # LAB JOINT: no deck to break (it goes with its platforms)
+	if edge_kind_of(e) == "joint":                        # LAB JOINT: no deck to break (it goes with its platforms)
 		return
 	var end := "a" if e["a"] == node_id else "b"
 	if breaking.has(ei):
@@ -2745,6 +2776,8 @@ func _start_rings() -> void:
 	last_stand_wave = clampf((_hard_end() - Rules.LAST_STAND_WAVE_SPARE - Rules.LAST_STAND_TIME) / maxf(last_stand_waves.size(), 1.0),
 			Rules.LAST_STAND_WAVE_MIN, Rules.LAST_STAND_WAVE_MAX)
 	last_stand_gap = ls_drop_gap_override if ls_drop_gap_override >= 0.0 else _fit_gap(last_stand_waves, Rules.VERY_LAST_STAND_TIME - time)
+	if Rules.quota:                                      # 3.0 (Daniele 11-27 "Last Stand = the quota"): no INWARD / OUTWARD
+		last_stand_method = "quota"                      # state is left - the map's quota order is the only one
 	events.append({"t": time, "type": "last_stand", "method": last_stand_method, "order": order.duplicate(),
 			"waves": last_stand_waves.duplicate(true), "gap": last_stand_gap})
 	fx_events.append({"type": "last_stand", "method": last_stand_method})
@@ -3281,6 +3314,8 @@ func _start_last_stand_legacy() -> void:
 		last_stand_final = inward_final
 		order = _collapse_order("inward", centre)
 	last_stand_order = order
+	if Rules.quota:                                      # 3.0: the quota names the Last Stand, never a method
+		last_stand_method = "quota"
 	last_stand_next = 0
 	last_stand_wave = clampf((_hard_end() - Rules.LAST_STAND_WAVE_SPARE - Rules.LAST_STAND_TIME) / maxf(order.size(), 1.0),
 			Rules.LAST_STAND_WAVE_MIN, Rules.LAST_STAND_WAVE_MAX)
@@ -5316,7 +5351,7 @@ func _power_check(seat: String, id: String, target) -> String:
 					return "A launcher never drops below T1"
 			elif n["structure"] == "":
 				return "Nothing to sink there"
-			if n["structure"] in ["vat", "machinegoon"] and n["tier"] >= 4:
+			if (n["structure"] in ["vat", "machinegoon"] and n["tier"] >= 4) or is_special(n):   # 3.0 SPECIAL: indestructible
 				return "A T4 holds its ground"
 			if n["structure"] == "vat" and n["tier"] <= 1 and i in homes.values():
 				return "A home keeps its vat"
@@ -5499,6 +5534,8 @@ func _deck_drop_end(e: Dictionary) -> void:
 
 
 func _sinkhole(seat: String, n: Dictionary) -> void:
+	if is_special(n):                                       # 3.0 SPECIAL: indestructible (cast_check refuses it; a guard here)
+		return
 	var old: String = n["structure"]
 	var from: int = n["tier"]
 	if n["build_kind"] != "":                               # an upgrade in progress sinks with it

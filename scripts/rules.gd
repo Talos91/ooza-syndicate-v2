@@ -94,9 +94,9 @@ static func move_speed() -> float:
 
 
 static func unit_speed() -> float:
-	## LAB option unit_speed (lab4 job 2; Daniele: "slow trops movement to 0.90 maybe we need a test with different unit traverse
-	## speed"): x BRAWL unit speed and door rate together, so a line keeps its spacing (metres_per_unit). 1.0 outside the lab.
-	return float(lab_opts.get("unit_speed", 1.0)) if lab else 1.0
+	## OOZE 3.0 UNIT_SPEED (was LAB option unit_speed, lab4 job 2): x BRAWL unit speed and door rate together, so a line keeps
+	## its spacing (metres_per_unit).
+	return UNIT_SPEED
 
 
 static func platform_mult() -> float:
@@ -161,7 +161,19 @@ static var demo: bool = VERSION.contains("-demo")
 # LAB BUILD (Daniele 2026-11-23: "build the lab with all the test so we test and tweak the game"; 05 Handoff/handoffs/LAB-BUILD-PLAN
 # 2026-11-23.md): VERSION "...-lab<n>" = grey-box test cards at oozesyndicate.com/lab/. Turns on proto_debug, NOT demo or quota.
 # Every lab rule sits behind lab_opts (read through lab_opt(): off when lab is false), never a deletion.
-static var lab: bool = VERSION.contains("-lab")
+# OOZE 3.0 (plan 3.0-ARCHITECTURE-PLAN sec 2.2, WP1): the lab rules ARE the game now. lab is false in every build (the VERSION
+# may still say "-lab<n>" while ooze3 is built, which only keeps proto_debug on); lab_opt() is a shim that answers the 3.0
+# values below, so files not yet ported (main, hud, map_pool) see the 3.0 game. No rule in sim.gd / seat_ai.gd reads lab_opts.
+# The shim, lab_opts and the LAB_* names go in WP6.
+static var lab: bool = false
+# ---- OOZE 3.0 RULES (Daniele 2026-11-27, Hub Desk answers). Static vars, so old tests can run the legacy game (comments say what
+# the 0.25 game did).
+static var JOINTS := true            # joint edges (clusters): no deck, unbreakable, vat-to-vat path (0.25: no joints)
+static var RELAY_SET := true         # LAB_RELAY_ARCHIVED kinds (lift, tilt, remote, laser_relay) play as plain nodes (0.25: all kinds)
+static var GAT_REACH: float = R      # Googatling reach from its node centre = its own platform, 7.6 m (0.25: MACHINEGOON_RANGE 10 m)
+static var GAT_POWER := 1.0          # x Googatling fire rate (MACHINEGOON_RATE[tier] x this)
+static var GAT_AMMO := 1.0 / 3.0     # own garrison units spent per unit killed: 1 unit per 3 kills (0.25: 1.0, one per kill)
+static var UNIT_SPEED := 0.75        # x BRAWL unit speed and door rate: 3.0 trial, Daniele 11-27 "x0.75 (try)" (0.25: 1.0)
 static var lab_opts := {
 	"joints": true,             # joint edges (clusters): no deck, unbreakable, vat-to-vat path
 	"gat_own_platform": true,   # the Googatling fires only over its own platform
@@ -220,8 +232,8 @@ const LAB_RELAY_ARCHIVED := ["lift", "tilt", "remote", "laser_relay"]
 # on the board; FFA: against the leader) or after the last launch: most quota wins, a tie goes to the side that held the last
 # platform (neutral: DRAW). On only in a lab build with lab_opt("quota_tier") (its card); a map's lastStand.quota block (rings
 # + orders) is its launch order. Main play is untouched.
-static var quota: bool:
-	get: return lab and lab_opt("quota_tier") == true
+# OOZE 3.0: the quota IS the Last Stand (Daniele 11-27 "Last Stand = the quota"); false = the 0.25 ring collapse (old tests).
+static var quota: bool = true
 const QUOTA_END_SPARE := 1.0         # s: the Very Last Stand's last launch lands this long before the hard end (Sim._vls_queue_next)
 const QUOTA_LAUNCH_TIME := 1.5       # s: the platform's flight to orbit (Fx._launch; Daniele 11-15 "straight up, leaves the screen")
 const QUOTA_LAUNCH_RISE := 70.0      # m it climbs in that time (past the top edge at the phone camera)
@@ -231,8 +243,25 @@ const QUOTA_AI_KEEP := 3.0           # shown units the AI leaves on its own doom
 
 
 static func lab_opt(key: String) -> Variant:
-	## A lab option: its lab_opts value in a lab build, else the real game's behaviour (_LAB_OFF).
-	return lab_opts.get(key) if lab else _LAB_OFF.get(key)
+	## SHIM (OOZE 3.0, until WP6 removes it): a lab option's lab_opts value in a lab build, else the 3.0 game's value - the
+	## rule vars above for the rule keys, the 3.0 view choices for the rest. Rules never call it; views not yet ported do.
+	if lab:
+		return lab_opts.get(key)
+	match key:
+		"joints": return JOINTS
+		"relay_set": return RELAY_SET
+		"quota_tier": return quota
+		"unit_speed": return UNIT_SPEED
+		"gat_own_platform": return true
+		"gat_range": return GAT_REACH
+		"gat_power": return GAT_POWER
+		"gat_ammo": return GAT_AMMO
+		"count_on_screen": return true      # the count on every vat screen (WP4)
+		"count_scale": return 1.0           # default count size (WP4: OPTIONS stepper, Rules.COUNT_SIZES)
+		"hud_badge": return false           # the HUD count badge goes (the screen count replaces it)
+		"cam_lock": return true             # every 3.0 map starts at the fixed camera (WP2 / WP4)
+		"gat_start": return false           # lab card only, dropped
+	return _LAB_OFF.get(key)
 # KIT2 at drill node SIZE D (Daniele 2026-11-18 "also in staging gogogogo"; kit2-staging, from bg-44b4 ea662788 / demo2-kit 24c346f):
 # the platform + vats baked from Models/2.0/kit-v2-detail at x0.68 (bake_demo2.py) and the full-size column (r 1.088) with its
 # wine bands (bake_demo2_D.py) in assets/kit/kit2/. VIEW ONLY and STATIC on staging: no launcher, no QUOTA, no river (the collar,
@@ -591,14 +620,22 @@ static var BUILD_SECONDS := 10.0          # every build / upgrade / swap takes t
 # hologram filling bottom to top and the vat is PAUSED - it makes nothing until the fill reaches the top (BUILD_SECONDS),
 # then it produces at the new tier. Its garrison still defends and can still be sent (only production stops).
 # Entrances per tier (T1 front, T2 + back, T3 + both sides) are VISUAL ONLY. false = the old rule (produce while upgrading).
-static var VAT_UPGRADE_PAUSES := true
+# OOZE 3.0 (Daniele 2026-11-27, Desk: "vats produce while upgrading, upgrade anim on the structure only"): false = the vat
+# keeps producing during its upgrade. true = the 0.25 rule above (old tests).
+static var VAT_UPGRADE_PAUSES := false
 static var SWAP_COOLDOWN := 10.0          # after a structure swap completes, before the next swap
 # STRUCTURES 2.1 (Daniele, 2026-09-27; OPEN-QUESTIONS "Structures 2.1 numbers"). What a node can hold:
 #   common (normal vat node): a vat T1-T3 OR a Machinegoon T1-T3 in its place (swapping = a BUILD_SECONDS build,
 #       then SWAP_COOLDOWN; the tier carries over);
 #   relay: one of Laser tower / Forge / Monster hub (single tier, swappable like the old attachments);
 #   special (strategic nodes, T4 neutrals): only its vat (no machinegoon, no relay structure).
-const NODE_BUILDS := {"common": ["vat", "machinegoon"], "relay": ["laser", "forge", "monster_hub"], "special": ["vat"]}
+# OOZE 3.0 NODE CATEGORIES (Daniele 2026-11-27, Desk; Sim.node_category): NORMAL ("common": a vat OR a Googatling, T1-T3, never
+# T4); SPECIAL (a T4 vat: always T4, only its vat, indestructible - no power lowers or removes it - and irreplaceable); RELAY (a
+# laser OR a juicer - "juicer" is the forge's new name; the id stays "forge" in data and protocol); RELAY SPECIAL (the launcher
+# relay: a category slot only, no launcher in 0.30.0). 0.25 relays also took a monster hub (players built none since 11-13).
+static var NODE_BUILDS := {"common": ["vat", "machinegoon"], "relay": ["laser", "forge"], "special": ["vat"]}   # (0.25 relay: + "monster_hub")
+const NODE_CATEGORIES := ["normal", "special", "relay", "relay_special"]
+const JUICER := "Juicer"              # the forge's shown name in 3.0 (Sim.STRUCTURE_NAMES, refusals, build lines)
 # MACHINEGOON: a continuous goo stream at the nearest enemy line whose head is within MACHINEGOON_RANGE of the node
 # centre, 2 / 3.5 / 5 kills/s shown; body kills bypass combat math like the laser; the node produces nothing
 # while it holds one (it keeps and can be reinforced its garrison). Build 15, upgrades 20 / 30 shown.
