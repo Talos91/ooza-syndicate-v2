@@ -463,6 +463,15 @@ func _determinism() -> void:
 	_parts_done += 1
 
 
+func _ctl_node(sim: Sim) -> int:
+	## A plain node given to B as a T2 vat (a Sinkhole may hit it).
+	var n: Dictionary = sim.nodes[3]
+	n["owner"] = "B"
+	n["structure"] = "vat"
+	n["tier"] = 2
+	return 3
+
+
 func _special_map() -> Dictionary:
 	## L09C with its centre (node 4) a map-placed neutral T4: setup makes it a SPECIAL node.
 	var m := MapBuilder.load_map(L09C)
@@ -493,7 +502,10 @@ func _part_f() -> void:
 	check(sim.can_build(4, "B", "machinegoon") != "", "SPECIAL: irreplaceable - no Googatling (%s)" % sim.can_build(4, "B", "machinegoon"))
 	check(sim.can_build(4, "B", "laser") != "" and sim.can_build(4, "B", "forge") != "", "SPECIAL: no relay structure either")
 	check(sim.can_upgrade(4, "B") != "", "SPECIAL: no tier above T4 (%s)" % sim.can_upgrade(4, "B"))
-	check(sim.cast_check("A", "active", 4) != "", "SPECIAL: a Sinkhole is refused (%s)" % sim.cast_check("A", "active", 4))
+	sim.skill_cd["A"]["active"] = 0.0                 # (ready: the refusal must be the node's, not the cooldown's)
+	var ctl := _ctl_node(sim)
+	check(sim.cast_check("A", "active", ctl) == "", "Sinkhole is castable on a plain enemy T2 vat (%s)" % sim.cast_check("A", "active", ctl))
+	check(sim.cast_check("A", "active", 4).contains("holds its ground"), "SPECIAL: a Sinkhole is refused (%s)" % sim.cast_check("A", "active", 4))
 	sim._sinkhole("A", sp)
 	check(int(sp["tier"]) == 4 and sp["structure"] == "vat", "SPECIAL: indestructible even when a Sinkhole lands (T%d %s)" % [int(sp["tier"]), sp["structure"]])
 	sim._land_classic(sp, "A", 600.0)
