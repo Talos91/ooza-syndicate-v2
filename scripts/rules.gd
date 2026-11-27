@@ -165,7 +165,7 @@ static var demo: bool = VERSION.contains("-demo")
 # may still say "-lab<n>" while ooze3 is built, which only keeps proto_debug on); lab_opt() is a shim that answers the 3.0
 # values below, so files not yet ported (main, hud, map_pool) see the 3.0 game. No rule in sim.gd / seat_ai.gd reads lab_opts.
 # The shim, lab_opts and the LAB_* names go in WP6.
-static var lab: bool = false
+static var lab: bool = VERSION.contains("-lab")   # LAB6 (this branch only): the LAB screen is on again for the lab build
 # ---- OOZE 3.0 RULES (Daniele 2026-11-27, Hub Desk answers). Static vars, so old tests can run the legacy game (comments say what
 # the 0.25 game did).
 static var JOINTS := true            # joint edges (clusters): no deck, unbreakable, vat-to-vat path (0.25: no joints)
