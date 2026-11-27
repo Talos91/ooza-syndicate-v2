@@ -9,7 +9,7 @@ class_name MapPool
 ## test_ai_curve run over. `all()` itself still carries the tutorial-only maps - test_maps4 (every baked
 ## map) and the rules tests that walk MapPool.all() for coverage still need to see them.
 
-const GROUP_ORDER := ["Z", "L", "G", "T", "R", "N", "E", "A", "M", "C", "B", "S", "X", "P", "D", "H"]   # G = the forward pool (0.24.5, POOL G); R = round R proto maps; E = experimental E-01..E-10; P = Relays 3.0 prototype test maps (never pooled); A = Alpha 11 classics; M = maps 4.3 / 4.4 classic + 4.6 relay;
+const GROUP_ORDER := ["Z", "Y", "L", "G", "T", "R", "N", "E", "A", "M", "C", "B", "S", "X", "P", "D", "H"]   # G = the forward pool (0.24.5, POOL G); R = round R proto maps; E = experimental E-01..E-10; P = Relays 3.0 prototype test maps (never pooled); A = Alpha 11 classics; M = maps 4.3 / 4.4 classic + 4.6 relay;
                                                               # MAPS 5.0: N = the map builder's new maps (References/Ooze Syndicate maps 5.0)
                                                               # (Mushroom Wars style); D = debug / test maps
 const DIR := "res://maps4"
@@ -170,7 +170,11 @@ const PROTO: Array[String] = ["G-01", "G-02", "G-03", "G-04", "G-05", "G-06", "G
 # maps 3.0/generator/maps3.py (baked with frame.box = Board3.BOX_ID). Non-empty = battlefield() / mode_offered() offer ONLY these
 # (every build line except a lab build), and test_scope() = these. Every older map stays baked in maps4/ and in all() (nothing is
 # deleted; the tutorial and campaign load theirs by path); the 3.0 export ships only these (WP6).
-const POOL3: Array[String] = ["Z-01", "Z-02", "Z-03", "Z-04", "Z-05", "Z-06", "Z-07", "Z-08"]
+# WP2b (Daniele 2026-11-27: "the 19 selected for the old staging should have been rebaked and adapted to the new gameplay and camera
+# angle (so reduce nodes, cluster them, fix relay etc)"): group "Y" = G-01..G-19 re-built for 3.0 (same names and numbers; each map
+# json says `was`) by References/Ooze Syndicate maps 3.0/generator/gmaps3.py, next to the Z maps (Daniele decides later whether Z stays).
+const POOL3: Array[String] = ["Z-01", "Z-02", "Z-03", "Z-04", "Z-05", "Z-06", "Z-07", "Z-08",
+	"Y-01", "Y-02", "Y-03", "Y-04", "Y-05", "Y-06", "Y-07", "Y-08", "Y-09", "Y-10", "Y-11", "Y-12", "Y-13", "Y-14", "Y-15", "Y-16", "Y-17", "Y-18", "Y-19"]
 # THEMES (2026-11-13): map code -> LookTheme id (corporate_campus / golden_hour / quota_parade / wellness_retreat). Empty = the LAB
 # on every map until Daniele assigns the round-32 settings; dev --theme=<id> forces one for shots.
 const THEMES := {}

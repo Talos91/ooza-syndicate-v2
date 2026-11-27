@@ -259,6 +259,18 @@ func _ooze3(m: Dictionary, path: String) -> void:
 			var b: Array = lay[str(int(e["to"]))]
 			check(absf(Vector2(a[0], a[1]).distance_to(Vector2(b[0], b[1])) - jd) < 0.05, "%s: joint %s-%s is two touching platforms (%.1f m)" % [code, str(e["from"]), str(e["to"]), jd])
 	check(m["seats"]["1v1"].size() == 2 and m["modes"] == ["1v1"], "%s: a 3.0 map is 1v1 only" % code)
+	# WP2b (Daniele 2026-11-27: "relays are never in clusters"; the 0.25.3 hotfix: every relay offers its build option): no joint
+	# touches a relay node, and every relay is a kind the 3.0 relay set plays (an archived kind would play as a plain node and
+	# offer no laser / juicer) with a non-empty relay build list.
+	var relay_ids := {}
+	for n in m["nodes"]:
+		if n.get("relay") != null and str(n.get("relay")) != "":
+			relay_ids[int(n["id"])] = true
+			check(not (str(n["relay"]) in Rules.LAB_RELAY_ARCHIVED), "%s: relay %d (%s) is a kind the 3.0 relay set plays" % [code, int(n["id"]), str(n["relay"])])
+			check(str(n["relay"]) == "launcher" or not (Rules.NODE_BUILDS["relay"] as Array).is_empty(), "%s: relay %d offers its build option (%s)" % [code, int(n["id"]), str(Rules.NODE_BUILDS["relay"])])
+	for e in m["edges"]:
+		if bool(e.get("joint", false)):
+			check(not relay_ids.has(int(e["from"])) and not relay_ids.has(int(e["to"])), "%s: relay never in a cluster (joint %s-%s)" % [code, str(e["from"]), str(e["to"])])
 
 
 func _invariants(m: Dictionary) -> void:
