@@ -2,6 +2,7 @@ extends SceneTree
 ## OOZE 3.0 ZOOM BOX probe (WP2; was tests/lab_box_probe.gd). Headless, one phone per run:
 ##   Godot --headless --path . --script res://tests/box_probe.gd -- --pt-height=390 pw=844 notch=47 [r=7.6] [map=Z-01]
 ##   Godot --headless --path . --script res://tests/box_probe.gd -- --pt-height=375 pw=812 notch=44
+##   ... orient=90 | 270: the notch inset on that side only (the game's per-side safe area); the half-widths are the nearer column's
 ## The window is (pw x pt-height) pt at 2 px per pt. At Board3's camera (CAM_DIST, CAM_PITCH) it measures the ground a platform
 ## RIM (radius r + 0.14, r = Rules.R unless given) may reach and still show inside main.pit_rect(); the far edge also keeps a
 ## Board3.TOWER m tower on that platform in view. Prints:
@@ -84,6 +85,8 @@ func _run() -> void:
 	var notch := float(_arg("notch", "0"))
 	var vp0 := root.get_visible_rect().size
 	UiKit.test_insets = Vector4(notch / UiKit.pt_per_px(vp0), 0.0, notch / UiKit.pt_per_px(vp0), 0.0)
+	UiKit.test_orient = int(_arg("orient", "-1"))     # 90 | 270: the iOS cut-out on one side only (UiKit.resolve_sides), the
+	                                                   # screen-centred camera against the off-centre pit; -1 = both sides
 	var r := float(_arg("r", str(Rules.R)))
 	var rim := r + 0.14
 	var code := _arg("map", "")
@@ -102,7 +105,7 @@ func _run() -> void:
 	var aim_z := -(far_z + near_z) / 2.0
 	# the box as seen from the phone's own centring aim (what the BOX line reports) ...
 	var box: Array = _box(m, dist, pitch, aim_z, pit, rim)
-	print("PIT %s pt (%.0f x %.0f pt screen, notch %.0f)" % [str(Rect2(pit.position * ppt, pit.size * ppt)), pw, ph, notch])
+	print("PIT %s pt (%.0f x %.0f pt screen, notch %.0f, orient %d)" % [str(Rect2(pit.position * ppt, pit.size * ppt)), pw, ph, notch, UiKit.test_orient])
 	print("BOX dist %.2f pitch %.0f aim_z %.2f far_z %.2f near_z %.2f far_half_w %.2f near_half_w %.2f (rect %.1f x %.1f m; far edge by %s; rim %.2f)" % [
 			dist, pitch, aim_z, box[0], box[1], box[2], box[3], 2.0 * minf(box[2], box[3]), box[1] - box[0],
 			"tower" if far_tower > far_ground else "ground", rim])
@@ -132,15 +135,21 @@ func _run() -> void:
 		var lpit: Rect2 = lm.pit_rect()
 		var inside := true
 		var worst := INF
+		var edge_pt := INF                            # the closest rim / tower top to a pit edge on screen, pt (< 0: outside)
+		var lppt := UiKit.pt_per_px(lm.get_viewport().get_visible_rect().size)
 		for n in lm.sim.nodes:
 			var pos: Vector3 = n["pos"]
 			worst = minf(worst, Board3.rim_margin(pos.x, pos.z))
+			var probe := [pos + Vector3(0, Board3.TOWER, 0)]
 			for k in range(24):
 				var a := TAU * k / 24.0
-				inside = inside and lpit.grow(0.5).has_point((lm.cam as Camera3D).unproject_position(pos + Vector3(cos(a), 0, sin(a)) * Board3.BOX_RIM))
-			inside = inside and lpit.grow(0.5).has_point((lm.cam as Camera3D).unproject_position(pos + Vector3(0, Board3.TOWER, 0)))
+				probe.append(pos + Vector3(cos(a), 0, sin(a)) * Board3.BOX_RIM)
+			for q in probe:
+				var sp: Vector2 = (lm.cam as Camera3D).unproject_position(q)
+				inside = inside and lpit.grow(0.5).has_point(sp)
+				edge_pt = minf(edge_pt, minf(minf(sp.x - lpit.position.x, lpit.end.x - sp.x), minf(sp.y - lpit.position.y, lpit.end.y - sp.y)) * lppt)
 		maps_ok = maps_ok and inside
-		print("LOCKED %s rims_in_pit %s worst %.2f m (box margin)" % [c, inside, worst])
+		print("LOCKED %s rims_in_pit %s worst %.2f m (box margin) edge %.1f pt" % [c, inside, worst, edge_pt])
 		if _arg("shots", "") != "":                   # windowed run only (off-screen): the start view at Board3's camera
 			await _frames(30)
 			var img := lm.get_viewport().get_texture().get_image()
@@ -161,5 +170,6 @@ func _box(m: Node, dist: float, pitch: float, aim_z: float, pit: Rect2, rim: flo
 	for z in [far_z, near_z]:
 		var y: float = (m.cam as Camera3D).unproject_position(Vector3(0, 0, z)).y
 		var g: Vector3 = m._ground(Vector2(pit.end.x, y))
-		halfw.append(g.x)
+		var gl: Vector3 = m._ground(Vector2(pit.position.x, y))   # the camera is screen-centred: with one-side insets the pit
+		halfw.append(minf(g.x, -gl.x))                            # is not, the nearer column sets the half-width
 	return [far_z, near_z, halfw[0], halfw[1]]

@@ -66,12 +66,17 @@ static func zones(vp: Vector2) -> Dictionary:
 	var d := {}
 	d["send"] = Rect2(l, cy - COL_H * z / 2.0, SEND_W * z, COL_H * z)
 	d["skill"] = Rect2(r - SKILL_W * z, cy - COL_H * z / 2.0, SKILL_W * z, COL_H * z)
-	d["score"] = Rect2((l + r) / 2.0 - SCORE_PT.x * z / 2.0, 0.0, SCORE_PT.x * z, SCORE_PT.y * z)
+	# the TOP BAR is centred on the physical SCREEN (Daniele 2026-11-27 "Centre on screen"): with per-side insets the safe area
+	# between the columns is off-centre, the score and the two AI screens are not - they mirror round vp.x / 2, each AI screen
+	# AI_X in from the wider of the two side insets (clear of the cut-out in both rotations)
+	var cx := vp.x / 2.0
+	var e := maxf(l, vp.x - r)
+	d["score"] = Rect2(cx - SCORE_PT.x * z / 2.0, 0.0, SCORE_PT.x * z, SCORE_PT.y * z)
 	# the AI screens end at THE PIT's top edge (+2 pt): his frame dips them 5 % into the pit's round corners, but the G maps put
 	# platforms there (zone sweep 11-18: G-01 / G-06 / G-10 / G-18), so they stay on the crust
 	var ah := minf(AI_PT.y, 66.0 + 2.0 - AI_Y)                 # (pit top = 66 pt in this unit, main.pit_rect)
-	d["ai_l"] = Rect2(l + AI_X * z, AI_Y * z, AI_PT.x * z, ah * z)
-	d["ai_r"] = Rect2(r - (AI_X + AI_PT.x) * z, AI_Y * z, AI_PT.x * z, ah * z)
+	d["ai_l"] = Rect2(e + AI_X * z, AI_Y * z, AI_PT.x * z, ah * z)
+	d["ai_r"] = Rect2(vp.x - e - (AI_X + AI_PT.x) * z, AI_Y * z, AI_PT.x * z, ah * z)
 	d["util"] = Rect2(r - UTIL_PT.x * z, UTIL_Y * z, UTIL_PT.x * z, UTIL_PT.y * z)
 	d["name"] = Rect2(l + 1.0 * z, vp.y - (FOOT_Y + FOOT_H) * z, 111.0 * z, FOOT_H * z)
 	d["ver"] = Rect2(r - 112.0 * z, vp.y - (FOOT_Y + FOOT_H) * z, 112.0 * z, FOOT_H * z)
