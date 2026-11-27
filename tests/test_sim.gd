@@ -36,6 +36,11 @@ func _init() -> void:
 		print("two_doors: %d failure(s)" % failures)
 		quit(1 if failures else 0)
 		return
+	if "--only=hotfix_0253" in OS.get_cmdline_user_args():    # 0.25.3 HOTFIX alone (quick)
+		_hotfix_0253()
+		print("hotfix_0253: %d failure(s)" % failures)
+		quit(1 if failures else 0)
+		return
 	if "--only=relays_proto" in OS.get_cmdline_user_args():   # RELAYS 3.0 PROTOTYPES alone (quick)
 		_relays_proto()
 		print("relays_proto: %d failure(s)" % failures)
@@ -1034,6 +1039,7 @@ func _init() -> void:
 	_catchup_tests()
 	_relays_proto()
 	_two_doors()
+	_hotfix_0253()
 	_ai_relays(mr, seats_r)
 
 	# ---------------------------------------------------------------- Daniele 2026-11-11: neutral nodes do not regrow (was 0.18.9)
@@ -3985,3 +3991,80 @@ func _two_doors() -> void:
 	check(absf(la - lb) < 0.01, "two doors in and out: N-24 home to home is even (A %.2f m, B %.2f m)" % [la, lb])
 	Rules.TWO_DOORS = was
 	Rules.DOOR_EXITS = was_exits
+
+
+func _g_sim(code: String) -> Sim:
+	for p in MapPool.all():
+		if (p as String).get_file().begins_with(code):
+			var m := MapBuilder.load_map(p)
+			var seats := {}
+			for st in m["seats"]["1v1"]:
+				seats[int(st["node"])] = st["seat"]
+			var s := Sim.new()
+			s.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "null"}, 1)
+			return s
+	return null
+
+
+func _hotfix_0253() -> void:
+	## 0.25.3 HOTFIX (Daniele 2026-11-27, four bugs on live 0.25.2). The Sim side of (b) and (d); (c)'s and (a)'s
+	## HUD side is tests/test_hotfix_0253.tscn.
+	# (d) every relay of the live pool (POOL G) that is not a launcher offers the relay pie's LASER and FORGE
+	var bare := []
+	for p in MapPool.all():
+		var code: String = (p as String).get_file().substr(0, 4)
+		if not code in MapPool.PROTO:
+			continue
+		var s := _g_sim(code)
+		for n in s.nodes:
+			if n["relay"] != "" and n["relay"] != "launcher" and not ("laser" in n["buildable"] and "forge" in n["buildable"]):
+				bare.append("%s n%d %s" % [code, n["id"], n["relay"]])
+	check(bare.is_empty(), "0.25.3 (d): every non-launcher relay on the G maps may hold a laser or a forge (bare: %s)" % [bare])
+	# (b) G-02's old laser relay (node 4, prebuilt laser) swaps to a forge
+	var s2 := _g_sim("G-02")
+	var lr: Dictionary = s2.nodes[4]
+	check(lr["relay"] == "laser_relay" and lr["structure"] == "laser", "G-02 node 4 is a laser relay holding its laser")
+	lr["owner"] = "A"
+	lr["units"] = float(Rules.FORGE_COST) + 50.0
+	check(s2.can_build(4, "A", "forge") == "", "0.25.3 (b): a laser relay's laser can change to a forge (%s)" % s2.can_build(4, "A", "forge"))
+	s2.build(4, "A", "forge")
+	for i in range(int(Rules.BUILD_SECONDS / 0.1) + 5):
+		s2.step(0.1)
+	check(lr["structure"] == "forge", "0.25.3 (b): ... and the forge stands after the build (%s)" % lr["structure"])
+	# (d) G-07's ferry console takes a laser
+	var s7 := _g_sim("G-07")
+	var fy: Dictionary = s7.nodes[3]
+	check(fy["relay"] == "ferry" and fy["structure"] == "", "G-07 node 3 is a ferry with an empty socket")
+	fy["owner"] = "A"
+	fy["units"] = float(Rules.LASER_COST) + 50.0
+	check(s7.can_build(3, "A", "laser") == "", "0.25.3 (d): the ferry's console takes a laser (%s)" % s7.can_build(3, "A", "laser"))
+	# (c) a sinkhole that destroys a T1 vat leaves an empty socket the owner can rebuild (Sim side; the pie's VAT slice is the HUD test)
+	var sc := _g_sim("G-02")
+	var vid := -1
+	for n in sc.nodes:
+		if n["node_kind"] == "common" and n["owner"] == "" and n["structure"] == "vat" and int(n["tier"]) == 1:
+			vid = n["id"]
+			break
+	var v: Dictionary = sc.nodes[vid]
+	v["owner"] = "B"
+	sc._sinkhole("A", v)
+	check(v["structure"] == "", "a sinkhole destroys a T1 vat (empty socket)")
+	v["units"] = float(Rules.VAT_RESTORE_COST) + 20.0
+	check(sc.can_build(vid, "B", "vat") == "", "0.25.3 (c): the emptied node can rebuild its vat (%s)" % sc.can_build(vid, "B", "vat"))
+	sc.build(vid, "B", "vat")
+	for i in range(int(Rules.BUILD_SECONDS / 0.1) + 5):
+		sc.step(0.1)
+	check(v["structure"] == "vat" and int(v["tier"]) == 1, "0.25.3 (c): ... and the vat stands again (T%d %s)" % [v["tier"], v["structure"]])
+	# (c) the AI rebuilds its own emptied node too
+	var sa := _g_sim("G-02")
+	var va: Dictionary = sa.nodes[vid]
+	va["owner"] = "B"
+	sa._sinkhole("A", va)
+	va["units"] = 200.0
+	var ai := SeatAI.new("B", 2.5, "Standard")
+	for i in range(200):
+		ai.think(sa, 0.1)
+		sa.step(0.1)
+		if va["build_kind"] == "vat_restore" or va["structure"] == "vat":
+			break
+	check(va["build_kind"] == "vat_restore" or va["structure"] == "vat", "0.25.3 (c): the AI rebuilds a vat on its node a sinkhole emptied")
