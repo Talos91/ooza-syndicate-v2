@@ -126,6 +126,8 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 		# map-placed T4 (it holds only its vat); common = every other vat node
 		var kind := "relay" if relay != "" else ("special" if str(n.get("category", "normal")) in ["strategic", "final"] \
 				or (owner == "" and tier >= 4) else "common")
+		if kind == "special" and owner != "":            # 3.0: a SPECIAL T4 is a neutral hotspot, never a home (a seat plays it common)
+			kind = "common"
 		var junction: String = str(n.get("junction", "")) if n.get("junction") != null else ""
 		if junction != "":                              # JUNCTION: a deck junction or curve - no owner, no units, no structure
 			kind = "junction"
@@ -133,7 +135,7 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			units = 0.0
 		if kind == "special" and owner == "":            # Daniele, 2026-09-27: a special node is always a T4 vat
 			tier = 4
-			units = float(Rules.NEUTRAL_UNITS[4])
+			units = float(Rules.SPECIAL_GARRISON)          # 3.0 HOTSPOT: its big neutral garrison (placeholder, Rules)
 		nodes.append({
 			"id": id, "pos": positions[id], "owner": owner, "tier": tier, "units": units,
 			"category": n.get("category", "normal"), "center": n.get("center", false), "relay": relay,
@@ -516,7 +518,7 @@ func _base_production(n: Dictionary) -> float:
 		return 0.0
 	if vat_paused(n):                                      # VAT COLUMN: paused while the blueprint fills
 		return 0.0
-	var p: float = Rules.PROD[n["tier"]] * stat(n["owner"], "production")
+	var p: float = (Rules.SPECIAL_PROD if is_special(n) else float(Rules.PROD[n["tier"]])) * stat(n["owner"], "production")   # 3.0: SPECIAL = the most
 	if Rules.proto_debug and not debug_prod.is_empty():   # PROTO DEBUG: MY PRODUCTION (readouts follow it too)
 		p *= float(debug_prod.get(n["owner"], 1.0))
 	return p * Rules.CATCHUP_PRODUCTION if _catchup.has(teams.get(n["owner"], n["owner"])) else p
@@ -553,6 +555,8 @@ func catchup_active(seat: String) -> bool:
 
 func node_cap(n: Dictionary) -> float:
 	## The node's capacity (its tier's cap): the halo tiers and the shared cap read it.
+	if is_special(n):                                    # 3.0 SPECIAL T4 hotspot (Rules.SPECIAL_CAP)
+		return float(Rules.SPECIAL_CAP)
 	return float(Rules.CAPS.get(n["tier"], Rules.CAPS[1]))
 
 
