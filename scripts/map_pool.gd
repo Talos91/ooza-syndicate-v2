@@ -9,7 +9,7 @@ class_name MapPool
 ## test_ai_curve run over. `all()` itself still carries the tutorial-only maps - test_maps4 (every baked
 ## map) and the rules tests that walk MapPool.all() for coverage still need to see them.
 
-const GROUP_ORDER := ["L", "G", "T", "R", "N", "E", "A", "M", "C", "B", "S", "X", "P", "D", "H"]   # G = the forward pool (0.24.5, POOL G); R = round R proto maps; E = experimental E-01..E-10; P = Relays 3.0 prototype test maps (never pooled); A = Alpha 11 classics; M = maps 4.3 / 4.4 classic + 4.6 relay;
+const GROUP_ORDER := ["Z", "L", "G", "T", "R", "N", "E", "A", "M", "C", "B", "S", "X", "P", "D", "H"]   # G = the forward pool (0.24.5, POOL G); R = round R proto maps; E = experimental E-01..E-10; P = Relays 3.0 prototype test maps (never pooled); A = Alpha 11 classics; M = maps 4.3 / 4.4 classic + 4.6 relay;
                                                               # MAPS 5.0: N = the map builder's new maps (References/Ooze Syndicate maps 5.0)
                                                               # (Mushroom Wars style); D = debug / test maps
 const DIR := "res://maps4"
@@ -72,6 +72,9 @@ static func battlefield() -> Array:
 	if not _battlefield_cache.is_empty():
 		return _battlefield_cache
 	var offered := all().filter(func(p): return not p.get_file().substr(0, 4) in TUTORIAL_ONLY and not archived(p) and (not rework(p) or p.get_file().substr(0, 4) in MULTI_FILL))
+	if not POOL3.is_empty() and not Rules.lab:        # OOZE 3.0: the Z maps only, on every build line (release, -dev, demo, proto)
+		_battlefield_cache = offered.filter(func(p): return p.get_file().substr(0, 4) in POOL3)
+		return _battlefield_cache
 	if Rules.lab and not LAB.is_empty():              # LAB BUILD: the lab maps only (empty LAB = the G pool below, via proto_debug)
 		var joints: bool = Rules.lab_opt("joints") == true
 		return offered.filter(func(p): return p.get_file().substr(0, 4) in LAB and (joints or not p.get_file().substr(0, 4) in LAB_JOINT))   # (not cached: a card may switch joints)
@@ -125,6 +128,9 @@ static func test_scope() -> Array[String]:
 	## The maps the per-map suites verify (test_maps4, test_map_pool, phone_fit): the G pool (Daniele 2026-11-15; before: PROTO + KEEP_OLD).
 	## REWORK maps are not checked and their failures are no blockers (TEST RULE 2026-11-06).
 	var out: Array[String] = []
+	if not POOL3.is_empty():                          # OOZE 3.0 (plan 2.4): the per-map suites check the Z pool only
+		out.append_array(POOL3)
+		return out
 	if Rules.lab and not LAB.is_empty():              # a lab build checks what its picker offers
 		out.append_array(LAB.filter(func(c): return Rules.lab_opt("joints") == true or not c in LAB_JOINT))
 	else:
@@ -159,6 +165,12 @@ static func archived(code_or_path: String) -> bool:
 # (Rules.proto_debug) offers just these - the Relays 3.0 test maps - and no older map fills a mode they lack (they are 1v1 only,
 # so the picker shows only the 1v1 chip). The release line never reaches this: its VERSION has no "-proto".
 const PROTO: Array[String] = ["G-01", "G-02", "G-03", "G-04", "G-05", "G-06", "G-07", "G-08", "G-09", "G-10", "G-11", "G-12", "G-13", "G-14", "G-15", "G-16", "G-17", "G-18", "G-19"]   # POOL G (2026-11-15): the G maps (was the round R + P maps; the kept ones are G now, the rest REWORK)
+# OOZE 3.0 POOL (plan 05 Handoff/handoffs/3.0-ARCHITECTURE-PLAN 2026-11-27.md section 2.4; Daniele 2026-11-27: the old pool-G maps are
+# NOT in the 3.0 build): group "Z", codes of 4 characters, built into Board3's zoom box at Rules.R 7.6 by References/Ooze Syndicate
+# maps 3.0/generator/maps3.py (baked with frame.box = Board3.BOX_ID). Non-empty = battlefield() / mode_offered() offer ONLY these
+# (every build line except a lab build), and test_scope() = these. Every older map stays baked in maps4/ and in all() (nothing is
+# deleted; the tutorial and campaign load theirs by path); the 3.0 export ships only these (WP6).
+const POOL3: Array[String] = ["Z-01", "Z-02", "Z-03", "Z-04", "Z-05", "Z-06", "Z-07", "Z-08"]
 # THEMES (2026-11-13): map code -> LookTheme id (corporate_campus / golden_hour / quota_parade / wellness_retreat). Empty = the LAB
 # on every map until Daniele assigns the round-32 settings; dev --theme=<id> forces one for shots.
 const THEMES := {}
@@ -188,6 +200,8 @@ static func mode_offered(code_or_path: String, mode: String) -> bool:
 	## new pool doesn't offer (it fills a gap, it doesn't compete with the new maps). Never a WITHHELD_MODES mode.
 	if mode in WITHHELD_MODES.get(code_or_path.get_file().substr(0, 4), []) or archived(code_or_path) or (rework(code_or_path) and not code_or_path.get_file().substr(0, 4) in MULTI_FILL):
 		return false
+	if not POOL3.is_empty() and not Rules.lab:        # OOZE 3.0: only the Z maps are offered, in every mode they seat
+		return code_or_path.get_file().substr(0, 4) in POOL3
 	if POOL_GROUPS.is_empty() or (Rules.lab and code_or_path.get_file().substr(0, 4) in LAB):
 		return true
 	var c := code_or_path.get_file().substr(0, 1)

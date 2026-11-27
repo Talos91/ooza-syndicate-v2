@@ -209,6 +209,58 @@ func _seats(m: Dictionary) -> void:
 			check(sizes == TEAMS[md], "%s: %s teams %s" % [code, md, str(sizes)])
 
 
+const EDGE_KINDS := ["deck", "joint"]          # OOZE 3.0 (plan 2.2): Sim.edge_kind's kinds; a map may never ship one the sim does not know
+const NODE_CATEGORIES := ["normal", "special", "relay", "relay_special"]   # Daniele 2026-11-27 (nodeCategory)
+
+
+func _ooze3(m: Dictionary, path: String) -> void:
+	## OOZE 3.0 pool (MapPool.POOL3) checks, plan 2.3 / 2.4: (1) the bake's stamps match the game: frame.nodeRadius == Rules.R
+	## (a stale bake) and frame.box == Board3.BOX_ID (built into this zoom box); (2) every platform rim (Board3.BOX_RIM) lies
+	## inside Board3's box at the baked position; (3) edge kinds and node categories are known; (4) joints are exactly two
+	## touching platforms apart and no two platforms' owner bands overlap.
+	var code: String = m["code"]
+	if not code in MapPool.POOL3:
+		return
+	var fr: Dictionary = m.get("frame", {})
+	check(absf(float(fr.get("nodeRadius", -1.0)) - Rules.R) < 0.001, "%s: frame.nodeRadius %s == Rules.R %.2f (else re-bake)" % [code, str(fr.get("nodeRadius")), Rules.R])
+	check(absf(Board3.BOX_R - Rules.R) < 0.001, "%s: Board3 was measured at R %.2f == Rules.R %.2f (else re-run box_probe)" % [code, Board3.BOX_R, Rules.R])
+	check(str(fr.get("box", "")) == Board3.BOX_ID, "%s: frame.box %s == Board3.BOX_ID %s (else re-bake into the box)" % [code, str(fr.get("box")), Board3.BOX_ID])
+	var lay: Dictionary = m["layout"]["nodes"]
+	var worst := INF
+	var worst_id := -1
+	for k in lay:
+		var p: Array = lay[k]
+		var mg := Board3.rim_margin(float(p[0]), float(p[1]))
+		if mg < worst:
+			worst = mg
+			worst_id = int(k)
+	check(worst >= -0.01, "%s: every rim inside Board3's box (worst node %d, margin %.2f m)" % [code, worst_id, worst])
+	for e in m["edges"]:
+		check(str(e.get("kind", "")) in EDGE_KINDS, "%s: edge %s-%s kind '%s' is known (%s)" % [code, str(e["from"]), str(e["to"]), str(e.get("kind")), str(EDGE_KINDS)])
+		check((str(e.get("kind")) == "joint") == bool(e.get("joint", false)), "%s: edge %s-%s kind matches its joint flag" % [code, str(e["from"]), str(e["to"])])
+	var homes := {}
+	for s in m["seats"]["1v1"]:
+		homes[int(s["node"])] = true
+	for n in m["nodes"]:
+		var cat := str(n.get("nodeCategory", ""))
+		check(cat in NODE_CATEGORIES, "%s: node %d nodeCategory '%s' is known" % [code, int(n["id"]), cat])
+		check((cat in ["relay", "relay_special"]) == (n.get("relay") != null and str(n.get("relay")) != ""), "%s: node %d is a relay exactly when its category is relay" % [code, int(n["id"])])
+	var jd := float(fr.get("jointDistance", 2.0 * (Rules.R + 0.14)))
+	var ids: Array = lay.keys()
+	for i in range(ids.size()):
+		for j in range(i + 1, ids.size()):
+			var a: Array = lay[ids[i]]
+			var b: Array = lay[ids[j]]
+			check(Vector2(a[0], a[1]).distance_to(Vector2(b[0], b[1])) >= jd - 0.05, "%s: platforms %s and %s do not overlap (>= %.1f m apart)" % [code, ids[i], ids[j], jd])
+	for k in range(m["edges"].size()):
+		var e: Dictionary = m["edges"][k]
+		if bool(e.get("joint", false)):
+			var a: Array = lay[str(int(e["from"]))]
+			var b: Array = lay[str(int(e["to"]))]
+			check(absf(Vector2(a[0], a[1]).distance_to(Vector2(b[0], b[1])) - jd) < 0.05, "%s: joint %s-%s is two touching platforms (%.1f m)" % [code, str(e["from"]), str(e["to"]), jd])
+	check(m["seats"]["1v1"].size() == 2 and m["modes"] == ["1v1"], "%s: a 3.0 map is 1v1 only" % code)
+
+
 func _invariants(m: Dictionary) -> void:
 	## What Sim silently assumes: nodes[id] is node id (ids 0..N-1 in array order), and one edge per
 	## node pair (find_route picks a link, the path builder re-resolves the pair's first edge).
@@ -637,7 +689,7 @@ func _very_last_stand() -> void:
 	# the spread picks are maps WITH a Last Stand order (lab maps have none: their board is a fixed size and they are not
 	# picked by list position, which moved whenever a map was added), the Last Stand drop check is unchanged for them
 	var ringed: Array = maps.filter(func(mm): return not (mm["lastStand"].get("methods", []) as Array).is_empty())
-	for i in [0, ringed.size() / 3, ringed.size() * 2 / 3, ringed.size() - 1]:
+	for i in ([0, ringed.size() / 3, ringed.size() * 2 / 3, ringed.size() - 1] if not ringed.is_empty() else []):   # OOZE 3.0: the Z pool has no ring orders (quota)
 		if not ringed[i] in picks:
 			picks.append(ringed[i])
 	for m in picks:
@@ -770,11 +822,12 @@ func _run() -> void:
 	## SCOPE (Daniele 2026-11-06: "suites verify only the round-R / MapPool.PROTO maps; old-map failures are not blockers"):
 	## on a proto build (Rules.proto_debug) only the proto picker's maps are checked; `-- scope=all` checks every baked map;
 	## `-- scope=pool` checks MapPool.test_scope() (the G pool, 2026-11-15) on any build.
-	var full := (not Rules.proto_debug and not "scope=pool" in OS.get_cmdline_user_args()) or "scope=all" in OS.get_cmdline_user_args()
+	## OOZE 3.0 (plan 2.4): while MapPool.POOL3 is set the default scope is the Z pool on every build line (old maps: `-- scope=all`).
+	var full := (MapPool.POOL3.is_empty() and not Rules.proto_debug and not "scope=pool" in OS.get_cmdline_user_args()) or "scope=all" in OS.get_cmdline_user_args()
 	var pool := MapPool.all()
 	if not full:
 		pool = pool.filter(func(p): return str(p).get_file().substr(0, 4) in MapPool.test_scope())
-		print("SCOPE pool: %d maps (MapPool.test_scope() = the G maps); -- scope=all for every baked map" % pool.size())
+		print("SCOPE pool: %d maps (MapPool.test_scope() = %s); -- scope=all for every baked map" % [pool.size(), "POOL3, the Z maps" if not MapPool.POOL3.is_empty() else "the G maps"])
 	_pool = pool
 	var baked := Array(DirAccess.get_files_at(MapPool.DIR)).filter(func(f): return f.trim_suffix(".remap").ends_with(".json")).size()
 	if full:
@@ -791,6 +844,7 @@ func _run() -> void:
 		if not m.has("layout"):
 			continue
 		_layout(m, path)
+		_ooze3(m, path)
 		_invariants(m)
 		_seats(m)
 		_last_stand(m)
