@@ -30,6 +30,7 @@ var hud                             # Hud (untyped: a test may load this script 
 var scale_k := 1.0
 var screens := {}                   # node id -> {"pivot", "frame", "panel", "label", "vat", "owner", "text"}
 var _t := 0.0
+var override := {}                  # LAB6 SEND RING: node id -> text shown instead of the count ("-24" while a send ring is open)
 
 
 func setup(m: Node) -> void:
@@ -117,7 +118,7 @@ func sync(force := false) -> void:
 			var col := Rules.seat_color(owner) if owner != "" else Rules.NEUTRAL
 			((s["frame"] as MeshInstance3D).material_override as StandardMaterial3D).albedo_color = col
 			(s["label"] as Label3D).modulate = col.lerp(Color.WHITE, 0.35)
-		var t := count_text(n)
+		var t: String = str(override[n["id"]]) if override.has(n["id"]) else count_text(n)   # LAB6 SEND RING hook
 		if t != s["text"]:
 			s["text"] = t
 			(s["label"] as Label3D).text = t

@@ -465,6 +465,7 @@ func setup(m: Node3D) -> void:
 	music_button.add_child(_music_glyph)
 	# side command panel (Alpha 11: 100/75/50/25 + the selected vat's count)
 	side_panel = PanelContainer.new()
+	side_panel.visible = shows("send_panel")           # LAB6 SEND RING hook: hidden with send_ui "ring"
 	# Alpha 24 Neon Noir: the SEND housing - a container, so it holds living ooze and drips (its buttons never do)
 	# ui-node (Daniele 2026-11-04): ONE tank instead of four share buttons and no SEND / DRAG A VAT words - SendTank draws its own
 	# frame, the goo at the picked share, the gauge ticks and the share / units on the surface; the panel is just its holder.
@@ -2241,6 +2242,8 @@ func dock_slot_rect(i: int) -> Rect2:
 # ------------------------------------------------------------------ TUTORIAL: reveal as you go (§6)
 func shows(key: String) -> bool:
 	## Is this HUD part on screen? Always, outside a lesson.
+	if key == "send_panel" and preload("res://scripts/send_ring.gd").on():   # LAB6 SEND RING hook: the ring replaces the panel
+		return false
 	return not gated or revealed.has(key.replace("machingoon", "machinegoon"))
 
 

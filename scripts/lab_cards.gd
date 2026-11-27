@@ -17,6 +17,8 @@ const GAT_POWER := {"key": "gat_power", "label": "POWER", "values": [1.0, 1.5, 2
 # lab4 job 3 (Daniele: "count size not there need to put so i can test"; the count ON the vat screen, "try +15 %", no HUD badge).
 # x1.0 = VatCount.DIGIT_H (three digits fill the vat capital's width).
 const COUNT := {"key": "count_scale", "label": "COUNT SIZE", "values": [1.0, 1.15, 1.3], "names": ["x1.0", "x1.15", "x1.3"]}
+# LAB6 SEND RING (Daniele 2026-11-27: "ring on the target ... 25 / 50 / 75 / ALL ... one gesture"): PANEL = today's HUD send panel.
+const SEND_UI := {"key": "send_ui", "label": "SEND AMOUNT", "values": ["panel", "ring"], "names": ["PANEL", "RING"]}
 const GAT_AMMO :={"key": "gat_ammo", "label": "AMMO", "values": [1.0, 0.5, 0.0], "names": ["1 PER KILL", "1 PER 2", "FREE"]}
 
 const CARDS: Array[Dictionary] = [
@@ -48,6 +50,9 @@ const CARDS: Array[Dictionary] = [
 	{"id": "quota", "title": "QUOTA BY TIER", "question": "1 point per tier, relays do not launch: does the score read and matter?",
 			"map": "L11P", "mode": "1v1", "ai": "Standard", "faction": "vex", "rival": "null",
 			"lab_opts": {"quota_tier": true, "gat_own_platform": true, "relay_set": true}, "live": true},
+	{"id": "send-ring", "title": "SEND RING", "question": "Pick the amount on a ring at the target, or on the panel: which is better?",
+			"map": "L11P", "mode": "1v1", "ai": "Standard", "faction": "vex", "rival": "null",
+			"lab_opts": {"count_on_screen": true, "hud_badge": false}, "live": true, "choices": [SEND_UI]},
 ]
 
 

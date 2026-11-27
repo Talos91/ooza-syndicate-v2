@@ -11,7 +11,7 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.30.0-lab5"   # OOZE 3.0 WP0 (branch ooze3): main 0.25.2 (cleanup) + lab4 61c2eb6e merged, lab still on; LAB 4: zoom box + locked camera, unit speed card, Googatling range/power/ammo options, relay-kill L09R redo, count on the vat screen (LAB 1-3: rule options, joint edges, cluster ladder); history in CHANGELOG.md
+const VERSION := "0.30.0-lab6"   # LAB 6: send ring card on ooze3 4dcf0e9e (send_ui panel / ring, scripts/send_ring.gd); OOZE 3.0 WP0 (branch ooze3): main 0.25.2 (cleanup) + lab4 61c2eb6e merged, lab still on; LAB 4: zoom box + locked camera, unit speed card, Googatling range/power/ammo options, relay-kill L09R redo, count on the vat screen (LAB 1-3: rule options, joint edges, cluster ladder); history in CHANGELOG.md
 const WORLD_LAB_FLOOR := true   # the demo's lab5 floor on every map (the fog / tube work was tuned on it); was Rules.demo only
 const LOOK_LAB2 := true   # the lab2 world look (cream decks, owner rim band, lab floor + surround) is the default (Daniele 2026-11-12: "the new status quo"); dev --look-old = the 0.24.1 look, --look=lab = test v1
 const HUD_LAB := true    # hud-lab (2026-11-13): the round-29/30 lab HUD pack (HudLab) is THE in-match HUD (false = the pre-lab HUD)
@@ -189,10 +189,11 @@ static var lab_opts := {
 	"gat_range": 0.0,           # Googatling reach, m from its node centre; 0 = as before (gat_own_platform: R 6 m, else MACHINEGOON_RANGE 10 m)
 	"gat_power": 1.0,           # x Googatling fire rate (kills/s = MACHINEGOON_RATE[tier] x this; Sim.gat_fire_rate)
 	"gat_ammo": 1.0,            # own garrison units spent per unit killed (1 = before: one per kill; 0.5 = 1 per 2 kills; 0 = free)
+	"send_ui": "panel",         # LAB6 SEND RING: "panel" = the HUD send panel (today) / "ring" = the amount picked on a ring at the target (send_ring.gd)
 }
 const _LAB_OFF := {"joints": false, "gat_own_platform": false, "gat_start": false, "quota_tier": false, "relay_set": false,
 		"count_on_screen": false, "count_scale": 1.0, "hud_badge": true, "cam_lock": false,
-		"unit_speed": 1.0, "gat_range": 0.0, "gat_power": 1.0, "gat_ammo": 1.0}   # what the real game does (lab off)
+		"unit_speed": 1.0, "gat_range": 0.0, "gat_power": 1.0, "gat_ammo": 1.0, "send_ui": "panel"}   # what the real game does (lab off)
 
 
 # LAB ZOOM BOX (lab4 job 1; Daniele's phone test of lab3: "if we trying maps more zoomed in the maps need to be buildt at zoom in

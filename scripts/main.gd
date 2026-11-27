@@ -83,6 +83,7 @@ var skill_fx: SkillFx                              # Skills 2.0 in the world: ev
 var scenery: Scenery
 var hud: Hud
 var vat_count: Node3D                               # LAB card COUNT SIZE (vat_count.gd), null otherwise
+var send_ring: Control                              # LAB6 SEND RING (send_ring.gd): the amount picked at the target, null with the panel
 var cam: Camera3D
 var cam_target := Vector3.ZERO
 var cam_dist := 90.0
@@ -165,6 +166,7 @@ var color_choice := "A"                       # your ownership colour: palette k
 var menu_layer: CanvasLayer
 const LabMenu := preload("res://scripts/lab_menu.gd")         # LAB BUILD (Rules.lab): the test-card screen
 const LabOverlay := preload("res://scripts/lab_overlay.gd")   # LAB BUILD: the in-match debug readout
+const SendRingScript := preload("res://scripts/send_ring.gd")   # LAB6 SEND RING: the amount ring at the target (send_ui "ring")
 const VatCountScript := preload("res://scripts/vat_count.gd")   # LAB card COUNT SIZE: counts on the vat screens
 static var relaunch := {}                     # survives a scene reload: Play again / Main menu
 static var last_map_path := ""                 # MAIN MENU remembers the last map played (0.19.0)
@@ -619,6 +621,13 @@ func _start_map(path: String) -> void:
 		vat_count = VatCountScript.new()
 		add_child(vat_count)
 		vat_count.setup(self)
+	if SendRingScript.on() and not Net.dedicated:      # LAB6 SEND RING hook: the ring layer over the HUD
+		var ring_layer := CanvasLayer.new()
+		ring_layer.layer = 4
+		add_child(ring_layer)
+		send_ring = SendRingScript.new()
+		ring_layer.add_child(send_ring)
+		send_ring.setup(self)
 	started = true
 	paused = false
 	_lm("started")
@@ -2435,12 +2444,15 @@ func _unhandled_input(event: InputEvent) -> void:
 					var moved := (mb.position - _press_pos).length() >= TAP_PIXELS
 					_note_drag_out(mb.position)
 					var aim := _send_aim(drag_from, mb.position)
+					if send_ring:                           # LAB6 SEND RING hook: the ring's target + share, else no cone send
+						aim = send_ring.filter_aim(aim, drag_from, mb.position, true)
 					if moved and aim["kind"] != "cancel":
 						_tap_node = -1                     # Alpha 11 (game.gd:723): a drag never arms the double-tap
 					if aim["kind"] == "send":
 						var target: int = aim["to"]
-						var count := int(floorf(sim.nodes[drag_from]["units"] * fraction))
-						if node_action("send", drag_from, {"to": target, "fraction": fraction}):
+						var f: float = float(aim.get("fraction", fraction))   # LAB6 SEND RING: the ring's pick (else the panel's)
+						var count := int(floorf(sim.nodes[drag_from]["units"] * f))
+						if node_action("send", drag_from, {"to": target, "fraction": f}):
 							fx._pulse(sim.nodes[target]["pos"], Rules.seat_color(HUMAN), Rules.R, 0.6)
 						else:
 							_send_failed("zero_units" if count < 1 else ("bridge_gone" if sim.find_route(drag_from, target).is_empty() else "refused"), drag_from, aim)
@@ -2489,6 +2501,8 @@ func _end_drag() -> void:
 	drag_from = -1
 	_drag_out = false
 	monster_from = -1
+	if send_ring:                                      # LAB6 SEND RING hook: the ring closes, the vat shows its count again
+		send_ring.end()
 	drag_mesh.clear_surfaces()
 	route_label.visible = false
 	_route_hud({})
@@ -2636,10 +2650,12 @@ func _draw_drag(from: int, b: Vector3, screen: Vector2) -> void:
 		return
 	var a: Vector3 = sim.nodes[from]["pos"]
 	var aim := _send_aim(from, screen)
+	if send_ring:                                      # LAB6 SEND RING hook
+		aim = send_ring.filter_aim(aim, from, screen)
 	var target: int = int(aim.get("to", -1))
 	var up := Vector3(0, 1.0, 0)
 	var mat := Mats.line(HUMAN)
-	var count := int(floorf(sim.nodes[from]["units"] * fraction))
+	var count := int(floorf(sim.nodes[from]["units"] * float(aim.get("fraction", fraction))))   # LAB6: the ring's pick
 	if aim["kind"] == "hold":
 		_draw_ring(from, mat)
 		route_label.text = "HOLD" if _queued_at(from) else "CANCEL"
