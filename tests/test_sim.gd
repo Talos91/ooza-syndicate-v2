@@ -3054,6 +3054,11 @@ func _relays_proto() -> void:
 	# proto line only (POOL_GROUPS ["N", "P"]): the P maps ARE offered on 02 BATTLEFIELD here; the release line keeps them out
 	if Rules.demo:                                    # DEMO BUILD: the picker offers MapPool.DEMO (R-01) only
 		check(MapPool.battlefield().map(func(p): return p.get_file().substr(0, 4)) == MapPool.DEMO, "DEMO: the battlefield pool is R-01 only")
+	elif not ((load("res://scripts/map_pool.gd") as Script).get_script_constant_map().get("POOL3", []) as Array).is_empty():   # OOZE 3.0 (WP2): the Z maps only
+		var pool3: Array = (load("res://scripts/map_pool.gd") as Script).get_script_constant_map()["POOL3"]
+		var bf3: Array = MapPool.battlefield().map(func(p): return p.get_file().substr(0, 4))
+		check(not bf3.is_empty() and bf3.all(func(c): return c in pool3),
+				"OOZE 3.0: the battlefield pool is the Z maps only (POOL3), no kept P maps (%s)" % str(bf3))
 	elif Rules.lab and not MapPool.LAB.is_empty():    # LAB BUILD: battlefield() is MapPool.LAB only (no G maps)
 		print("SKIP  RELAYS 3.0: kept P maps in the battlefield pool (lab build, battlefield() = MapPool.LAB %s)" % [MapPool.LAB])
 	else:
