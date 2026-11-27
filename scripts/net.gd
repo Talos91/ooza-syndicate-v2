@@ -76,7 +76,7 @@ signal rematch_changed
 signal order_feedback(message: String)
 signal seats_changed                               # host: which seats the AI plays changed
 
-const VERSION_TAG := "ooze20-net-8"               # plus Rules.VERSION: guests must match the host exactly (2: team switch, room colours; 3: structures 2.1, teams; 4: server-hosted rooms, room owner; 5: delta snapshots, binary frames; 6: READY; 7: player names; 8: POWERS - new horde keys, Portal [entrance, exit])
+const VERSION_TAG := "ooze20-net-9"               # plus Rules.VERSION: guests must match the host exactly (2: team switch, room colours; 3: structures 2.1, teams; 4: server-hosted rooms, room owner; 5: delta snapshots, binary frames; 6: READY; 7: player names; 8: POWERS - new horde keys, Portal [entrance, exit]; 9: OOZE 3.0 - 3.0 rules (joints, Last Stand = quota, unit speed, Googatling reach), snapshot "quota" always read; the count size is a local view option, never on the wire)
 # MAX 4 SEATS (Daniele 2026-11-18, screen layout; deleted from the code 2026-11-23): FFA5, 3v3 and 2v2v2 are gone - a request for
 # one is refused (set_mode). Tag archive-2026-11-23 keeps them (MODES 1v1 FFA3 FFA4 FFA5 2v2 3v3 2v2v2, SLOTS up to 6).
 const MODES := ["1v1", "FFA3", "FFA4", "2v2"]

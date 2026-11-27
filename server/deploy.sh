@@ -10,6 +10,8 @@
 #                                    closes the open rooms)
 #   server/deploy.sh --check         (with or without --staging) only the overwrite guard below, against the box: uploads
 #                                    and changes nothing; exit 0 = this build may deploy, 4 = a room runs this version
+#   server/deploy.sh --dry-run       (with or without --staging; OOZE 3.0 WP5) no ssh, no upload: prints the protocol tag, the
+#                                    version, the pack name and what that deploy would and would not touch, then exits 0
 # The overwrite guard (Daniele, 2026-10-27): every deploy refuses (exit 4) to rewrite /opt/ooze/packs/<tag>_<version>.pck
 # while a match host runs from that pack - a host reopens its pack by path at every scene load, so a rebuilt pack under
 # the same version string breaks the room (bump Rules.VERSION or wait). A pack byte-identical to this build (the staging
@@ -24,15 +26,31 @@ RELAY=""
 FORCE=""
 STAGING=""
 CHECK=""
+DRY=""
 for a in "$@"; do
 	case "$a" in
 		--relay) RELAY="--relay" ;;
 		--force) FORCE="--force" ;;
 		--staging) STAGING="--staging" ;;
 		--check) CHECK="--check" ;;
-		*) echo "unknown option $a (use --relay, --relay --force, --staging, --check)"; exit 1 ;;
+		--dry-run) DRY="--dry-run" ;;
+		*) echo "unknown option $a (use --relay, --relay --force, --staging, --check, --dry-run)"; exit 1 ;;
 	esac
 done
+if [ -n "$DRY" ]; then                             # nothing leaves this PC: no ssh, no scp
+	tag=$(sed -n 's/^const VERSION_TAG := "\([^"]*\)".*/\1/p' scripts/net.gd)
+	ver=$(sed -n 's/^const VERSION := "\([^"]*\)".*/\1/p' scripts/rules.gd)
+	[ -n "$tag" ] && [ -n "$ver" ] || { echo "could not read the version"; exit 1; }
+	size=$( [ -f "$WEB/index.pck" ] && stat -c %s "$WEB/index.pck" || echo "not exported yet" )
+	echo "DRY RUN - nothing is sent to $SERVER"
+	echo "version: $tag/$ver   pack: /opt/ooze/packs/${tag}_${ver}.pck   local $WEB/index.pck: $size"
+	if [ -n "$STAGING" ]; then
+		echo "--staging would: run the overwrite guard, upload index.pck as that pack; live version.txt, current.pck, web/ and the relay stay"
+	else
+		echo "plain would: run the overwrite guard, upload build/web + the pack, set version.txt = $tag/$ver and current.pck${RELAY:+, then restart the relay (--relay)}"
+	fi
+	exit 0
+fi
 [ -f "$WEB/index.pck" ] || { echo "no $WEB/index.pck - export Web first"; exit 1; }
 tag=$(sed -n 's/^const VERSION_TAG := "\([^"]*\)".*/\1/p' scripts/net.gd)
 ver=$(sed -n 's/^const VERSION := "\([^"]*\)".*/\1/p' scripts/rules.gd)

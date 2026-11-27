@@ -60,9 +60,21 @@ func _open_room(mode: String) -> void:
 	host.connected = true
 	host.room_code = "AB7K"
 	host.mode = mode
-	host.map_path = host.maps_for(mode)[0]
+	host.map_path = _map_for(mode)
 	host.roster = {1: {"faction": "vex", "slot": 0}}
 	host.room_owner = 1                             # a browser-hosted room: the host runs it (Net._start)
+
+
+func _map_for(mode: String) -> String:
+	## The pool's first map for `mode`, else (OOZE 3.0: the pool is the Z maps, 1v1 only - Daniele 11-27; WP6 removes the
+	## other modes) the first legacy map in MapPool.dir that seats it, so the protocol checks still run on every seat count.
+	var pool: Array = host.maps_for(mode)
+	if not pool.is_empty():
+		return pool[0]
+	for p in MapPool.all():
+		if host.map_offers(p, mode):
+			return p
+	return ""
 
 
 func _join(remote: String, faction := "null", version := "") -> Node:
@@ -395,7 +407,34 @@ func _run() -> void:
 	fp2.free()
 
 	# ---------------------------------------------------------------- STRUCTURES 2.1 + TEAMS (0.18.10): orders and snapshots
-	check(host.VERSION_TAG == "ooze20-net-8", "the net protocol is bumped for the powers (ooze20-net-8; 7: player names)")
+	check(host.VERSION_TAG == "ooze20-net-9", "the net protocol is bumped for OOZE 3.0 (ooze20-net-9; 8: powers)")
+	check(host.version() == "ooze20-net-9/" + Rules.VERSION, "a room's version = net-9 tag + Rules.VERSION (0.25.x net-8 rooms never mix)")
+	# OOZE 3.0 (WP5): the quota rides every snapshot, keyframe and delta, through the real wire to the guest's Sim
+	host._order_limits = {}
+	var q_old: Dictionary = hs.quota.duplicate()
+	hs.quota = {"A": 3, "B": 5}
+	hs.quota_last_side = "B"
+	hs.quota_reason = "final"
+	host._broadcast_raw("state", var_to_bytes(host._wire_state(host.snapshot(hs, true), true)).compress(FileAccess.COMPRESSION_DEFLATE))
+	_deliver()
+	check(gs.quota == {"A": 3, "B": 5} and gs.quota_last_side == "B" and gs.quota_reason == "final",
+			"guest: a keyframe carries the quota (%s, %s, %s)" % [str(gs.quota), gs.quota_last_side, gs.quota_reason])
+	hs.quota = {"A": 4, "B": 5}
+	hs.quota_last_side = "A"
+	hs.quota_reason = "unreachable"
+	var q_delta: Dictionary = host._wire_state(host.snapshot(hs, false), false)
+	check(q_delta.has("base") and q_delta.has("quota"), "a delta snapshot carries the quota whole")
+	host._broadcast_raw("state", var_to_bytes(q_delta).compress(FileAccess.COMPRESSION_DEFLATE))
+	_deliver()
+	check(gs.quota == {"A": 4, "B": 5} and gs.quota_last_side == "A" and gs.quota_reason == "unreachable",
+			"guest: a delta updates the quota (%s, %s, %s)" % [str(gs.quota), gs.quota_last_side, gs.quota_reason])
+	var q_wire := var_to_str(host.snapshot(hs, true)) + var_to_str(host.match_info) + var_to_str(host.roster)
+	check(not q_wire.contains("count_scale") and not q_wire.contains("count_size") and not q_wire.contains("COUNT_SIZE"),
+			"the count size (a local OPTIONS choice) is in no packet: snapshot, launch, roster")
+	hs.quota = q_old
+	hs.quota_last_side = ""
+	hs.quota_reason = ""
+	host.apply_snapshot(gs, host.snapshot(hs, true))
 	host._order_limits = {}
 	host._packet_limits = {}
 	host.bridge.sent = []

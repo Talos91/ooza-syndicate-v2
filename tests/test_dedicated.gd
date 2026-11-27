@@ -85,14 +85,24 @@ func _run() -> void:
 		if not a.maps_for(m).is_empty():
 			big = m
 			break
-	check(big != "", "the pool offers a mode with more than two seats")
-	b.set_mode(big)
-	await _wait(func(): return false, 1.0)
-	check(a.mode == "1v1" and b.mode == "1v1", "a non-owner's lobby change is ignored")
-	a.set_mode(big)
-	check(await _wait(func(): return a.mode == big and b.mode == big), "the owner changes the mode for everyone (%s)" % big)
-	check(not a.can_start(), "%s with two players cannot DEPLOY" % big)
-	a.set_mode("1v1")
+	if big != "":
+		b.set_mode(big)
+		await _wait(func(): return false, 1.0)
+		check(a.mode == "1v1" and b.mode == "1v1", "a non-owner's lobby change is ignored")
+		a.set_mode(big)
+		check(await _wait(func(): return a.mode == big and b.mode == big), "the owner changes the mode for everyone (%s)" % big)
+		check(not a.can_start(), "%s with two players cannot DEPLOY" % big)
+		a.set_mode("1v1")
+	else:                                             # OOZE 3.0 (Daniele 11-27 "BRAWL 1v1 only"): the pool offers 1v1 alone,
+		var maps: Array = a.maps_for("1v1")            # so the owner-only lobby change is a map change
+		check(maps.size() >= 2, "3.0: the pool offers 1v1 only, on %d maps" % maps.size())
+		var other: String = maps[1] if maps[0] == a.map_path else maps[0]
+		b.set_map(other)
+		await _wait(func(): return false, 1.0)
+		check(a.map_path != other and b.map_path != other, "a non-owner's lobby change is ignored")
+		a.set_map(other)
+		check(await _wait(func(): return a.map_path == other and b.map_path == other), "the owner changes the map for everyone (%s)" % other.get_file())
+		check(a.mode == "1v1" and a.maps_for("FFA4").is_empty() and a.maps_for("2v2").is_empty(), "3.0: no room offers 2v2 / FFA")
 	var ls: bool = a.last_stand
 	a.toggle_last_stand()
 	check(await _wait(func(): return a.mode == "1v1" and a.last_stand != ls and b.last_stand != ls), "the owner toggles LAST STAND")

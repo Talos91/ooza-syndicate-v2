@@ -14,6 +14,17 @@
   relay.py forwards both, so it must be at least as new as the game (the binary-aware relay has run since the 0.21.2
   deploy; the net-4 one is kept on the box as `/opt/ooze/relay.py.net4-backup`). A slow guest skips snapshots (backlog).
 
+- Protocol `ooze20-net-9` (OOZE 3.0, first staging 0.30.0; WP5 2026-11-27): the 3.0 rules (joint edges, Last Stand = quota,
+  unit speed x0.75, Googatling reach) and the snapshot's `quota` field (read on every snapshot, keyframe and delta). The
+  count size is a local OPTIONS choice and never rides a packet (`tests/test_net.gd` checks it). relay.py is unchanged: it
+  forwards any version and picks the pack by the version string. **Coexistence:** live stays `ooze20-net-8/0.25.3`
+  (`version.txt`, `current.pck`); a plain `deploy.sh --staging` of 0.30.0 adds `/opt/ooze/packs/ooze20-net-9_0.30.0.pck`
+  beside it, so a staging player's CREATE ROOM gets a net-9 match host from that pack and a live player's gets a net-8 one
+  from `current.pck`. A room code is open to anyone, but a guest on the other build is refused at REGISTER (its
+  `Net.version()` differs), so net-8 and net-9 players never share a room. No `--relay` and no restart are needed. Mind the
+  keep-4 prune (`KEEP`): only a plain deploy prunes, by `sort -V` of `<tag>_<version>`, so every net-9 pack counts as newer than any net-8 one: a
+  live 0.25.x hotfix then keeps its own pack and the net-9 packs, and loses the oldest net-8 rollbacks first.
+  `deploy.sh --dry-run [--staging]` prints the tag, version and pack name without touching the box.
 - Limits (0.21.4): frames are capped per socket on the frame header (bigger = the socket closes with 1009, nothing
   buffered): 64 KB for the hello, 8 KB for a guest, 1 MB for a host (the largest keyframe measured: 81 KB raw / 13 KB
   deflated); 64 sockets per address (carrier NAT). A booting match host starts at nice 10 and goes back to 0 once it
