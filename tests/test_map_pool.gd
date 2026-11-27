@@ -60,6 +60,9 @@ func _arg(key: String, fallback: String) -> String:
 
 func _init() -> void:
 	SeatAI.guard_on = _arg("guard", "on") != "off"
+	if not MapPool.POOL3.is_empty():
+		_pool3()
+		return
 	var paths := MapPool.battlefield()
 	if Rules.proto_debug:   # proto / demo build: check the proto + keep-list scope (Daniele 2026-11-10), not just the demo's one map
 		paths = MapPool.all().filter(func(p): return p.get_file().substr(0, 4) in MapPool.test_scope())
@@ -117,6 +120,51 @@ func _init() -> void:
 
 	_check_overpass()
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
+	quit(1 if failures else 0)
+
+
+func _pool3() -> void:
+	## OOZE 3.0 (plan 2.4, Daniele 2026-11-27: old pool-G maps are not in the 3.0 build): the pickers offer ONLY the Z maps
+	## (MapPool.POOL3) on every build line but a lab build; every older map stays baked (nothing deleted) and is offered nowhere;
+	## every Z map loads, seats 1v1, lays out every node and finishes a headless AI vs AI match.
+	var lab0 := Rules.lab
+	var demo0 := Rules.demo
+	var proto0 := Rules.proto_debug
+	for line in [[false, false, false, "release"], [false, false, true, "-dev / proto"], [false, true, true, "demo"]]:
+		Rules.lab = line[0]
+		Rules.demo = line[1]
+		Rules.proto_debug = line[2]
+		MapPool._battlefield_cache = []
+		var bf := MapPool.battlefield()
+		var codes := bf.map(func(p): return p.get_file().substr(0, 4))
+		check(codes == Array(MapPool.POOL3), "%s line: the picker offers exactly the Z maps %s (got %s)" % [line[3], str(MapPool.POOL3), str(codes)])
+		for code in ["G-01", "G-19", "L09C", "N-06", "M-15", "T-02"]:
+			check(not MapPool.mode_offered(code, "1v1") and not MapPool.mode_offered(code, "2v2"), "%s line: old map %s offered in no mode" % [line[3], code])
+		for code in MapPool.POOL3:
+			check(MapPool.mode_offered(code, "1v1"), "%s line: %s offered in 1v1" % [line[3], code])
+	Rules.lab = lab0
+	Rules.demo = demo0
+	Rules.proto_debug = proto0
+	MapPool._battlefield_cache = []
+	check(MapPool.test_scope() == MapPool.POOL3, "test_scope() is POOL3")
+	check(MapPool.all().any(func(p): return p.get_file().begins_with("G-01")), "old maps stay baked (G-01 in MapPool.all())")
+	var paths := MapPool.all().filter(func(p): return p.get_file().substr(0, 4) in MapPool.POOL3)
+	check(paths.size() == MapPool.POOL3.size(), "every POOL3 map is baked (%d of %d)" % [paths.size(), MapPool.POOL3.size()])
+	print("%d maps in the pool (POOL3)" % paths.size())
+	for map_path in paths:
+		var sm := MapBuilder.load_map(map_path)
+		check(sm.get("seats", {}).has("1v1"), "%s: seats 1v1" % map_path)
+		if not sm.get("seats", {}).has("1v1"):
+			continue
+		var spos := MapBuilder.layout(sm)
+		check(spos.size() == sm["nodes"].size(), "%s: every node laid out (%d/%d)" % [sm["code"], spos.size(), sm["nodes"].size()])
+		var s_seats := {}
+		for st in sm["seats"]["1v1"]:
+			s_seats[int(st["node"])] = st["seat"]
+		_play(sm, spos, s_seats, {}, "1v1")
+	_check_overpass()
+	print("
+%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	quit(1 if failures else 0)
 
 
