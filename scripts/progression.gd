@@ -329,9 +329,9 @@ static func seat_stats(sim: Sim, seat: String) -> Dictionary:
 
 
 static func placements(sim: Sim, strength := {}) -> Dictionary:
-	## seat -> place (1 = best). Winners (the winning seat and its team-mates) first; then survivors by `strength`
+	## seat -> place (1 = best). The winner first; then survivors by `strength`
 	## (seat -> final strength, the host's number; missing = 0); then seats in reverse order of going out (sim.events
-	## "eliminated"). Team-mates share their team's best place. A draw has no winners.
+	## "eliminated"). A draw has no winners.
 	var out_t := {}
 	for e in sim.events:
 		if e.get("type") == "eliminated" and not out_t.has(e.get("seat")):
@@ -345,29 +345,22 @@ static func placements(sim: Sim, strength := {}) -> Dictionary:
 		return float(out_t[s])
 	seats.sort_custom(func(a, b): return score.call(a) > score.call(b))
 	var place := {}
-	var team_place := {}
 	var next := 1
 	for s in seats:
-		var t = sim.teams.get(s, null)
-		if t != null and team_place.has(t):
-			place[s] = team_place[t]
-			continue
 		place[s] = next
-		if t != null:
-			team_place[t] = next
 		next += 1
 	return place
 
 
 static func history_entry(sim: Sim, seat: String, info := {}) -> Dictionary:
 	## One MATCH HISTORY line for this device's log: when, map, mode, online or not (room_key "ROOM-ROUND" joins it
-	## to the server's record), how long, the result, and every seat (faction, team, name or AI level, you).
+	## to the server's record), how long, the result, and every seat (faction, name or AI level, you).
 	## info: "map", "mode", "online", "room_key", "names" {seat: name}, "ai" {seat: level}.
 	var players := []
 	var names: Dictionary = info.get("names", {})
 	var ai: Dictionary = info.get("ai", {})
 	for s in sim.factions.keys():
-		players.append({"seat": s, "faction": str(sim.factions[s]), "team": sim.teams.get(s, null),
+		players.append({"seat": s, "faction": str(sim.factions[s]),
 				"name": str(names.get(s, "")), "ai_level": str(ai.get(s, "")), "is_me": s == seat,
 				"won": sim.winner != "" and (sim.winner == s or sim.allied(s, sim.winner))})
 	return {"t": _now(), "map": str(info.get("map", "")), "mode": str(info.get("mode", "")),
@@ -403,7 +396,7 @@ static func _from_server(m: Dictionary) -> Dictionary:
 	for s in m.get("seats", []):
 		if not s is Dictionary:
 			continue
-		players.append({"seat": str(s.get("seat", "")), "faction": str(s.get("faction", "")), "team": s.get("team"),
+		players.append({"seat": str(s.get("seat", "")), "faction": str(s.get("faction", "")),
 				"name": str(s.get("name", "")) if s.get("name") != null else "", "ai_level": str(s.get("ai_level", "")) if s.get("ai_level") != null else "",
 				"is_me": s.get("is_me") == true, "won": s.get("won") == true})   # null-safe: bool(null) crashes
 		if s.get("is_me") == true:

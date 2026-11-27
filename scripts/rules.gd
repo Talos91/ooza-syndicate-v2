@@ -5,7 +5,8 @@ extends RefCounted
 ## SCALE (PARAMETERS.md: army scale ~5x; vat caps are still an open question) - change here only.
 ##
 ## SIEGE was deactivated in 0.18.7 (Daniele: "brawl is our game") and DELETED from the code 2026-11-23 (owner
-## decision), with the 5-6 seat modes (FFA5, 3v3, 2v2v2): the game is BRAWL, max 4 seats (1v1, 2v2, FFA3, FFA4).
+## decision), with the 5-6 seat modes (FFA5, 3v3, 2v2v2); 2v2 (teams, allies, EJECT) was deleted 2026-11-27 (Daniele, 3.0 plan:
+## "Modes: BRAWL 1v1 only").
 ## Both come back from git tag archive-2026-11-23 (SIEGE_ON, bridge_combat, the deck / platform / door /
 ## platform-fight tunables, recall, tug-of-war, sieges, goo-patch lines).
 
@@ -524,7 +525,7 @@ static var PROD := {1: 5.0 * BRAWL_TRIAL_15, 2: 8.0 * BRAWL_TRIAL_15, 3: 12.0 * 
 # WorldLocals sends no Local to a neutral node (its line and its match-start march wait for the capture).
 const NEUTRAL_REGEN := false
 # CATCH-UP (Daniele, 2026-10-27: "include both in 0.23.15: the +15 % catch-up for the trailing side"; balance study: the node
-# leader at 2:00 won 77 %): while a side (a seat, or a team in team modes) holds fewer than CATCHUP_NODE_RATIO of the leading
+# leader at 2:00 won 77 %): while a side (a seat) holds fewer than CATCHUP_NODE_RATIO of the leading
 # side's nodes, its vats produce x CATCHUP_PRODUCTION (vats only: not forges, not neutral regen). Strictly under half: exactly
 # half gets nothing. Re-checked every step (Sim._catchup); lessons and campaign missions keep it off (Sim.catchup_on).
 const CATCHUP_PRODUCTION := 1.15
@@ -608,7 +609,7 @@ static var forge_bonus: float = FORGE_BONUS_DEFAULT  # live-tunable (Alpha 11: +
 # MONSTER_SPEED of the BRAWL unit speed, kicks every unit on its decks off the bridge (friend or foe), passes
 # through the nodes on the way (their garrisons untouched; lines crossing those platforms are kicked too) and takes the end node empty (a friendly end node loses a tier instead). Nothing
 # can shoot it; only a fall kills it. MONSTER_TAKE_MAX (Daniele 2026-10-27, Ooze Desk: "a monster kills up to 40 defenders"): at
-# the end node it kicks off at most this many defenders (garrison + stored allied troops, shared in proportion); a node holding
+# the end node it kicks off at most this many defenders (its garrison); a node holding
 # more keeps its owner and the rest of its troops. The decks on the way are not capped.
 const MONSTER_TAKE_MAX := 200.0           # 40 shown
 static var MONSTER_HUB_COST := 150        # 30 shown
@@ -1185,7 +1186,7 @@ static func stat(faction: String, key: String) -> float:
 
 # SEAT COLOURS for the current match (Daniele, Alpha 14: "implement faction colour selection").
 # Filled by assign_colors() at match start: your pick, the rest from the palette; "faction" mode uses
-# each seat's faction colour (Alpha 11 style); team modes give each team one hue, light and dark.
+# each seat's faction colour (Alpha 11 style).
 static var seat_colors: Dictionary = SEATS.duplicate()
 
 
@@ -1193,30 +1194,20 @@ static func seat_color(seat: String) -> Color:
 	return seat_colors.get(seat, SEATS.get(seat, NEUTRAL))
 
 
-# Player colours, Alpha 16 (Daniele: "in 2v2 and team matches the hue must be very recognisable from
-# one player to another, and in FFA the colours very different - green, red, blue, purple"). FFA: each
-# seat takes the next far-apart hue. Teams: each team is one family (cool / warm; in three-team modes
-# cool, warm and violet) and every player in it still has a clearly different hue, so you read both
-# "which team" and "which player".
+# Player colours, Alpha 16 (Daniele: "the colours very different - green, red, blue, purple"): each seat
+# takes the next far-apart hue of FFA_ORDER (BRAWL is 1v1 only since 2026-11-27: the rival takes the first
+# hue far from yours; the name FFA_ORDER stays from the free-for-all days).
 const HUES := {
 	"red": Color("#ff4545"), "green": Color("#6dff4a"), "blue": Color("#4a78ff"), "gold": Color("#ffd23f"),
 	"purple": Color("#b36bff"), "cyan": Color("#2ee6ff"), "rose": Color("#ff5ab8"), "orange": Color("#ff9a2e"),
 }
 const FFA_ORDER := ["red", "green", "blue", "gold", "purple", "cyan", "rose", "orange"]
-const TEAM_FAMILIES := [["cyan", "green", "blue"], ["red", "gold", "rose"]]   # 2v2: cyan+green vs red+gold
-const TEAM_FAMILIES_3 := [["cyan", "green", "blue"], ["red", "gold", "orange"], ["purple", "rose"]]   # three teams (2v2v2 deleted 2026-11-23; kept so 3-team map data still colours)
-const FAMILY_NAMES := {"cyan": "COOL", "red": "WARM", "purple": "VIOLET"}   # a family by its first hue
 
 
 # ONLINE ROOM COLOURS (Daniele, 0.18.7: "my gf saw herself blue in her game and me i saw myself blue";
 # his decision: the same colours on every screen). Every player picks a hue (a HUES key) in the room
-# lobby, unique in the room; in team modes each team shares one family above and every teammate has a
-# different hue of it. The host sends the seat -> hue map with the launch (Net.room_colours) and every
+# lobby, unique in the room. The host sends the seat -> hue map with the launch (Net.room_colours) and every
 # browser applies it with use_colours, so nobody is recoloured on their own screen.
-static func colour_families(team_count: int) -> Array:
-	return TEAM_FAMILIES if team_count <= 2 else TEAM_FAMILIES_3
-
-
 static func use_colours(keys: Dictionary) -> void:
 	seat_colors = {}
 	for s in keys:
@@ -1228,44 +1219,10 @@ static func _hue_gap(a: Color, b: Color) -> float:
 	return minf(d, 1.0 - d)
 
 
-static func assign_colors(seats: Array, factions: Dictionary, human: String, choice: String, teams: Dictionary) -> void:
+static func assign_colors(seats: Array, factions: Dictionary, human: String, choice: String) -> void:
 	## choice: a palette key ("A".."F") for your colour, or "faction".
 	seat_colors = {}
 	var mine: Color = FACTIONS[factions.get(human, "null")][1] if choice == "faction" else SEATS.get(choice, SEATS["A"])
-	if not teams.is_empty():
-		# your team takes the family closest to your pick (your pick first), every other team one of the
-		# remaining families in seat order (a tie keeps the first family, as before)
-		var team_ids := []
-		for s in seats:
-			if not (teams.get(s, 0) in team_ids):
-				team_ids.append(teams.get(s, 0))
-		var fams: Array = (TEAM_FAMILIES if team_ids.size() <= 2 else TEAM_FAMILIES_3).map(func(f): return f.map(func(k): return HUES[k]))
-		var best := 0
-		var best_gap: float = fams[0].map(func(c): return _hue_gap(c, mine)).min()
-		for i in range(1, fams.size()):
-			var g: float = fams[i].map(func(c): return _hue_gap(c, mine)).min()
-			if g < best_gap:
-				best_gap = g
-				best = i
-		var rest := []
-		for i in range(fams.size()):
-			if i != best:
-				rest.append(fams[i])
-		var own: Array = [mine] + fams[best].filter(func(c): return _hue_gap(c, mine) > 0.07)
-		var family := {teams.get(human, 0): own}
-		var r := 0
-		for s in seats:
-			if not family.has(teams.get(s, 0)):
-				family[teams.get(s, 0)] = rest[r % rest.size()]
-				r += 1
-		var count := {}
-		for s in ([human] + seats.filter(func(x): return x != human)):
-			var t = teams.get(s, 0)
-			var list: Array = family.get(t, rest[0])
-			var i: int = count.get(t, 0)
-			seat_colors[s] = list[i % list.size()] if i < list.size() else (list[i % list.size()] as Color).darkened(0.35)
-			count[t] = i + 1
-		return
 	var used := [mine]
 	seat_colors[human] = mine
 	for s in seats:
@@ -1291,12 +1248,9 @@ static func assign_colors(seats: Array, factions: Dictionary, human: String, cho
 # COLOUR-BLIND MODE (Daniele 2026-09-28: "yes add color blind mode in settings"; SETTINGS > DISPLAY, saved on the
 # device). At match start every seat takes its colour from these palettes instead - on your screen only (an online
 # room still sends the same hue keys to everyone). Picked so every pair a mode puts on one board stays apart under
-# protanopia, deuteranopia and tritanopia (Machado 2009 simulation, CIEDE2000; 🧩 UI's cvd.py): free-for-all pairs
-# >= 15 (the default palette's worst: 1.1, blue / purple), 2v2 / 3v3 teams >= 26 apart and teammates >= 14 (27 in
-# 2v2), 2v2v2 teams >= 21 apart and teammates >= 11. You take the first colour (your team the first family).
+# protanopia, deuteranopia and tritanopia (Machado 2009 simulation, CIEDE2000; 🧩 UI's cvd.py): every pair
+# >= 15 (the default palette's worst: 1.1, blue / purple). You take the first colour, the rival the next.
 const CB_FFA := [Color("#ff4019"), Color("#8cbcff"), Color("#ffd400"), Color("#d977a8"), Color("#19ffb2"), Color("#a666ff")]
-const CB_TEAMS := [[Color("#9077d9"), Color("#00ffea"), Color("#77b8d9")], [Color("#d95f36"), Color("#ffff66"), Color("#d9b816")]]
-const CB_TEAMS_3 := [[Color("#ff4000"), Color("#d97790")], [Color("#8c8cff"), Color("#40ffef")], [Color("#ffe28c"), Color("#ffff00")]]
 static var settings_path := "user://settings.cfg"   # tests point this elsewhere ([display] colour_blind)
 static var _colour_blind := -1                        # -1 until read
 
@@ -1352,7 +1306,7 @@ static func set_colour_blind(on: bool) -> bool:
 	return c.save(settings_path) == OK
 
 
-static func apply_colour_blind(seats: Array, teams: Dictionary, human: String) -> void:
+static func apply_colour_blind(seats: Array, human: String) -> void:
 	## After assign_colors / use_colours: COLOUR-BLIND MODE's palettes for this match's seats (nothing when it's off).
 	if not colour_blind():
 		return
@@ -1360,23 +1314,9 @@ static func apply_colour_blind(seats: Array, teams: Dictionary, human: String) -
 	for s in seats:
 		if not (s in order):
 			order.append(s)
-	if teams.is_empty():
-		for i in range(order.size()):
-			var c: Color = CB_FFA[i % CB_FFA.size()]
-			seat_colors[order[i]] = c if i < CB_FFA.size() else c.darkened(0.35)
-		return
-	var team_ids := []                                 # in order of first seat: yours first
-	for s in order:
-		if not (teams.get(s, 0) in team_ids):
-			team_ids.append(teams.get(s, 0))
-	var fams: Array = CB_TEAMS if team_ids.size() <= 2 else CB_TEAMS_3
-	var count := {}
-	for s in order:
-		var t = teams.get(s, 0)
-		var fam: Array = fams[team_ids.find(t) % fams.size()]
-		var i: int = count.get(t, 0)
-		seat_colors[s] = fam[i % fam.size()] if i < fam.size() else (fam[i % fam.size()] as Color).darkened(0.35)
-		count[t] = i + 1
+	for i in range(order.size()):
+		var c: Color = CB_FFA[i % CB_FFA.size()]
+		seat_colors[order[i]] = c if i < CB_FFA.size() else c.darkened(0.35)
 
 
 static func state_color(state: String) -> Color:
@@ -1543,7 +1483,7 @@ const PERF_BUDGET_FULL_OBJECTS := 1400
 # HudCallouts: a short callout at the node / deck / spot it is about (an outlined line + a small icon), one per
 # place, an edge arrow when that place is off screen; sizes in canvas units x Hud.ui_scale, phones floored in real
 # points (UiKit.pt_per_px). Seconds include the fade.
-const HUD_CALLOUT_LIFE := 2.6          # a map callout (monster, forge, handover, eject, a refused order at its node)
+const HUD_CALLOUT_LIFE := 2.6          # a map callout (monster, forge, a refused order at its node)
 const HUD_CALLOUT_POP := 0.16          # pop-in
 const HUD_CALLOUT_FADE := 0.45         # fade-out at the end of its life
 const HUD_CALLOUT_RISE := 14.0         # canvas units it drifts up over its life
@@ -1693,14 +1633,13 @@ const LS_RING_BREATHE := 2.4             # rad/s of its slow breath (0.6..1 of L
 const LS_RING_R := 0.35                  # m beyond the platform radius
 const LS_FRAGMENTS := 18                 # fall pieces a dropping node's decks break into (Fx._collapse; at least 1 a module; was 6 a module)
 # Under attack (CombatFx._alarm; "we need an animation that shows when a building is under attack"): YOUR node while
-# an enemy line pours in at its door - the rim on the side it comes from flickers red and short sparks jump there;
-# an ally's node the same, dimmer (team modes). On the platform's lip, never over the count badge (beside the node).
+# an enemy line pours in at its door - the rim on the side it comes from flickers red and short sparks jump there.
+# On the platform's lip, never over the count badge (beside the node).
 const ALARM_COLOR := Color("#ff3b30")
 const ALARM_ARC := 0.34                  # fraction of the rim lit, centred on the attack's side
 const ALARM_R := 1.2                     # m beyond the platform radius: the arc's outer edge (just outside the lip's bumpers)
 const ALARM_INNER := 0.9                 # its inner edge, x its outer radius (a band ~0.7 m wide)
 const ALARM_POWER := 1.5                 # your node's brightness (additive)
-const ALARM_ALLY := 0.45                 # an ally's node: x this (the arc and its sparks)
 const ALARM_FLICKER := 3.5               # Hz: bright / dim steps while it pours in
 const ALARM_DIM := 0.3                   # the dim step's brightness
 const ALARM_HOLD := 0.6                  # s the cue fades out after the last unit poured in

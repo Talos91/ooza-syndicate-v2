@@ -31,7 +31,7 @@ func _build_sim(info: Dictionary) -> Sim:
 	for s in map["seats"][info["mode"]]:
 		seats[int(s["node"])] = s["seat"]
 	var s := Sim.new()
-	s.setup(map, MapBuilder.layout(map), seats, info["players"], int(info["seed"]), {}, info.get("loadouts", {}))
+	s.setup(map, MapBuilder.layout(map), seats, info["players"], int(info["seed"]), info.get("loadouts", {}))
 	return s
 
 

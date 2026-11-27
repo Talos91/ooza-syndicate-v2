@@ -21,7 +21,7 @@ func _sim(path: String, mode: String, players: Dictionary) -> Sim:
 	for s in map["seats"][mode]:
 		seats[int(s["node"])] = s["seat"]
 	var sim := Sim.new()
-	sim.setup(map, MapBuilder.layout(map), seats, players, 7, {}, {})
+	sim.setup(map, MapBuilder.layout(map), seats, players, 7, {})
 	return sim
 
 

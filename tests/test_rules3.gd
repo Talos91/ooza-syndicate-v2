@@ -56,7 +56,7 @@ func _sim_m(m: Dictionary, seed_value := 5, loadouts := {}) -> Sim:
 	for s in m["seats"]["1v1"]:
 		seats[int(s["node"])] = s["seat"]
 	var sim := Sim.new()
-	sim.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "ember"}, seed_value, {}, loadouts)
+	sim.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "ember"}, seed_value, loadouts)
 	return sim
 
 

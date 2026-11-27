@@ -41,13 +41,10 @@ func _build_sim(info: Dictionary) -> Sim:
 	## What main._start_online builds on a guest: the room's map, seats and seed, no AI.
 	var map := MapBuilder.load_map(info["map"])
 	var seats := {}
-	var teams := {}
 	for s in map["seats"][info["mode"]]:
 		seats[int(s["node"])] = s["seat"]
-		if info["mode"] == "2v2" and s.get("team") != null:
-			teams[s["seat"]] = int(s["team"])
 	var s := Sim.new()
-	s.setup(map, MapBuilder.layout(map), seats, info["players"], int(info["seed"]), teams, info.get("loadouts", {}))
+	s.setup(map, MapBuilder.layout(map), seats, info["players"], int(info["seed"]), info.get("loadouts", {}))
 	return s
 
 
@@ -81,7 +78,7 @@ func _run() -> void:
 	check(a.server_hosted() and b.server_hosted(), "both players know the room is server-hosted (ranked)")
 
 	var big := ""                                      # a mode with more seats than players that the pool still offers
-	for m in ["FFA3", "FFA4", "2v2"]:                  # (0.24.1's pool has no FFA3 map: set_mode keeps 1v1 then)
+	for m in ["FFA3", "FFA4"]:                  # (0.24.1's pool has no FFA3 map: set_mode keeps 1v1 then)
 		if not a.maps_for(m).is_empty():
 			big = m
 			break
@@ -102,7 +99,7 @@ func _run() -> void:
 		check(a.map_path != other and b.map_path != other, "a non-owner's lobby change is ignored")
 		a.set_map(other)
 		check(await _wait(func(): return a.map_path == other and b.map_path == other), "the owner changes the map for everyone (%s)" % other.get_file())
-		check(a.mode == "1v1" and a.maps_for("FFA4").is_empty() and a.maps_for("2v2").is_empty(), "3.0: no room offers 2v2 / FFA")
+		check(a.mode == "1v1" and a.maps_for("FFA4").is_empty(), "3.0: no room offers FFA")
 	var ls: bool = a.last_stand
 	a.toggle_last_stand()
 	check(await _wait(func(): return a.mode == "1v1" and a.last_stand != ls and b.last_stand != ls), "the owner toggles LAST STAND")

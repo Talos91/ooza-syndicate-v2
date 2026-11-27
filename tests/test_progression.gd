@@ -255,9 +255,8 @@ func _from_sim() -> void:
 	var sim := Sim.new()
 	sim.factions = {"A": "solar", "B": "ember", "C": "null", "D": "bloom"}
 	sim.homes = {"A": 1, "B": 2}
-	sim.teams = {"A": 1, "C": 1, "B": 2, "D": 2}
 	sim.has_relays = true
-	sim.winner = "C"
+	sim.winner = "A"
 	sim.events = [
 		{"type": "capture", "node": 5, "seat": "A", "from": ""},
 		{"type": "capture", "node": 6, "seat": "A", "from": "B"},
@@ -268,11 +267,11 @@ func _from_sim() -> void:
 		{"type": "skill", "seat": "B", "id": "scorch"},
 	]
 	var r := Progression.result_from_sim(sim, "A", {"ai_level": "Expert"})
-	check(r["won"] and r["faction"] == "solar" and r["relay_map"], "a team-mate's win is a win: %s" % str(r))
+	check(r["won"] and r["faction"] == "solar" and r["relay_map"], "the winner's result is a win: %s" % str(r))
 	var st: Dictionary = r["stats"]
 	check(st["captures"] == 2 and st["relay_fires"] == 1 and st["monster_kicked"] == 12 and st["skills"] == 1 and st["home_lost"],
 			"stats from the events: %s" % str(st))
-	check(not Progression.result_from_sim(sim, "B")["won"], "the other team lost")
+	check(not Progression.result_from_sim(sim, "B")["won"], "B lost")
 	var sb := Progression.seat_stats(sim, "B")
 	check(sb["nodes_lost"] == 1 and not sb["home_lost"] and sb["captures"] == 1, "B lost node 6, not its home: %s" % str(sb))
 	# the host's extras: a home lost to a Last Stand collapse, relay drops credited to the seat that fired, going out
@@ -280,7 +279,6 @@ func _from_sim() -> void:
 		{"t": 200.0, "type": "collapse", "node": 2, "from": "B"},
 		{"t": 210.0, "type": "fall", "seat": "B", "units": Rules.SCALE * 30.0, "why": "relay", "by": "A", "relay": 9},
 		{"t": 211.0, "type": "fall", "seat": "A", "units": Rules.SCALE * 5.0, "why": "relay", "by": "A", "relay": 9},
-		{"t": 212.0, "type": "fall", "seat": "C", "units": Rules.SCALE * 7.0, "why": "relay", "by": "A", "relay": 9},
 		{"t": 250.0, "type": "eliminated", "seat": "D"},
 		{"t": 300.0, "type": "eliminated", "seat": "B"},
 		{"t": 20.0, "type": "monster_launch", "seat": "A", "id": 1},
@@ -289,12 +287,8 @@ func _from_sim() -> void:
 	check(sb["home_lost"] and sb["out_at_s"] == 300.0, "B's home fell in a collapse; out at 300 s: %s" % str(sb))
 	var sa := Progression.seat_stats(sim, "A")
 	check(sa["void_drops"] == 30 and sa["monster_launches"] == 1 and sa["monster_kicks"] == 1 and sa["out_at_s"] < 0.0,
-			"A dropped 30 enemy units (its own 5 and ally C's 7 don't count): %s" % str(sa))
-	var pl := Progression.placements(sim)
-	check(pl["A"] == 1 and pl["C"] == 1 and pl["B"] == 2 and pl["D"] == 2, "2v2: the teams place together: %s" % str(pl))
-	sim.teams = {}
-	sim.winner = "A"
-	pl = Progression.placements(sim, {"C": 500.0})
+			"A dropped 30 enemy units (its own 5 don't count): %s" % str(sa))
+	var pl := Progression.placements(sim, {"C": 500.0})
 	check(pl["A"] == 1 and pl["C"] == 2 and pl["B"] == 3 and pl["D"] == 4,
 			"FFA: winner, survivor, then the later out before the earlier: %s" % str(pl))
 

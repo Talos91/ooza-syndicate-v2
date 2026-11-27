@@ -107,13 +107,10 @@ func _init() -> void:
 		check(spos.size() == sm["nodes"].size(), "%s: every node reachable from the centre (%d/%d)" %
 				[sm["code"], spos.size(), sm["nodes"].size()])
 		var s_seats := {}
-		var s_teams := {}
 		for s in sm["seats"][md]:
 			s_seats[int(s["node"])] = s["seat"]
-			if md == "2v2" and s.get("team") != null:
-				s_teams[s["seat"]] = int(s["team"])
 		# every map plays BRAWL (SIEGE deleted 2026-11-23 - a map's "combatMode" no longer picks the mode)
-		_play(sm, spos, s_seats, s_teams, md)
+		_play(sm, spos, s_seats, md)
 
 	_check_overpass()
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
@@ -155,17 +152,17 @@ func _pool3() -> void:
 		var s_seats := {}
 		for st in sm["seats"]["1v1"]:
 			s_seats[int(st["node"])] = st["seat"]
-		_play(sm, spos, s_seats, {}, "1v1")
+		_play(sm, spos, s_seats, "1v1")
 	_check_overpass()
 	print("
 %s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	quit(1 if failures else 0)
 
 
-func _play(sm: Dictionary, spos: Dictionary, s_seats: Dictionary, s_teams: Dictionary, md: String) -> void:
+func _play(sm: Dictionary, spos: Dictionary, s_seats: Dictionary, md: String) -> void:
 		var ssim := Sim.new()
 		ssim.ai_builds = true                              # the AI seats' rotating builds, as in play (seed 5)
-		ssim.setup(sm, spos, s_seats, {"A": "null", "B": "ember", "C": "vex", "D": "solar", "E": "bloom", "F": "null"}, 5, s_teams)
+		ssim.setup(sm, spos, s_seats, {"A": "null", "B": "ember", "C": "vex", "D": "solar", "E": "bloom", "F": "null"}, 5)
 		var s_ais := []
 		for seat in s_seats.values():
 			s_ais.append(SeatAI.new(seat, 2.0, "Standard" if seat == "A" else "Veteran"))

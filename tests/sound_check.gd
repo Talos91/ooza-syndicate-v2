@@ -183,9 +183,6 @@ func _check_slots() -> void:
 	check(Music.slot_for(true, s, "A", false) == "DEFEAT", "slot: lost = DEFEAT")
 	s.winner = ""
 	check(Music.slot_for(true, s, "A", false) == "DEFEAT", "slot: a draw = DEFEAT")
-	s.teams = {"A": 0, "C": 0, "B": 1, "D": 1}
-	s.winner = "C"
-	check(Music.slot_for(true, s, "A", false) == "VICTORY", "slot: your team-mate won (2v2) = VICTORY")
 
 
 func _check_menu() -> void:

@@ -33,12 +33,11 @@ func _initialize() -> void:
 func _match(path: String, mode: String, levels: Dictionary, seed_value: int, limit := 420.0) -> Sim:
 	var m := MapBuilder.load_map(path)
 	var seats := {}
-	var teams := {}
 	for s in m["seats"][mode]:
 		seats[int(s["node"])] = s["seat"]
 	var sim := Sim.new()
 	sim.ai_builds = true                              # the AI seats' rotating builds, as in play
-	sim.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "null", "C": "null", "D": "null", "E": "null", "F": "null"}, seed_value, teams)
+	sim.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "null", "C": "null", "D": "null", "E": "null", "F": "null"}, seed_value)
 	var ais := []
 	for seat in seats.values():
 		ais.append(SeatAI.new(seat, 2.5, levels.get(seat, "Standard")))

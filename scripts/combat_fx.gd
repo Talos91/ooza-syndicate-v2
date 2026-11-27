@@ -21,8 +21,8 @@ extends Node3D
 ## and reused.
 ## Match feel (Daniele's phone test, 2026-09-28): the contest ring is a progress meter - the attacker's colour sweeps
 ## round it over the share of the fight they are winning (_progress: attackers at the door and on their way in
-## against the garrison left, at the Sim's own exchange rate; eased, no numbers) - and YOUR node under attack (an
-## ally's, dimmer) flickers red on its rim at the side the enemy line pours in from, with short sparks there (_alarm).
+## against the garrison left, at the Sim's own exchange rate; eased, no numbers) - and YOUR node under attack
+## flickers red on its rim at the side the enemy line pours in from, with short sparks there (_alarm).
 
 const BEAM_SHADER := preload("res://shaders/beam.gdshader")
 const SPARK_SHADER := preload("res://shaders/spark.gdshader")
@@ -48,7 +48,7 @@ var vis: Dictionary
 var fx: Fx
 var _frame := 0
 var _fights := {}           # node id -> {ring, mat, life, heat, rate, best, att, angle, share, prog, target, frame}
-var _alarms := {}           # node id -> {ring, mat, life, angle, ally, frame, spark_t} (your / an ally's node under attack)
+var _alarms := {}           # node id -> {ring, mat, life, angle, frame, spark_t} (your node under attack)
 var _start_angle := 0.0     # the contest ring's sweep starts here: the platforms' far side (top of the screen)
 var viewer := "A"           # whose nodes raise the under-attack cue (main.HUMAN; set in setup)
 var _cannons := {}          # node id -> {beam, bmat, muzzle, mmat, hit, hmat, scorch, smat, on, t, fade, to, col}
@@ -152,8 +152,8 @@ func _gather_fights(dt: float) -> void:
 		if not sim.node_hidden(n["id"], viewer):      # POWERS: inside a rival's fog the fight (and its ring) is not seen
 			_contest(n, h["owner"], came, rate, share, door)
 			_clash(door, door_d, Rules.seat_color(h["owner"]), _owner_color(n["owner"]), rate, dt)
-		if n["owner"] != "" and sim.allied(n["owner"], viewer):
-			_alarm(n, came, n["owner"] != viewer, dt)
+		if n["owner"] != "" and n["owner"] == viewer:
+			_alarm(n, came, dt)
 	for id in _fights:                            # the ring's sweep: how close the strongest side is to taking it
 		var f: Dictionary = _fights[id]
 		if f["frame"] == _frame:
@@ -247,7 +247,7 @@ func _progress(n: Dictionary, seat: String) -> float:
 	## strength is its units pouring in plus those on their way in (within Rules.CONTEST_REACH m of the door) times
 	## that ratio, against the garrison left: A / (A + G). Both fall by the same amount per exchange, so the sweep
 	## heads for 1 when the attack will take it and back to 0 when the defence will hold. Read-only; no rule here.
-	var garrison: float = sim.garrison_total(n)
+	var garrison: float = float(n["units"])
 	var att := 0.0
 	for h in sim.hordes:
 		# POWERS (0.22.2, Daniele's playtest: "NULL decoys visible to all"): only a decoy's OWNER sees it as a decoy - for
@@ -265,29 +265,17 @@ func _progress(n: Dictionary, seat: String) -> float:
 
 func _kill_ratio(n: Dictionary, seat: String) -> float:
 	## Defenders one arriving unit of `seat` kills at node n: Sim._land_classic's exchange (attack / (health x garrison
-	## x Fortify / Aegis / forge), against the defenders' attack / the attacker's health), mixed by troop share.
+	## x Fortify / Aegis / forge), against the defenders' attack / the attacker's health).
 	var d_seat: String = n["owner"]
-	var total: float = sim.garrison_total(n)
-	var tough := 0.0
-	var d_att := 0.0
-	if total > 0.0001 and not (n["allies"] as Dictionary).is_empty():
-		var shares := {d_seat: float(n["units"])}
-		for k in n["allies"]:
-			shares[k] = float(n["allies"][k])
-		for k in shares:
-			var w: float = shares[k] / total
-			tough += w * sim.stat(k, "health") * sim.stat(k, "garrison")
-			d_att += w * (sim.attack_of(k) if k != "" else 1.0)
-	else:
-		tough = sim.stat(d_seat, "health") * sim.stat(d_seat, "garrison")
-		d_att = sim.attack_of(d_seat) if d_seat != "" else 1.0
+	var tough: float = sim.stat(d_seat, "health") * sim.stat(d_seat, "garrison")
+	var d_att: float = sim.attack_of(d_seat) if d_seat != "" else 1.0
 	var kill_per: float = sim.attack_of(seat) / maxf(tough * sim.garrison_div(n), 0.0001)
 	var cost_per: float = d_att / maxf(sim.stat(seat, "health"), 0.0001)
 	return kill_per / maxf(cost_per, 0.0001)
 
 
-func _alarm(n: Dictionary, came: Vector3, ally: bool, dt: float) -> void:
-	## YOUR node (ally: a team-mate's) with an enemy line pouring in at its door this frame: the rim facing the attack
+func _alarm(n: Dictionary, came: Vector3, dt: float) -> void:
+	## YOUR node with an enemy line pouring in at its door this frame: the rim facing the attack
 	## flickers red (_update_alarms) and, at most every Rules.ALARM_SPARK_GAP s, short sparks jump off the rim there.
 	var id: int = n["id"]
 	if not _alarms.has(id):
@@ -299,7 +287,7 @@ func _alarm(n: Dictionary, came: Vector3, ally: bool, dt: float) -> void:
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mi.visible = false
 		add_child(mi)
-		_alarms[id] = {"ring": mi, "mat": mat, "life": 0.0, "angle": 0.0, "ally": ally, "frame": -1, "spark_t": 0.0}
+		_alarms[id] = {"ring": mi, "mat": mat, "life": 0.0, "angle": 0.0, "frame": -1, "spark_t": 0.0}
 	var al: Dictionary = _alarms[id]
 	var d := Vector3(came.x, 0.0, came.z)
 	d = d.normalized() if d.length() > 0.01 else Rules.front_dir()
@@ -307,16 +295,14 @@ func _alarm(n: Dictionary, came: Vector3, ally: bool, dt: float) -> void:
 		return                                        # two lines at one door: one cue, one spark clock
 	al["frame"] = _frame
 	al["angle"] = atan2(d.z, d.x)
-	al["ally"] = ally
 	al["spark_t"] = float(al["spark_t"]) - dt
 	if float(al["spark_t"]) <= 0.0:
 		al["spark_t"] = Rules.ALARM_SPARK_GAP
-		var k := Rules.ALARM_ALLY if ally else 1.0
 		var rim: Vector3 = n["pos"] + d * (Rules.R + 0.15) + Vector3(0, RING_Y + 0.25, 0)
 		var side := d.cross(Vector3.UP)
 		for i in range(Rules.ALARM_SPARKS):
 			var v := (d * randf_range(0.4, 1.0) + side * randf_range(-0.9, 0.9) + Vector3(0, randf_range(0.8, 1.6), 0)).normalized()
-			_spark(rim + side * randf_range(-1.2, 1.2), v * randf_range(3.0, 6.5), Rules.ALARM_COLOR.lerp(HOT, randf() * 0.4) * (1.3 * k),
+			_spark(rim + side * randf_range(-1.2, 1.2), v * randf_range(3.0, 6.5), Rules.ALARM_COLOR.lerp(HOT, randf() * 0.4) * 1.3,
 					randf_range(0.16, 0.26), randf_range(0.18, 0.32), 14.0)
 
 
@@ -326,7 +312,7 @@ func _update_alarms(dt: float) -> void:
 		var ring: MeshInstance3D = al["ring"]
 		var active: bool = al["frame"] == _frame
 		al["life"] = minf(1.0, float(al["life"]) + dt * 8.0) if active else float(al["life"]) - dt / Rules.ALARM_HOLD
-		if float(al["life"]) <= 0.0 or sim.collapsed.get(id, false) or not sim.allied(str(sim.nodes[id]["owner"]), viewer):
+		if float(al["life"]) <= 0.0 or sim.collapsed.get(id, false) or str(sim.nodes[id]["owner"]) != viewer:
 			al["life"] = 0.0
 			al["spark_t"] = 0.0                           # the next attack here sparks at once
 			ring.visible = false
@@ -341,8 +327,7 @@ func _update_alarms(dt: float) -> void:
 		mat.set_shader_parameter("color", Rules.ALARM_COLOR)
 		mat.set_shader_parameter("att_angle", al["angle"])
 		mat.set_shader_parameter("arc", Rules.ALARM_ARC)
-		mat.set_shader_parameter("power", Rules.ALARM_POWER * on * smoothstep(0.0, 1.0, float(al["life"]))
-				* (Rules.ALARM_ALLY if al["ally"] else 1.0))
+		mat.set_shader_parameter("power", Rules.ALARM_POWER * on * smoothstep(0.0, 1.0, float(al["life"])))
 
 
 func _clash(spot: Vector3, out: Vector3, att: Color, def: Color, rate: float, dt: float) -> void:

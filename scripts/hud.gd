@@ -25,8 +25,8 @@ var human := "A"
 var root: Control
 var top_panel: PanelContainer
 var stats_label: Label                 # 0.19.2 spec H6: the clock, centred in the new top bar
-var top_left: HBoxContainer            # your side (you first, then teammates)
-var top_right: HBoxContainer           # every other team, grouped with a wider gap between groups
+var top_left: HBoxContainer            # your side (you)
+var top_right: HBoxContainer           # every rival, with a wider gap between them
 var top_chips := {}                    # seat -> {panel, emblem, label}
 var pause_button: Button
 var music_button: Button              # MUSIC (0.22.x): left of PAUSE, a drawn note glyph (Music.toggle_on())
@@ -187,27 +187,11 @@ func style_panel(p: Control, accent: Color = Color("276578")) -> void:
 
 
 func _seat_groups() -> Array:
-	## [[you, your teammates...], [a rival team/seat], ...] (0.19.2 spec H6: "team modes group chips by
-	## team"; FFA - no sim.teams entries - puts every rival in its own singleton group).
-	var has_teams: bool = sim.teams.has(human)
-	var mine: int = int(sim.teams.get(human, -999))
-	var my_group := [human]
-	var others := {}
-	var order := []
+	## [[you], [a rival], ...]: every rival in its own singleton group (no teams since 2026-11-27).
+	var groups := [[human]]
 	for seat in sim.factions.keys():
-		if seat == human:
-			continue
-		if has_teams and int(sim.teams.get(seat, -998)) == mine:
-			my_group.append(seat)
-		else:
-			var key = sim.teams[seat] if sim.teams.has(seat) else seat
-			if not others.has(key):
-				others[key] = []
-				order.append(key)
-			others[key].append(seat)
-	var groups := [my_group]
-	for k in order:
-		groups.append(others[k])
+		if seat != human:
+			groups.append([seat])
 	return groups
 
 
@@ -1738,8 +1722,7 @@ class InspectorHub:
 
 func _inspector_actions(n: Dictionary) -> void:
 	## Structures 2.1 (spec B): common - UPGRADE / MACHINEGOON (or VAT to go back); relay - LASER / FORGE /
-	## MONSTER HUB (single tier) + SWITCH; special - T4 vat only, no swap; hub - LAUNCH; EJECT wherever
-	## allied troops are stored. Costs and disabled reasons come straight from the Sim (can_build /
+	## MONSTER HUB (single tier) + SWITCH; special - T4 vat only, no swap; hub - LAUNCH. Costs and disabled reasons come straight from the Sim (can_build /
 	## can_upgrade) in _refresh_inspector, so a greyed button always explains itself.
 	var id: int = n["id"]
 	# OOZE 3.0 NODE CATEGORIES (Daniele 2026-11-27, Sim.node_category): normal = vat or Googatling T1-T3 (UPGRADE to T3, swap);
@@ -1780,8 +1763,6 @@ func _inspector_actions(n: Dictionary) -> void:
 		_add_action("VAT", "VAT", sim.build_cost(n, "vat"), "build", id, {"kind": "vat"})
 		if "machinegoon" in n["buildable"] and shows("machinegoon"):
 			_add_action("MACHINEGOON", BUILD_LABEL["machinegoon"], sim.build_cost(n, "machinegoon"), "build", id, {"kind": "machinegoon"})
-	if sim.allied_units(n) > 0.0001 and shows("eject") and inspector_actions.size() < 3:   # max 3 slices (Daniele 2026-11-13)
-		_add_action("EJECT", "EJECT", 0, "eject", id)
 
 
 func _add_action(name: String, title: String, cost: int, method: String, id: int, args := {}) -> void:
@@ -2230,7 +2211,7 @@ func _refresh_inspector(cam: Camera3D) -> void:
 		tint_emblem(inspector_emblem, Rules.seat_color(owner))
 	inspector_who.text = "NEUTRAL" if owner == "" else str(sim.factions.get(owner, "")).to_upper()
 	_font_color(inspector_who, Color("c8e6ee") if owner == "" else inspector_col)
-	# ui-node compact card: STRUCTURE [tier chip] / units bar (yours, allies', neutral) / shields (vats) / ONE status line
+	# ui-node compact card: STRUCTURE [tier chip] / units bar (yours, neutral) / shields (vats) / ONE status line
 	inspector_first.text = "· " + _structure_word(n)
 	var hidden_pop := owner != "" and not sim.allied(owner, human)
 	inspector_tier.visible = (n["relay"] == "" and str(n["structure"]) in ["vat", "machinegoon", ""]) or n["relay"] == "launcher"   # the launcher has tiers (proto merge)
@@ -2260,8 +2241,6 @@ func _refresh_inspector(cam: Camera3D) -> void:
 					ring.queue_redraw()
 			"build":
 				why = sim.can_build(inspector_id, human, str((a["args"] as Dictionary).get("kind", "")))
-			"eject":
-				why = sim.can_build(inspector_id, human, "eject")
 			"launch_monster":
 				why = _monster_ready(n)
 		b.disabled = why != ""
@@ -2380,7 +2359,7 @@ func _draw_card_units() -> void:
 	var s := ui_scale
 	var r := Rect2(Vector2(0, 2.0 * s), Vector2(c.size.x, c.size.y - 4.0 * s))
 	var cap := maxf(float(sim.node_cap(n)), 1.0)
-	var units: float = sim.garrison_total(n) if sim.allied_units(n) > 0.0001 else float(n["units"])
+	var units: float = float(n["units"])
 	var f := clampf(units / cap, 0.0, 1.0)
 	var pts := NoirBox.rounded(r, r.size.y / 2.0)
 	NodeNoir.glass(c, pts, 0.9)
@@ -2916,12 +2895,11 @@ func _build_end() -> void:
 	## DEFEAT. / DRAW., the map, your faction's character, three real numbers - then PROGRESSION's strip exactly as it
 	## was (main.rewards, granted once at the match end: a rebuild only draws it again), then the ways on.
 	var winner := _end_winner
-	var won := sim.allied(winner, human)               # team modes: allies win together
+	var won := sim.allied(winner, human)
 	var draw := winner == ""
 	var s := MatchScreens.open(end_panel, mobile, _my_faction())
 	var seats: Array = sim.factions.keys()
-	var team := sim.teams.has(human)
-	var ffa := not team and seats.size() > 2
+	var ffa := seats.size() > 2
 	var outcome := "VICTORY" if won else ("DRAW" if draw else "DEFEAT")
 	var where := "%s · %s" % [main.mode, MatchScreens.clock(sim.time)]
 	if main.online:

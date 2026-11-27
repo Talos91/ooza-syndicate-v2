@@ -1,6 +1,6 @@
 extends SceneTree
 ## AI think cost and determinism (perf pass, 2026-09-28):
-##   Godot --headless --path . --script res://tests/ai_bench.gd -- [lvl=Expert] [map=M-39-circuit-warren] [mode=2v2]
+##   Godot --headless --path . --script res://tests/ai_bench.gd -- [lvl=Expert] [map=G-05-catapult-bay] [mode=1v1]
 ##       [dt=0.016667] [limit=420] [seed=7] [log=user://ai_orders.txt] [guard=off]
 ## Every seat is the AI at `lvl`; the match runs at a fixed step. Prints the think cost (per frame: the sum of every
 ## seat's think that frame; worst / p99 / mean over frames with a think; frames where two seats thought together),
@@ -21,19 +21,16 @@ func _arg(key: String, fallback: String) -> String:
 
 func _run() -> void:
 	var lvl := _arg("lvl", "Expert")
-	var path := "res://maps4/%s.json" % _arg("map", "M-39-circuit-warren")
-	var mode := _arg("mode", "2v2")
+	var path := "res://maps4/%s.json" % _arg("map", "G-05-catapult-bay")
+	var mode := _arg("mode", "1v1")
 	var dt := float(_arg("dt", str(1.0 / 60.0)))
 	var limit := float(_arg("limit", "420"))
 	var m := MapBuilder.load_map(path)
 	var seats := {}
-	var teams := {}
 	for s in m["seats"][mode]:
 		seats[int(s["node"])] = s["seat"]
-		if typeof(s.get("team")) in [TYPE_INT, TYPE_FLOAT]:
-			teams[s["seat"]] = int(s["team"])
 	var sim := Sim.new()
-	sim.setup(m, MapBuilder.layout(m), seats, {}, int(_arg("seed", "7")), teams)
+	sim.setup(m, MapBuilder.layout(m), seats, {}, int(_arg("seed", "7")))
 	var ais := []
 	for seat in seats.values():
 		ais.append(SeatAI.new(seat, 2.5, lvl))

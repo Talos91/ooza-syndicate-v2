@@ -25,7 +25,7 @@ extends RefCounted
 ## wins, or when objective.limit passes; a match that ends before a non-conquest objective is met is lost.
 ## Optional objectives (m.optional.kind): no_vat_lost, drops_fires {n, fires}, machinegoon_t3, before_ultimate,
 ## no_skill {skill}, monster_kicks {n}, units_at_end {n}, fires {n}, home_kept; an unknown kind is never met.
-## A node counts as lost when it is captured from you (handovers included); a Last Stand drop is not a loss to the
+## A node counts as lost when it is captured from you; a Last Stand drop is not a loss to the
 ## rival and does not count (the conservative reading: the docs are silent - reported to Daniele).
 
 signal changed
@@ -280,7 +280,7 @@ func _scan_events() -> void:
 				if who == seat and not bool(ev.get("friendly", false)) and not bool(ev.get("held", false)):
 					monster_took = true
 					moved = true
-			"capture", "handover":
+			"capture":
 				if str(ev.get("from", "")) == seat and who != seat:
 					_lost(int(ev.get("node", -1)))
 					moved = true

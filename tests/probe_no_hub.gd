@@ -20,13 +20,10 @@ func _run() -> void:
 	var m := MapBuilder.load_map(path)
 	var mode := _arg("mode", str(m["seats"].keys()[0]))
 	var seats := {}
-	var teams := {}
 	for s in m["seats"][mode]:
 		seats[int(s["node"])] = s["seat"]
-		if typeof(s.get("team")) in [TYPE_INT, TYPE_FLOAT]:
-			teams[s["seat"]] = int(s["team"])
 	var sim := Sim.new()
-	sim.setup(m, MapBuilder.layout(m), seats, {}, int(_arg("seed", "7")), teams)
+	sim.setup(m, MapBuilder.layout(m), seats, {}, int(_arg("seed", "7")))
 	var ais := []
 	for seat in seats.values():
 		ais.append(SeatAI.new(seat, 2.5, _arg("lvl", "Expert")))

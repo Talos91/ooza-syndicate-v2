@@ -81,22 +81,16 @@ func _init() -> void:
 	Rules.settings_path = CFG
 	Rules._colour_blind = -1
 	check(not Rules.colour_blind(), "COLOUR-BLIND is off by default")
-	Rules.assign_colors(["A", "B", "C", "D", "E"], {}, "A", "A", {})
+	Rules.assign_colors(["A", "B", "C", "D", "E"], {}, "A", "A")
 	var before: Dictionary = Rules.seat_colors.duplicate()
-	Rules.apply_colour_blind(["A", "B", "C", "D", "E"], {}, "A")
+	Rules.apply_colour_blind(["A", "B", "C", "D", "E"], "A")
 	check(Rules.seat_colors == before, "COLOUR-BLIND off: the match keeps its colours")
 	check(Rules.set_colour_blind(true), "COLOUR-BLIND is saved")
 	Rules._colour_blind = -1
 	check(Rules.colour_blind(), "... and read back")
-	Rules.apply_colour_blind(["A", "B", "C", "D", "E"], {}, "C")
+	Rules.apply_colour_blind(["A", "B", "C", "D", "E"], "C")
 	check(Rules.seat_colors["C"] == Rules.CB_FFA[0] and Rules.seat_colors["A"] == Rules.CB_FFA[1]
 			and Rules.seat_colors["E"] == Rules.CB_FFA[4], "FFA 5: you first, then the seats in order, on CB_FFA")
-	Rules.apply_colour_blind(["A", "B", "C", "D"], {"A": 1, "B": 0, "C": 1, "D": 0}, "A")
-	check(Rules.seat_colors["A"] == Rules.CB_TEAMS[0][0] and Rules.seat_colors["C"] == Rules.CB_TEAMS[0][1]
-			and Rules.seat_colors["B"] == Rules.CB_TEAMS[1][0] and Rules.seat_colors["D"] == Rules.CB_TEAMS[1][1],
-			"2v2: your team the first family, each teammate a different colour")
-	Rules.apply_colour_blind(["A", "B", "C", "D", "E", "F"], {"A": 0, "B": 1, "C": 2, "D": 0, "E": 1, "F": 2}, "A")
-	check(Rules.seat_colors["F"] == Rules.CB_TEAMS_3[2][1], "2v2v2: three families")
 	Rules.set_colour_blind(false)
 	Rules.settings_path = "user://settings.cfg"
 	Rules._colour_blind = -1

@@ -101,9 +101,9 @@ func _run() -> void:
 	m._pick(m.show_colours)
 	await shot("10-colour-sheet")
 	m._cancel_pick()
-	_fake_room("2v2", false)
+	_fake_room("1v1", false)
 	m.show_lobby()
-	await shot("11-room-host-2v2")
+	await shot("11-room-host-1v1")
 	m._open_maps()
 	await shot("12-room-host-map-picker")
 	m._cancel_pick()
@@ -116,10 +116,10 @@ func _run() -> void:
 	_fake_room("1v1", true)
 	m.show_lobby()
 	await shot("13-room-guest-1v1")
-	_fake_room("2v2", true)
+	_fake_room("1v1", true)
 	m._lobby_sheet = "seat:0"
 	m.show_lobby()
-	await shot("22-room-guest-2v2-seat-sheet")
+	await shot("22-room-guest-seat-sheet")
 	m._lobby_sheet = ""
 	m._pick(m.show_factions)                          # ROUND 4: ARMY from the room, then EDIT LOADOUT
 	await shot("23-room-army")
@@ -127,8 +127,8 @@ func _run() -> void:
 	await shot("24-loadout-from-lobby")
 	m._save_armies()
 	await shot("24b-after-save")
-	_fake_room("2v2", false)
-	m._lobby_sheet = "seat:3"
+	_fake_room("1v1", false)
+	m._lobby_sheet = "seat:1"
 	m.show_lobby()
 	await shot("16b-room-host-open-seat-sheet")
 	m._lobby_sheet = ""

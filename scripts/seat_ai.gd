@@ -264,7 +264,7 @@ func _estimate(sim: Sim, n: Dictionary) -> float:
 	if not mem.is_empty() and sim.node_hidden(n["id"], seat):
 		return mem["units"]                               # POWERS: inside a rival's Fog of War it keeps its last look
 	if mem.is_empty() or _clock >= float(mem["next"]):
-		mem = {"units": maxf(0.0, sim.garrison_total(n) * (1.0 + rng.randf_range(-cfg["error"], cfg["error"]))), "next": _clock + float(cfg["observe"])}
+		mem = {"units": maxf(0.0, float(n["units"]) * (1.0 + rng.randf_range(-cfg["error"], cfg["error"]))), "next": _clock + float(cfg["observe"])}
 		_memory[n["id"]] = mem
 	return mem["units"]
 
@@ -428,7 +428,7 @@ func _shortfall(sim: Sim, n: Dictionary) -> float:
 		kill += u * _kills_per(sim, h["owner"], n)
 	if kill <= 0.0:
 		return 0.0
-	var held: float = sim.garrison_total(n) + sim.production(n) * (0.0 if first == INF else first) + _incoming(sim, n["id"], false)
+	var held: float = float(n["units"]) + sim.production(n) * (0.0 if first == INF else first) + _incoming(sim, n["id"], false)
 	return kill + 2.0 * Rules.SCALE - held
 
 
@@ -1348,7 +1348,7 @@ func _monsters(sim: Sim) -> void:
 					own += 1.0 * Rules.SCALE
 			if own > 0.5:
 				continue                                  # never through its own (or an ally's) lines
-			var g: float = sim.garrison_total(t)
+			var g: float = float(t["units"])
 			var v := kick + minf(g, Rules.MONSTER_TAKE_MAX) * (1.0 if t["owner"] != "" else 0.6)   # it kicks at most MONSTER_TAKE_MAX there
 			if t["owner"] != "" and g <= Rules.MONSTER_TAKE_MAX and _incoming(sim, id, false) + _nearby_spare(sim, id) > 4.0 * Rules.SCALE:
 				v += 8.0 * Rules.SCALE + t["tier"] * 4.0 * Rules.SCALE   # it can hold what it takes

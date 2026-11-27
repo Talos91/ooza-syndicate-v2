@@ -66,7 +66,7 @@ func _run() -> void:
 	m.show_setup()
 	await shot("02-vs-ai-setting-sheet")
 	m._bg_sheet = false
-	_fake_room("2v2", false)
+	_fake_room("1v1", false)
 	m._setting_room = Net.room_code                  # (the stub room can't publish: the remembered pick is set by hand)
 	Net.room_backdrop = "3"
 	m.show_lobby()
@@ -75,7 +75,7 @@ func _run() -> void:
 	m.show_lobby()
 	await shot("04-room-host-setting-sheet")
 	m._lobby_sheet = ""
-	_fake_room("2v2", true)
+	_fake_room("1v1", true)
 	Net.room_backdrop = "3"
 	m.show_lobby()
 	await shot("05-room-guest")

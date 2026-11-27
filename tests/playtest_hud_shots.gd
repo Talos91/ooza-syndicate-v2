@@ -1,7 +1,6 @@
 extends Node
 ## playtest-hud contact-sheet shots (2026-09-28, cousins playtest branch):
 ##   timeout 90 Godot --path . --resolution 1266x585 tests/playtest_hud_shots.tscn -- --shot=arrow --out=<dir>
-##   timeout 90 Godot --path . --resolution 1266x585 tests/playtest_hud_shots.tscn -- --shot=halo --out=<dir>
 ##   timeout 90 Godot --path . --resolution 1266x585 tests/playtest_hud_shots.tscn -- --shot=relay --out=<dir>
 ##   timeout 90 Godot --path . --resolution 1266x585 tests/playtest_hud_shots.tscn -- --shot=pause --out=<dir> --tag=1266x585
 ##   timeout 90 Godot --path . --resolution 1136x640 tests/playtest_hud_shots.tscn -- --shot=pause --out=<dir> --tag=1136x640
@@ -61,12 +60,6 @@ func _process(dt: float) -> void:
 		"arrow":
 			sim.nodes[_a]["units"] = 500.0            # comfortably over T1->T2's cost: the arrow shows
 			await _save("arrow")
-		"halo":
-			sim.nodes[_a]["allies"]["B"] = sim.node_cap(sim.nodes[_a]) * 0.85   # tier 3
-			var other := _second_a_node(sim)
-			if other >= 0:
-				sim.nodes[other]["allies"]["B"] = sim.node_cap(sim.nodes[other]) * 0.4   # tier 2, elsewhere
-			await _save("halo")
 		"relay":
 			var r := _relay_node(sim)
 			if r >= 0:
@@ -83,13 +76,6 @@ func _process(dt: float) -> void:
 			await get_tree().process_frame
 			await _save("pause" + ("_" + tag if tag != "" else ""))
 	get_tree().quit(0)
-
-
-func _second_a_node(sim: Sim) -> int:
-	for n in sim.nodes:
-		if n["owner"] == "A" and n["id"] != _a:
-			return n["id"]
-	return -1
 
 
 func _relay_node(sim: Sim) -> int:

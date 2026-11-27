@@ -139,13 +139,10 @@ func _build_sim(info: Dictionary) -> Sim:
 	## What main._start_online builds: the room's map, seats and seed, no AI.
 	var map := MapBuilder.load_map(info["map"])
 	var seats := {}
-	var teams := {}
 	for s in map["seats"][info["mode"]]:
 		seats[int(s["node"])] = s["seat"]
-		if info["mode"] == "2v2" and s.get("team") != null:
-			teams[s["seat"]] = int(s["team"])
 	var s := Sim.new()
-	s.setup(map, MapBuilder.layout(map), seats, info["players"], int(info["seed"]), teams, info.get("loadouts", {}))
+	s.setup(map, MapBuilder.layout(map), seats, info["players"], int(info["seed"]), info.get("loadouts", {}))
 	return s
 
 
@@ -168,7 +165,7 @@ func _versus_card(m: Node3D, n: Node) -> Node:
 func _run() -> void:
 	MapPool.dir = "res://maps"                     # the legacy roster offers every mode, whatever pack ships
 	# ---------------------------------------------------------------- lobby, every mode
-	for mode in ["1v1", "FFA3", "FFA4", "2v2"]:   # map-pass 11-18: FFA5 / 3v3 / 2v2v2 archived (max 4 seats)
+	for mode in ["1v1", "FFA3", "FFA4"]:   # map-pass 11-18: FFA5 / 3v3 / 2v2v2 archived (max 4 seats); 2v2 deleted 2026-11-27
 		_open_room(mode)
 		for i in range(1, host.slots()):
 			_join("g%d" % i, ["null", "ember", "bloom", "solar"][i - 1])
@@ -189,8 +186,6 @@ func _run() -> void:
 		check(extra.bridge == null and not host.roster.has(host.links["late"]), mode + ": a full room rejects a sixth player")
 		guests.erase("late")
 		extra.queue_free()
-		if mode == "2v2":
-			check(host.team_of_slot(0) == host.team_of_slot(1) and host.team_of_slot(0) != host.team_of_slot(2), "2v2: A+B against C+D")
 
 	# ---------------------------------------------------------------- version check, faction change
 	_open_room("1v1")
@@ -406,7 +401,7 @@ func _run() -> void:
 	fp.free()
 	fp2.free()
 
-	# ---------------------------------------------------------------- STRUCTURES 2.1 + TEAMS (0.18.10): orders and snapshots
+	# ---------------------------------------------------------------- STRUCTURES 2.1 (0.18.10): orders and snapshots
 	check(host.VERSION_TAG == "ooze20-net-9", "the net protocol is bumped for OOZE 3.0 (ooze20-net-9; 8: powers)")
 	check(host.version() == "ooze20-net-9/" + Rules.VERSION, "a room's version = net-9 tag + Rules.VERSION (0.25.x net-8 rooms never mix)")
 	# OOZE 3.0 (WP5): the quota rides every snapshot, keyframe and delta, through the real wire to the guest's Sim
@@ -447,7 +442,7 @@ func _run() -> void:
 			and host._execute(g_id, {"action": "build", "a": home_b, "args": {"kind": 7}}) == [false, "Order rejected"],
 			"an unknown build kind is rejected")
 	check(not host._execute(g_id, {"action": "build", "a": home_a, "args": {"kind": "machinegoon"}})[0], "a guest can't build on the host's node")
-	check(host._execute(g_id, {"action": "eject", "a": home_b, "args": {}}) == [false, "No allied troops to eject here"], "EJECT with no allied troops is refused with the reason")
+	check(host._execute(g_id, {"action": "eject", "a": home_b, "args": {}}) == [false, "Order rejected"], "EJECT (deleted with 2v2) is an unknown order")
 	hs.nodes[target]["structure"] = "monster_hub"     # (staged: B's captured neighbour holds a ready hub)
 	hs.nodes[target]["units"] = 300.0
 	hs.nodes[target]["monster_ready_t"] = 0.0
@@ -455,8 +450,6 @@ func _run() -> void:
 	check(host._execute(g_id, {"action": "launch_monster", "a": target, "args": {"to": 1.5}}) == [false, "Order rejected"], "a monster order with a bad target is rejected")
 	var lm: Array = host._execute(g_id, {"action": "launch_monster", "a": target, "args": {"to": home_a}})
 	check(lm[0] and hs.monsters.size() == 1, "a guest's monster launch runs on the host (%s)" % str(lm))
-	hs.nodes[home_b]["allies"] = {"A": 25.0}          # (staged: stored allied troops travel too)
-	hs.nodes[home_b]["arrivals"] = ["A"]
 	hs.draw_line = "DRAW - test"
 	hs.step(0.1)
 	var ss: Dictionary = host.snapshot(hs, false)
@@ -464,9 +457,8 @@ func _run() -> void:
 	var sw: PackedByteArray = var_to_bytes(ss)
 	host.apply_snapshot(gs, bytes_to_var(sw))
 	check(gs.nodes[home_b]["build_kind"] == "machinegoon" and gs.nodes[target]["structure"] == "monster_hub"
-			and gs.nodes[home_b]["allies"] == {"A": 25.0} and gs.nodes[home_b]["arrivals"] == ["A"]
 			and absf(float(gs.nodes[target]["monster_ready_t"]) - float(hs.nodes[target]["monster_ready_t"])) < 0.001,
-			"the guest sees the new node fields (structure, allies, arrivals, monster_ready_t)")
+			"the guest sees the new node fields (structure, monster_ready_t)")
 	check(gs.monsters.size() == 1 and gs.monsters[0]["id"] == hs.monsters[0]["id"] and (gs.monsters[0]["pos"] as Vector3).distance_to(hs.monsters[0]["pos"]) < 0.01
 			and gs.draw_line == "DRAW - test", "the guest sees the monster where the host has it, and the draw line")
 	var mp0: float = gs.monsters[0]["s"]
@@ -480,8 +472,6 @@ func _run() -> void:
 	hs.nodes[target]["hub_monster"] = -1              # (cleanup, matching hs.monsters = [] above)
 	hs.nodes[target]["monster_ready_t"] = 0.0          # (the earlier real launch put it on a ~40 s cooldown)
 	Rules.MONSTER_REACH = 1
-	hs.nodes[home_b]["allies"] = {}
-	hs.nodes[home_b]["arrivals"] = []
 	hs.draw_line = ""
 	host.apply_snapshot(gs, host.snapshot(hs, false))  # re-sync the guest: the hub reads ready again
 	# 0.20.1 monster-launch fix (Daniele's online playtest, both players guests: "i couldn't figure how
@@ -759,7 +749,7 @@ func _run() -> void:
 	Rules.apply_balance("")
 
 	_test_colours()
-	_test_teams()
+	_test_rooms_more()
 	print("\nALL PASSED (0 failed)" if failures == 0 else "\n%d FAILED" % failures)
 
 
@@ -895,7 +885,7 @@ func _colours_of(n: Node) -> Dictionary:
 
 
 func _test_colours() -> void:
-	## 0.18.7 (Daniele: the same colours on every screen): lobby picks, unique, team families, the map
+	## 0.18.7 (Daniele: the same colours on every screen): lobby picks, unique, the map
 	## in the launch, identical on host and guest.
 	# ---------------------------------------------------------------- FFA: unique picks
 	_open_room("FFA4")
@@ -944,44 +934,6 @@ func _test_colours() -> void:
 	Rules.use_colours(c2.match_info["colours"])
 	check(Rules.seat_colors == on_host and Rules.seat_colors["A"] == Rules.HUES[hc["A"]], "host and guest render identical seat colours (no per-screen recolouring)")
 
-	# ---------------------------------------------------------------- team families
-	_open_room("2v2")
-	host.map_path = "res://maps4/A-01-orbital-nexus.json"   # A+C against B+D
-	host._fix_colours()
-	var t1 := _join("g1", "null")
-	_deliver()
-	check(host.team_of(1) != host.team_of(t1.assigned_id), "2v2 on A-01: the first guest (B) starts on the other team")
-	var fams: Array = host.families()
-	var hfam: int = host.family_of(fams, host.roster[1]["colour"])
-	var gfam: int = host.family_of(fams, host.roster[t1.assigned_id]["colour"])
-	check(hfam >= 0 and gfam >= 0 and hfam != gfam, "rival teams get different hue families")
-	var host_family_other: String = (fams[hfam] as Array).filter(func(k): return k != host.roster[1]["colour"])[0]
-	_to_host("g1", {"op": "colour", "colour": host_family_other})
-	_deliver()
-	check(host.family_of(fams, host.roster[t1.assigned_id]["colour"]) == gfam, "a hue of the other team's family is refused")
-	_to_host("g1", {"op": "colour", "colour": "purple"})
-	check(host.roster[t1.assigned_id]["colour"] != "purple", "a hue in no team family is refused in team modes")
-	# switch to the host's team: the colour follows the team's family
-	_to_host("g1", {"op": "team", "team": host.team_of(1)})
-	_deliver()
-	check(host.team_of(t1.assigned_id) == host.team_of(1), "the guest joined the host's team")
-	check(host.family_of(fams, host.roster[t1.assigned_id]["colour"]) == hfam and host.roster[t1.assigned_id]["colour"] != host.roster[1]["colour"], "teammates share the family with different hues")
-	# the host picks a hue of the free family: the whole team moves to it
-	var other_fam: Array = fams[1 - hfam]
-	host.set_colour(other_fam[0])
-	check(host.roster[1]["colour"] == other_fam[0] and host.roster[t1.assigned_id]["colour"] in other_fam and host.roster[t1.assigned_id]["colour"] != other_fam[0], "a pick from the free family moves the team to it")
-	host.set_ai_fill("Standard")
-	var rc: Dictionary = host.room_colours()
-	check(rc.size() == 4 and _uniq(rc.values()).size() == 4, "room colours: four seats, four hues")
-	var ok_fam := true
-	for sl in range(4):
-		var same_team: bool = host.team_of_slot(sl) == host.team_of(1)
-		ok_fam = ok_fam and (host.family_of(fams, rc[host.SEATS[sl]]) == (1 - hfam if same_team else hfam))
-	check(ok_fam, "the AI seats take their team's family (the AI team the other one)")
-	_ready_all()
-	host.start_match()
-	_deliver()
-	check(t1.match_info["colours"] == host.match_info["colours"] and host.match_info["colours"] == rc, "2v2 launch: the same map on host and guest")
 
 
 func _uniq(a: Array) -> Dictionary:
@@ -991,92 +943,10 @@ func _uniq(a: Array) -> Dictionary:
 	return d
 
 
-func _test_teams() -> void:
-	## 0.18.7 (Daniele: "there should be so i can switch to my gf team"): JOIN TEAM, host-validated.
-	_open_room("2v2")
-	host.map_path = "res://maps4/A-01-orbital-nexus.json"   # A+C against B+D: join order splits two players
-	host._fix_colours()
-	var gf := _join("gf", "bloom")
-	_deliver()
-	var gid: int = gf.assigned_id
-	check(gf.local_seat() == "B" and gf.team_of(gid) != gf.team_of(1), "on A-01 the guest joins seat B, the rival team")
-	gf.switch_team(gf.team_of(1))                           # the real guest call: an op to the host
-	_deliver()
-	check(host.seat_of(gid) == "C" and gf.local_seat() == "C" and host.team_of(gid) == host.team_of(1), "JOIN TEAM: the guest moves to seat C, the host's team")
-	_to_host("gf", {"op": "team", "team": 9})
-	_to_host("gf", {"op": "team", "team": "x"})
-	_to_host("gf", {"op": "team", "team": host.team_of(1)})
-	check(host.seat_of(gid) == "C", "unknown teams and a no-op switch are ignored")
-	var g3 := _join("g3", "ember")
-	_deliver()
-	check(host.seat_of(g3.assigned_id) == "B", "a newcomer takes the first free seat (B)")
-	var g4 := _join("g4", "vex")
-	_deliver()
-	check(host.seat_of(g4.assigned_id) == "D" and host.roster.size() == 4, "the fourth player takes seat D")
-	_to_host("g3", {"op": "team", "team": host.team_of(1)})
-	_deliver()
-	check(host.seat_of(g3.assigned_id) == "B" and host.team_of(g3.assigned_id) != host.team_of(1), "a full team takes nobody")
-	host.peer_left(g4.assigned_id)
-	_deliver()
-	check(host.seat_of(gid) == "C" and host.seat_of(g3.assigned_id) == "B", "team modes: a lobby departure keeps everyone's seat")
-	check(host.move_to_team(g3.assigned_id, host.team_of(1)) == false, "the host cannot overfill a team")
-	check(host.move_to_team(gid, host.team_of(g3.assigned_id)) and host.seat_of(gid) == "D", "the host moves a player to the other team")
-	check(host.move_to_team(gid, host.team_of(1)) and host.seat_of(gid) == "C", "and back")
-	host.peer_left(g3.assigned_id)
-	_deliver()
-	# deploy with EMPTY SEATS: AI - the humans play together, the AI fills B and D
-	host.set_ai_fill("Casual")
-	_ready_all()
-	host.start_match()
-	_deliver()
-	var info: Dictionary = host.match_info
-	check(info["ai"] == {"B": "Casual", "D": "Casual"} and info["players"].size() == 4, "deploy: AI in the free seats B and D (not packed)")
-	check(gf.local_seat() == "C" and gf.match_info["roster"][gid]["slot"] == 2, "the guest's round seat is C")
-	var hs := _build_sim(info)
-	check(hs.allied("A", "C") and not hs.allied("A", "B") and not hs.allied("C", "D"), "the match seats both humans on the same side (allied lines, shared win)")
-	hs.winner = "C"
-	check(hs.allied(hs.winner, "A"), "a win by the guest's seat is the host's win too")
-	# mode and map changes re-validate the teams
-	_open_room("2v2")
-	host.map_path = "res://maps4/A-01-orbital-nexus.json"
-	host._fix_colours()
-	var m1 := _join("m1", "bloom")
-	_deliver()
-	host.move_to_team(m1.assigned_id, host.team_of(1))
-	check(host.seat_of(m1.assigned_id) == "C", "A-01: host A and guest C together")
-	host.set_map("res://maps4/B-05-trident-exchange.json")   # A+B against C+D
-	_deliver()
-	check(host.team_of(m1.assigned_id) == host.team_of(1) and host.seat_of(m1.assigned_id) == "B" and m1.local_seat() == "B", "a map with other team seats keeps the pair together (guest to B)")
-	host.set_mode("FFA3")
-	_deliver()
-	check(host.seat_of(1) == "A" and host.seat_of(m1.assigned_id) == "B" and m1.mode == "FFA3", "FFA: no teams, seats packed in seat order")
-	host.set_mode("3v3")
-	_deliver()
-	check(host.mode == "FFA3", "3v3 is archived (map-pass 11-18, max 4 seats): the room refuses it")
-	host.set_mode("2v2")
-	host.set_map("res://maps4/A-01-orbital-nexus.json")
-	_deliver()
-	check(host.team_of(m1.assigned_id) == host.team_of(1) and host.seat_of(m1.assigned_id) == "C", "back to 2v2 on A-01: still together (A + C)")
-	check(_uniq(_colours_of(host).values()).size() == 2 and host.family_of(host.families(), host.roster[1]["colour"]) == host.family_of(host.families(), host.roster[m1.assigned_id]["colour"]), "after every change the pair keeps one hue family, different hues")
-	# a smaller mode never overfills a team: three players, then 2v2 (was three on one 3v3 team; 3v3 archived 11-18)
-	_open_room("FFA4")
-	host._fix_colours()
-	_join("p2", "bloom")
-	_join("p3", "ember")
-	_deliver()
-	check(host.roster.size() == 3, "three players in the room")
-	host.set_mode("2v2")
-	_deliver()
-	var sizes := {}
-	for id in host.roster:
-		sizes[host.team_of(id)] = int(sizes.get(host.team_of(id), 0)) + 1
-	check(sizes.values().all(func(n): return n <= 2) and _uniq(host.roster.values().map(func(r): return r["slot"])).size() == 3, "three -> 2v2: the third player goes to the other team (no team over two)")
-	check(guests["p3"].team_of(3) == host.team_of(3) and guests["p3"].local_seat() == host.seat_of(3), "the guests see the re-validated seats")
-	m1 = guests["p2"]
-	# FFA refuses team switches
-	host.set_mode("FFA3")
-	check(not host.move_to_team(m1.assigned_id, 1), "FFA: no team switching")
-	# the protocol refuses a guest built without team switching (same-build rooms only)
+func _test_rooms_more() -> void:
+	## The protocol check and NAMES (the team-switch tests went with 2v2, 2026-11-27).
+	# the protocol refuses a guest on an older protocol (same-build rooms only)
+	_open_room("1v1")
 	_join("old", "null", "ooze20-net-1/" + Rules.VERSION)
 	check("rejected" in _kinds_to("old"), "a guest on the previous room protocol is refused")
 	guests.erase("old")

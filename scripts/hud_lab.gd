@@ -650,7 +650,7 @@ static func draw_card(hud, ci: Control) -> void:
 	ci.draw_texture_rect(tex("paint-card"), r, false)
 	ci.draw_texture_rect(tex("mask-card-owner-edge"), r, false, hud.inspector_col)
 	var cap := maxf(float(hud.sim.node_cap(n)), 1.0)
-	var units: float = hud.sim.garrison_total(n) if hud.sim.allied_units(n) > 0.0001 else float(n["units"])
+	var units: float = float(n["units"])
 	var f := clampf(units / cap, 0.0, 1.0)
 	var k := u
 	art(ci, "mask-card-bar-track", Vector2.ZERO, k)

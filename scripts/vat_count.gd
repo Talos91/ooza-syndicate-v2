@@ -283,7 +283,7 @@ func count_text(n: Dictionary) -> String:
 		return "?"
 	if masked:
 		return ""
-	var units: float = sim.garrison_total(n) if sim.allied_units(n) > 0.0001 else sim.visible_units(n, human)
+	var units: float = sim.visible_units(n, human)
 	return str(Rules.shown(units))
 
 

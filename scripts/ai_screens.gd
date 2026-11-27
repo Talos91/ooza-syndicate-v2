@@ -2,8 +2,7 @@ class_name AiScreens
 extends Control
 ## hud-43 AI SCREENS (Daniele 11-18 screen layout: "AI moods on the AI screens, no top banners"): two screens in the top corners of his
 ## frame, tilted -12 / +12 deg, each the faction AI's screen (Daniele's 2026-11-17 frame + the ai-clean AI) + its MOOD on a cream plate.
-## Who shows: 1v1 = left you (your faction's AI), right the enemy AI. 2v2 = left your team, right the other team (the face = the team
-## seat the reaction is about). FFA = left you, right the AI with the biggest reaction (queued, biggest first).
+## Who shows: 1v1 = left you (your faction's AI), right the enemy AI. FFA = left you, right the AI with the biggest reaction (queued, biggest first).
 ##
 ## AI REACTIONS (ai-reactions 2026-11-18, Daniele: "ai reactions lets implement more now is too flat"): the screen is drawn from LAYERS
 ## (assets/art/ui/ai_layers, tools/prep_ai_layers.py: glass, glitch, glow, body, eyes, shut eyes, frame), so a reaction animates the
@@ -302,8 +301,6 @@ func _rivals_of(seat: String) -> Array:
 	for s in hud.sim.factions.keys():
 		if str(s) == seat:
 			continue
-		if hud.sim.teams.has(seat) and hud.sim.teams.get(s, -1) == hud.sim.teams.get(seat, -2):
-			continue
 		out.append(str(s))
 	return out
 
@@ -328,7 +325,7 @@ func _read_events() -> void:
 				if s != "" and u >= 8.0 and u >= 0.2 * (maxf(float(hud.sim.seat_strength(s)), 0.0) + u):
 					react(s, "ARMY_LOST")
 					var rv := _rivals_of(s)
-					if rv.size() <= 2:                     # 1v1 / 2v2: the other side won that fight (FFA: nobody can tell)
+					if rv.size() == 1:                     # 1v1: the other side won that fight (FFA: nobody can tell)
 						for r in rv:
 							react(r, "ARMY_WON")
 			"collapse":
@@ -354,7 +351,7 @@ func _end(winner: String) -> void:
 		return
 	for s in hud.sim.factions.keys():
 		var seat := str(s)
-		var won: bool = seat == winner or (winner != "" and hud.sim.teams.has(seat) and hud.sim.teams.get(seat) == hud.sim.teams.get(winner, -9))
+		var won: bool = seat == winner
 		react(seat, "WIN" if won else ("LOSE" if winner != "" else "SLUMP"))
 	_ended = true
 
@@ -392,7 +389,7 @@ func _sample() -> void:
 			react(s, "NEARWIN")
 		elif ratio <= 0.4:
 			react(s, "NEARLOSS")
-	for i in range(2):                               # the baseline mood of the seat on screen (a live teammate replaces an out seat)
+	for i in range(2):                               # the baseline mood of the seat on screen (FFA: a live rival replaces an out seat)
 		if cur[i] == "" and hud._seat_out(shown[i]):
 			for x in sides[i]:
 				if sim.factions.has(x) and not hud._seat_out(x):

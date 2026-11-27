@@ -8,7 +8,7 @@ extends CanvasLayer
 ## (3D thumbnails + preview) -> 03 SETUP (players, your colour, your faction, rival, difficulty,
 ## Last Stand) -> DEPLOY. OPTIONS holds the match switches (Last Stand,
 ## enemy counts, detail). ONLINE -> CREATE ROOM / JOIN ROOM ->
-## the room lobby (players, teams, faction, colour, map, PLAYERS, Last Stand) -> DEPLOY by
+## the room lobby (players, faction, colour, map, PLAYERS, Last Stand) -> DEPLOY by
 ## the host (Net, through the room server). TUTORIAL (TUTORIAL-DESIGN.md §7): the nine lesson rows
 ## (TutorialPage, TutorialDirector's table and progress), CONTINUE = the first lesson not done.
 ## ARMIES (0.18.7, SKILLS 2.0): the army presets - per faction its fixed ultimate plus 1 active and 1 map skill
@@ -32,8 +32,8 @@ var map_path := ""                                # setup() takes main's, or the
 var ai_level := "Standard"
 var mode := "1v1"
 var colour := "A"
-const MODES_OFFERED := ["1v1"]   # OOZE 3.0 (Daniele 2026-11-27): BRAWL 1v1 only; 2v2 / FFA code stays until WP6, never offered
-const MODE_NAMES := {"1v1": "1 V 1", "2v2": "2 V 2", "FFA3": "FFA 3", "FFA4": "FFA 4"}   # max 4 seats: FFA5 / 3v3 / 2v2v2 deleted 2026-11-23 (Daniele 2026-11-18)
+const MODES_OFFERED := ["1v1"]   # OOZE 3.0 (Daniele 2026-11-27): BRAWL 1v1 only; 2v2 deleted in WP6, FFA code stays, never offered
+const MODE_NAMES := {"1v1": "1 V 1", "FFA3": "FFA 3", "FFA4": "FFA 4"}   # max 4 seats: FFA5 / 3v3 / 2v2v2 deleted 2026-11-23 (Daniele 2026-11-18)
 const COLOUR_NAMES := {"A": "CYAN", "B": "GREEN", "C": "PURPLE", "D": "RED", "E": "GOLD", "F": "ROSE", "faction": "FACTION"}
 var maps: Array = []
 var _is_main := false
@@ -80,7 +80,6 @@ const MAP_TYPES := ["all", "xs", "s", "m", "l"]
 const MAP_TYPE_NAMES := {"all": "ALL SIZES", "xs": "TINY", "s": "SMALL", "m": "MEDIUM", "l": "LARGE", "none": "OTHER"}
 var _chat_btn: Button
 var _chat_t := 0.0
-var _move_pick := -1                               # host, team modes: the player picked to MOVE to a team
 var _lobby_note := ""                              # READY: the host's last notice in the lobby ("Settings changed - ...")
 const HUE_NAMES := ["red", "green", "blue", "gold", "purple", "cyan", "rose", "orange"]   # Rules.HUES, lobby order
 var _army := ""                                    # ARMIES: the faction whose preset is open
@@ -4191,12 +4190,10 @@ func show_setup() -> void:
 	_sel45(st, 426, ys[1], 357, 35, "ARMY", str(UiKit.NAMES[faction]), func(): _pick(show_factions))
 	var cb := _sel45(st, 426, ys[2], 357, 35, "COLOUR", str(COLOUR_NAMES[colour]), func(): _pick(show_colours))
 	cb.acc_col = Rules.FACTIONS[faction][1] if colour == "faction" else Rules.SEATS[colour]
-	var team := _setup_team_of()
 	var rw := 357.0 - 40.0 * maxi(0, enemies.size() - 1)
 	var rf := str(rival_picks.get(first, "random"))
-	var ally: bool = team.has(first) and team.get(first) == team.get("A", -1)
-	_sel45(st, 426, ys[3], rw, 35, ("ALLY " if ally else "RIVAL ") + first, str(UiKit.NAMES.get(rf, "RANDOM")), func(): _open_lobby_sheet("seat:" + first))
-	for k in range(1, enemies.size()):                 # FFA / 2v2: a key per further AI seat (its sheet: army + level)
+	_sel45(st, 426, ys[3], rw, 35, "RIVAL " + first, str(UiKit.NAMES.get(rf, "RANDOM")), func(): _open_lobby_sheet("seat:" + first))
+	for k in range(1, enemies.size()):                 # FFA: a key per further AI seat (its sheet: army + level)
 		var s: String = enemies[k]
 		var kb := st.key("KEY-SMALL", 426 + rw + 4.0 + 40.0 * (k - 1), ys[3] + 1.0, 36, 33, s, func(): _open_lobby_sheet("seat:" + s))
 		kb.size_pt = 14.0
@@ -4218,14 +4215,6 @@ func show_setup() -> void:
 
 
 const TEXT_IN := 22.0                              # note 2: text inset inside a 43B plate (its 14 pt chamfer + bolt)
-
-
-func _setup_team_of() -> Dictionary:
-	var team := {}
-	for s in _selected_map().get("seats", {}).get(mode, []):
-		if s.get("team") != null and mode == "2v2":
-			team[str(s.get("seat", ""))] = int(s["team"])
-	return team
 
 
 func _seat_rows(r: Rect2, cur_f: String, cur_lv: String, on_f: Callable, on_lv: Callable, enabled := true, y0 := -1.0) -> float:
@@ -4296,9 +4285,7 @@ func _setup_sheet_draw() -> void:
 			_lobby_sheet = ""
 			_pick(show_factions)
 			return
-		var team := _setup_team_of()
-		var ally: bool = team.has(seat) and team.get(seat) == team.get("A", -1)
-		var r := _sheet_frame("PLAY VS AI / SEAT %s" % seat, ("AI ALLY" if ally else "AI RIVAL") + ".", Vector2(900, 360))
+		var r := _sheet_frame("PLAY VS AI / SEAT %s" % seat, "AI RIVAL.", Vector2(900, 360))
 		_seat_rows(r, str(rival_picks.get(seat, "random")), ai_level, func(f):
 			rival_picks[seat] = f
 			_close_lobby_sheet(), func(lv):
@@ -4466,7 +4453,7 @@ func _setup_colours(pos: Vector2, width: float) -> void:
 		_shell_add(UiKit.label(self, "Every player in their faction's colour", 13, Color("ffd15c")), Vector2(pos.x, y))
 		y += UiKit.line_h(self, 13) + 6.0
 	if not mobile:
-		var n := UiKit.label(self, "Team modes: one hue per team, light and dark. FACTION: every seat in its own faction colour (Alpha 11).", 13, UiKit.MUTED)
+		var n := UiKit.label(self, "FACTION: every seat in its own faction colour (Alpha 11).", 13, UiKit.MUTED)
 		n.clip_text = true
 		n.size = Vector2(width, UiKit.line_h(self, 13))
 		_shell_add(n, Vector2(pos.x, y))
@@ -4608,7 +4595,7 @@ func _toggle(text: String, on: bool, pos: Vector2, dims: Vector2, call: Callable
 
 func show_seats() -> void:
 	## RIVALS (a MATCH SETUP sheet; round 2, Daniele 2026-11-04: one screen, no scroll, no pager): compact cells two per
-	## row - YOU (your faction, CHANGE -> FACTION), AI LEVEL, then every AI seat (ally or rival, its team in team modes)
+	## row - YOU (your faction, CHANGE -> FACTION), AI LEVEL, then every AI seat (a rival)
 	## with its pick (ANY or one of the five). FFA 5 = 6 cells = 3 rows. SAVE returns to MATCH SETUP.
 	_last_show = show_seats                  # a resize that changes the phone sizing rebuilds it (_fit)
 	var sel := _selected_map()
@@ -4626,10 +4613,6 @@ func show_seats() -> void:
 	UiKit.btn(self, "SAVE  →", Vector2(content.size.x - x - dw, fy), Vector2(dw, 48), _back_to_setup, "primary", faction, 18)
 	_shell_add(UiKit.label(self, "%s  ·  you + %d AI" % [MODE_NAMES.get(mode, mode), _enemy_seats().size()], 15, UiKit.MUTED),
 			Vector2(x, fy + (bh - UiKit.line_h(self, 15)) / 2.0))
-	var team := {}
-	for s in sel.get("seats", {}).get(mode, []):
-		if mode == "2v2" and s.get("team") != null:
-			team[str(s.get("seat", ""))] = int(s["team"])
 	var cells := ["A", "level"] + _enemy_seats()
 	var cw := floorf((w - gap) / 2.0)
 	var ph := UiKit.tap_h(self, 50.0)
@@ -4649,9 +4632,8 @@ func show_seats() -> void:
 			_shell_add(UiKit.label(self, "AI LEVEL", 12, UiKit.COPPER, true, 3), Vector2(p.x + 14.0, p.y + pad_y))
 			_difficulty(Vector2(p.x + 14.0, ry), cw - 28.0)
 			continue
-		var ally: bool = s == "A" or (team.has(s) and team.get(s) == team.get("A", -1))
-		var role := "YOU" if s == "A" else ("AI ALLY" if ally else "AI RIVAL")
-		var kick := "SEAT %s  ·  %s%s" % [s, role, ("  ·  TEAM %d" % (int(team[s]) + 1)) if team.has(s) else ""]
+		var role := "YOU" if s == "A" else "AI RIVAL"
+		var kick := "SEAT %s  ·  %s" % [s, role]
 		_shell_add(UiKit.label(self, kick, 12, UiKit.COPPER, true, 3), Vector2(p.x + 14.0, p.y + pad_y))
 		if s == "A":
 			_shell_add(_cutout(faction, Vector2.ZERO, Vector2(ph, ph)), Vector2(p.x + 14.0, ry))
@@ -4773,8 +4755,7 @@ func show_lobby() -> void:
 		(func(): VersusScreen.warm_art(fs)).call_deferred()
 	## ONLINE ROOM = the remake (45B, sizes.json ONLINE-ROOM-4P): LEAVE ROOM at the top right; the MAP-CARD (name, nodes,
 	## the map; host: tap = MAP PICKER); up to four SEAT-CARDs (letter + edge in the seat's room colour, the army in the
-	## avatar well, name, HOST / READY / AWAY / OPEN / SIT HERE, the three chosen skills; tap = the seat's sheet, an open
-	## seat on another team = SIT HERE); the ROOM-CODE-PANEL (code, SHARE, the latest chat lines, the message field);
+	## avatar well, name, HOST / READY / AWAY / OPEN, the three chosen skills; tap = the seat's sheet); the ROOM-CODE-PANEL (code, SHARE, the latest chat lines, the message field);
 	## six SELECTOR-CARDs (MODE, MAP, SETTING, ARMY, COLOUR, RULES: each opens its sheet over the room); the STATUS-STRIP
 	## (seats, Net's status, the host's notice) and DEPLOY (host, once every seat is ready) / READY (guest).
 	if not Net.in_room():
@@ -4908,7 +4889,7 @@ func _loadout_chips(parent: Control, f: String, lo: Dictionary, right_x: float, 
 
 func _colour_row(pos: Vector2, w: float, d := 0.0) -> float:
 	## Your colour: one hexagon chip per hue, filled solid in its colour, border the same colour, no words (Daniele,
-	## 0.19.0 - the picked one is named in the caption above); taken hues (and, in team modes, another team's family)
+	## 0.19.0 - the picked one is named in the caption above); taken hues
 	## are dimmed and disabled. The picked chip gets HexChip's white ring + scale-up. Wraps on a narrow column; returns
 	## the height used.
 	var me := Net.local_id()
@@ -5058,8 +5039,7 @@ func _lobby_sheet_body(host: bool) -> void:
 		var ch := _colour_row(r.position, r.size.x, maxf(UiKit.tap_h(self, 70.0), floorf(r.size.x / 8.0) - 8.0))
 		if locked:
 			_ready_lock(cr0)
-		var hint := "Every seat has one colour, the same on every screen. " + (("Teammates share a hue family (%s); a colour from a free family moves your team to it." % " / ".join(
-				Net.families().map(func(f): return Rules.FAMILY_NAMES.get(f[0], "")))) if Net.mode in Net.TEAM_MODES else "Taken colours are greyed.")
+		var hint := "Every seat has one colour, the same on every screen. Taken colours are greyed."
 		if Rules.colour_blind():
 			hint += " COLOUR-BLIND MODE is on: in the match your screen shows colour-blind-safe colours."
 		_say(hint, r.position + Vector2(0, ch + 10.0), 13, UiKit.MUTED, r.size.x)
@@ -5122,23 +5102,8 @@ func _lobby_sheet_body(host: bool) -> void:
 				show_lobby(), host and ai_on and not Net.active, y)
 			_sheet_fit()
 			return
-		# actions: team moves (you: switch; the host: move a player), else your own picks
+		# actions: your own picks
 		var acts := []
-		if Net.mode in Net.TEAM_MODES and id >= 0 and (me or host):
-			for t in Net.team_ids():
-				var tt: int = t
-				if Net.team_of(id) == tt or Net.free_slot_in(tt) < 0:
-					continue
-				var mb := UiKit.chip(self, "MOVE TO TEAM %d" % (Net.team_ids().find(tt) + 1), Vector2.ZERO, func():
-					if me:
-						Net.switch_team(tt)
-					else:
-						Net.move_to_team(id, tt)
-					_close_lobby_sheet(), shell_f, false)
-				mb.disabled = locked if me else Net.active
-				acts.append(mb)
-			if acts.is_empty():
-				y += _say("Every other team is full: free a seat there to move.", Vector2(r.position.x, y), 13, UiKit.MUTED, r.size.x) + 8.0
 		if me:
 			for a in [["COLOUR", "colour"]]:
 				var key: String = a[1]
@@ -5362,9 +5327,6 @@ func _seat45(st: Kit45.Stage, i: int, id: int, colours: Dictionary, x: float, y:
 	var seat: String = Net.SEATS[i]
 	var col: Color = Rules.HUES.get(str(colours.get(seat, "")), Rules.SEATS.get(seat, Color.WHITE))
 	var me := id >= 0 and id == Net.local_id()
-	var team := Net.team_of_slot(i) if Net.mode in Net.TEAM_MODES else -1
-	var sit := id < 0 and team >= 0 and Net.team_of(Net.local_id()) != team and Net.free_slot_in(team) >= 0 \
-			and not Net.ready_locked() and not Net.active
 	var stt := "OPEN"
 	var state := ("AI " + Net.ai_fill.to_upper()) if Net.ai_fill != "" else "Waiting…"
 	var state_col := UiKit.MUTED
@@ -5385,9 +5347,6 @@ func _seat45(st: Kit45.Stage, i: int, id: int, colours: Dictionary, x: float, y:
 			state_col = col
 		else:
 			state = "NOT READY"
-	elif sit:
-		state = "SIT HERE"
-		state_col = _viewer_col()
 	var p := st.piece("SEAT-CARD", x, y, 170, 72, stt)
 	p.tints = {"edge": col, "letter": col, "seat": col}
 	var ink := Kit45.ink_on("SEAT-CARD", p.key, stt, [53, 7, 108, 16])
@@ -5406,10 +5365,7 @@ func _seat45(st: Kit45.Stage, i: int, id: int, colours: Dictionary, x: float, y:
 		st.txt("+", x + 17, y + 34, 20, 16, 16.0, UiKit.MUTED, true, 1)
 	st.txt(name_t, x + 53, y + 7, 108, 16, 13.0, ink if id >= 0 else Color(ink, 0.6), true)
 	st.txt(state, x + 53, y + 25, 108, 16, 12.5, state_col if state_col != UiKit.MUTED else Color(ink, 0.7), true)
-	var call := func(): _open_lobby_sheet("seat:%d" % i)
-	if sit:
-		call = func(): Net.switch_team(team)
-	var tb := st.tap(x, y, 170, 72, call)
+	var tb := st.tap(x, y, 170, 72, func(): _open_lobby_sheet("seat:%d" % i))
 	tb.text = seat + " " + name_t                     # (tests find the seats by their text)
 	for k in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
 		tb.add_theme_color_override(k, Color(0, 0, 0, 0))
@@ -5449,7 +5405,7 @@ func _room_chat45(st: Kit45.Stage) -> void:
 
 
 func show_room_demo() -> void:
-	## SCREENSHOT HELPER only (--menu-page=room_demo [--room-mode=2v2]): a made-up four-seat room (host YOU, a ready player,
+	## SCREENSHOT HELPER only (--menu-page=room_demo [--room-mode=FFA3]): a made-up four-seat room (host YOU, a ready player,
 	## an open seat, an away player) and two chat lines, so the ONLINE ROOM can be shot offline. Never reached in play.
 	Net.bridge = RefCounted.new()
 	Net.hosting = true

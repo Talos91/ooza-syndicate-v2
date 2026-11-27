@@ -25,7 +25,7 @@ static func payload(sim: Sim, info: Dictionary, users: Dictionary, left: Diction
 		for n in sim.nodes:
 			if n["owner"] == seat and not sim.collapsed.get(n["id"], false):
 				nodes_held += 1
-		seats.append({"seat": seat, "team": sim.teams.get(seat, null), "faction": str(sim.factions[seat]),
+		seats.append({"seat": seat, "faction": str(sim.factions[seat]),
 				"user_id": users.get(seat, null), "ai_level": ai.get(seat, null), "left_early": bool(left.get(seat, false)),
 				"won": sim.winner != "" and (seat == sim.winner or sim.allied(seat, sim.winner)),
 				"placed": int(placed.get(seat, seat_list.size())), "final_strength": Rules.shown(float(strength[seat])),
@@ -45,8 +45,7 @@ static func outcome(sim: Sim) -> Dictionary:
 			last = e
 	var draw := sim.winner == ""
 	var end := "draw" if draw else ("forced" if bool(last.get("forced", false)) else ("vls" if sim.very_last_stand_active else "win"))
-	var team = sim.teams.get(sim.winner, null) if not draw else null
-	return {"winner_seat": null if draw else sim.winner, "winner_team": team, "draw": draw, "end": end}
+	return {"winner_seat": null if draw else sim.winner, "draw": draw, "end": end}
 
 
 static func map_code(path: String) -> String:
