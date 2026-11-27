@@ -128,18 +128,8 @@ static func world_texts(inst: Node) -> Array:
 	var hud: Hud = inst.hud
 	var cam: Camera3D = inst.cam
 	var out := []
-	for n in inst.sim.nodes:
-		var id: int = n["id"]
-		var r: Rect2 = hud.badge_rect(id)
-		if r.size.x > 0.0:
-			out.append(["badge#%d" % id, r])
-			var bl = hud.get("badge_layer")
-			if bl and not Calm.labels() and n["owner"] != "" and n["relay"] == "" and str(n["structure"]) in ["vat", "machinegoon"]:
-				var cr: Rect2 = BadgeLayer.chip_rect(r, bl.chip_h())
-				if bl.under_band(cr):
-					cr.position.y = r.end.y            # (drawn under the badge instead)
-				out.append(["chip#%d" % id, cr])
-		# (WP4b: no Last Stand sign or upgrade chip in the HUD any more - both are on the node's screen, VatCount._keep_clear)
+	# (WP4b: no Last Stand sign or upgrade chip in the HUD any more - both are on the node's screen, VatCount._keep_clear;
+	# WP6: the HUD node badges and their tier chips are deleted - the count is on the screen too)
 	if hud.callouts:
 		var i := 0
 		for r in hud.callouts.rects():

@@ -2030,7 +2030,7 @@ func _process(delta: float) -> void:
 
 
 func _zone_check() -> void:
-	## Dev (--zone-check, hud-43): every platform rim and troop badge vs the HUD zones; prints one ZONECHECK line.
+	## Dev (--zone-check, hud-43): every platform rim vs the HUD zones; prints one ZONECHECK line.
 	var vp := get_viewport().get_visible_rect().size
 	var z := Hud43.zones(vp)
 	var hits := []
@@ -2044,11 +2044,6 @@ func _zone_check() -> void:
 		for key in ["send", "skill", "score", "ai_l", "ai_r", "util"]:
 			if nr.intersects(z[key]):
 				hits.append("node%d:%s" % [n["id"], key])
-		var b = hud.badges.get(n["id"], {}).get("panel")
-		if b is Control and (b as Control).is_visible_in_tree():
-			for key in ["send", "skill", "score", "util"]:
-				if (b as Control).get_global_rect().intersects(z[key]):
-					hits.append("badge%d:%s" % [n["id"], key])
 	var pr := pit_rect()
 	print("ZONECHECK %s vp=%s pit=%s overlaps=%d %s" % [str(map.get("code", "")), vp, pr, hits.size(), " ".join(hits)])
 
@@ -2550,10 +2545,7 @@ func _node_at(p: Vector3, screen: Vector2 = Vector2(-1, -1)) -> int:
 		var rb := _relay_button_at(p, screen)          # RELAY V2: a relay's button disc selects its relay
 		if rb >= 0:
 			return rb
-		var b := hud.badge_at(screen)
-		if b >= 0:
-			return b
-		if vat_count:                                  # 3.0: a count screen is its node's explicit target, as the badge was
+		if vat_count:                                  # 3.0: a count screen is its node's explicit target (the old HUD badge's job)
 			var cs: int = vat_count.screen_at(screen, cam)
 			if cs >= 0:
 				return cs
@@ -2562,16 +2554,10 @@ func _node_at(p: Vector3, screen: Vector2 = Vector2(-1, -1)) -> int:
 
 func _relay_button_at(p: Vector3, screen: Vector2) -> int:
 	## RELAY V2: the relay whose button tap disc (RelayView.hit_disc: >= Rules.RELAY_HIT_PT on a phone) holds this
-	## screen point, or -1. A badge drawn right over the point keeps it (badges are the explicit node targets).
+	## screen point, or -1.
 	if screen.x < 0.0 or vis.is_empty() or cam == null:
 		return -1
-	var rb := RelayView.button_at(cam, sim, vis, screen, p, mobile)
-	if rb >= 0 and hud:
-		for id in hud.badges:
-			var panel: Control = hud.badges[id]["panel"]
-			if panel.visible and panel.get_global_rect().has_point(screen):
-				return -1
-	return rb
+	return RelayView.button_at(cam, sim, vis, screen, p, mobile)
 
 
 func _route_hud(r: Dictionary) -> void:
@@ -2926,15 +2912,12 @@ func _coach_sync() -> void:
 		light = []
 		rects = []
 	var platforms := []                               # the card rather sits over empty sky than over a platform
-	var busy := []                                    # ... and the strip over none, nor over a badge
+	var busy := []                                    # ... and the strip over none
 	for n in sim.nodes:
 		if not sim.collapsed.get(n["id"], false):
 			var sp := cam.unproject_position(n["pos"])
 			platforms.append(sp)
 			busy.append(Rect2(sp - Vector2(radius, radius) * 0.6, Vector2(radius, radius) * 1.2))
-			var br := hud.badge_rect(n["id"])
-			if br.size != Vector2.ZERO:
-				busy.append(br.grow(3.0))
 	if hud.inspector_id >= 0:                         # the open inspector's ring, info panel and buttons
 		var ir := _inspector_target()
 		if ir.size != Vector2.ZERO:
@@ -2964,12 +2947,10 @@ func _coach_sync() -> void:
 
 
 func _tutorial_rect(key: String) -> Rect2:
-	## A coach rect key on screen: "send:0.25", "action:<NAME>" (Hud.action_rect), "dock:<slot>", "badge:<id>",
+	## A coach rect key on screen: "send:0.25", "action:<NAME>" (Hud.action_rect), "dock:<slot>",
 	## "send_panel", "top_bar", "dock", "inspector", "handler" (the creature beside the card).
 	var parts := key.split(":", true, 1)
 	match parts[0]:
-		"badge":
-			return hud.badge_rect(int(parts[1]))
 		"monster_icon":                               # 0.19.2: the monster over your ready hub
 			return hud.monster_icon_rect(int(parts[1]))
 		"send_panel":

@@ -1732,9 +1732,4 @@ const VERSUS_ONLINE_MIN := 2.5
 const VERSUS_ONLINE_PREDRAW_FRAMES := 2     # frames the online VERSUS card is drawn before the map build starts (0.23.0)
 const VERSUS_LOBBY_MAX := 45.0             # s a DEPLOY-raised VERSUS card waits for the launch before giving the lobby back (0.23.2)
 const VERSUS_ONLINE_MAX := 20.0
-# Badges during camera motion (the Last Stand zoom "still slows the game down"): Hud._layout_badges scores 24 spots x 3
-# reaches against every platform, deck and badge (~10 ms a frame on M-39 on desktop, every frame of the 1.5 s zoom);
-# while the camera moves the badges now follow their platforms' screen position and scale, and the full layout runs
-# once the camera has held still this many frames.
-const BADGE_SETTLE_FRAMES := 2
 # --- end MATCH FEEL ---

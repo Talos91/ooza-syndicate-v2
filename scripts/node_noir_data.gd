@@ -7,7 +7,6 @@
 ##   socket [x, y] centre of a skill card's vessel socket in body px (null: none)
 
 const PARTS := {
-	"node_capture_burst": {"file": "res://assets/ui/node_noir/node_capture_burst.png", "rim": "", "ooze": "", "shine": "", "size": [496, 496], "body": [48, 48, 400, 400], "slice": null, "drip": 0, "gel": 0, "socket": null},
 	"node_card": {"file": "res://assets/ui/node_noir/node_card_fill.png", "rim": "res://assets/ui/node_noir/node_card_rim.png", "ooze": "", "shine": "", "size": [696, 396], "body": [48, 48, 600, 300], "slice": [108, 108, 108, 108], "drip": 0, "gel": 0, "socket": null},
 	"node_hub": {"file": "res://assets/ui/node_noir/node_hub_fill.png", "rim": "res://assets/ui/node_noir/node_hub_rim.png", "ooze": "", "shine": "", "size": [296, 296], "body": [48, 48, 200, 200], "slice": null, "drip": 0, "gel": 0, "socket": null},
 	"node_label_pill": {"file": "res://assets/ui/node_noir/node_label_pill.png", "rim": "", "ooze": "", "shine": "", "size": [696, 216], "body": [48, 48, 600, 120], "slice": [96, 96, 96, 96], "drip": 0, "gel": 0, "socket": null},

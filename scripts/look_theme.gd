@@ -17,7 +17,7 @@ const SHORT := {"corporate": "corporate_campus", "campus": "corporate_campus", "
 const WORLD := "res://assets/world/themes/%s/%s.png"
 const UI := "res://assets/ui/themes/%s/%s.png"
 const HUD_SHELLS := ["key-shell", "vat-shell", "button-shell", "r30-tube-shell", "r30-skill-feed-shell", "r30-vat-feed-shell",
-		"paint-badge", "paint-banner", "paint-card", "paint-close", "paint-slice-40", "paint-slice-50", "paint-tier-tag", "paint-toast"]
+		"paint-banner", "paint-card", "paint-close", "paint-slice-40", "paint-slice-50", "paint-toast"]
 
 # zone: [base, trim, roughness, base metalness, trim metalness] (sRGB hex from MATERIALS-<S>.md; corporate / wellness give
 # metalness in prose: corporate rims + sleeves 0.65, smaller hardware 0.45, stone / porcelain / liner 0; wellness 0.55 on the

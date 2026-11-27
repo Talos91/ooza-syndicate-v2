@@ -4,13 +4,12 @@ extends Node
 ##   Godot_v4.6.1-stable_win64_console.exe --path . --resolution 1266x585 res://tests/phone_fit.tscn -- out=<file>
 ##   (pitches=auto measures each map at its own MapCamera pitch; pitches=50,54,.. sweeps them)
 ## For every pooled map and every candidate camera pitch it
-## starts the real game on the phone HUD profile, lets the camera fit and the badges lay out, and
+## starts the real game on the phone HUD profile, lets the camera fit, and
 ## measures what a player gets on a landscape phone:
 ##   tap   - smallest node tap target in points: min(tap circle's short axis, distance to the nearest
 ##           other node) on an 844 x 390 pt screen (iPhone 13/14 class) - Apple's minimum is 44 pt
 ##   off   - platforms (rim) outside the screen, under   hud - platforms under the HUD panels
-##   bover - badges outside the screen or under the HUD, bhit - badge/badge overlaps,
-##   bplat - badges covering another node's platform
+##   (WP6: the HUD node badges and their bover / bhit / bplat counts are gone - the counts are on the vat screens)
 ##   relay buttons (RELAY V2) - the smallest button tap disc and the pad's own size (pt), discs off screen / under the
 ##           HUD, discs reaching over another node's platform (that node keeps those taps: RelayView.button_at)
 ##   LEVELS (map round 2026-11) - per lift and level 0 / 1: _measure_levels below
@@ -73,7 +72,7 @@ func _circle_screen(cam: Camera3D, p: Vector3, r: float) -> Dictionary:
 
 
 func _rect_hits_circle(rect: Rect2, circ: Dictionary, shrink: float = 0.85) -> bool:
-	## Badge rect against a projected platform ellipse (shrunk a little: touching the rim is fine).
+	## A screen rect against a projected platform ellipse (shrunk a little: touching the rim is fine).
 	var c: Vector2 = circ["c"]
 	var hx: float = circ["hx"] * shrink
 	var hy: float = circ["hy"] * shrink
@@ -130,31 +129,6 @@ func _measure(main: Node, pt_w: float) -> Dictionary:
 		if size < tap:
 			tap = size
 			worst = n["id"]
-	var bover := 0
-	var bhit := 0
-	var bplat := 0
-	var rects := {}
-	for id in hud.badges:
-		var panel: Control = hud.badges[id]["panel"]
-		if not panel.visible:
-			continue
-		rects[id] = panel.get_global_rect()
-	var ids := rects.keys()
-	for i in range(ids.size()):
-		var r: Rect2 = rects[ids[i]]
-		if not screen.encloses(r):
-			bover += 1
-		else:
-			for pr in panels:
-				if (pr as Rect2).intersects(r):
-					bover += 1
-					break
-		for j in range(i + 1, ids.size()):
-			if r.grow(-1.0).intersects(rects[ids[j]]):
-				bhit += 1
-		for n in sim.nodes:
-			if n["id"] != ids[i] and _rect_hits_circle(r, circ[n["id"]]):
-				bplat += 1
 	# RELAY V2: every relay button's tap disc (RelayView.hit_disc, the phone minimum Rules.RELAY_HIT_PT): its size, the
 	# pad's own projected size, discs off screen / under the HUD, and discs reaching over ANOTHER node's platform
 	var btn := INF
@@ -179,7 +153,7 @@ func _measure(main: Node, pt_w: float) -> Dictionary:
 		for m in sim.nodes:
 			if m["id"] != n["id"] and _rect_hits_circle(Rect2(dc, Vector2.ZERO).grow(float(disc[1]) * 0.7), circ[m["id"]]):
 				btclash += 1
-	return {"tap": tap * ppt, "worst": worst, "off": off, "hud": under, "bover": bover, "bhit": bhit, "bplat": bplat,
+	return {"tap": tap * ppt, "worst": worst, "off": off, "hud": under,
 			"plat": 2.0 * minf(circ[worst]["hx"], circ[worst]["hy"]) * ppt if worst >= 0 else 0.0,
 			"btn": btn, "pad": pad, "bthud": bthud, "btclash": btclash}
 
@@ -192,7 +166,7 @@ func _measure_levels(main: Node) -> PackedStringArray:
 	##   steal - other platforms whose drawn centre now selects the lift (the upper level covering a lower level's tap)
 	##   cover - other platforms whose centre lies under the lift's drawn platform (rim shrunk 0.85)
 	## Levels CLEAN = steal 0 and cover 0 at both levels (the brief's gate); own < 9 is reported apart (a neighbour's
-	## badge / button over the lift's own platform: the same check as `bplat`, not a level overlap).
+	## relay button over the lift's own platform, not a level overlap).
 	var out := PackedStringArray()
 	var sim = main.sim
 	var cam: Camera3D = main.cam
@@ -230,9 +204,9 @@ func _measure_levels(main: Node) -> PackedStringArray:
 				elif hit < 0:
 					miss += 1
 				else:
-					other += 1                                 # which path took it: a relay button, a badge, the ground
+					other += 1                                 # which path took it: a relay button, a count screen / the ground
 					var g: Vector3 = main._ground(s)
-					var why := "button" if main._relay_button_at(g, s) >= 0 else ("badge" if main.hud.badge_at(s) >= 0 else "ground")
+					var why := "button" if main._relay_button_at(g, s) >= 0 else "ground"
 					others["%d:%s" % [hit, why]] = true
 			var steal := []
 			var cover := []
@@ -303,8 +277,8 @@ func _run_one(pt_w: float) -> void:
 			var r := _measure(inst, pt_w)
 			r["pitch"] = inst.cam_pitch
 			rows.append(r)
-			var line := tag + "%s %-6s pitch %2.0f  tap %5.1f pt (node %d, platform %4.1f pt)  off %d hud %d  badges: over %d hit %d on-platform %d" % [
-					code, md, r["pitch"], r["tap"], r["worst"], r["plat"], r["off"], r["hud"], r["bover"], r["bhit"], r["bplat"]]
+			var line := tag + "%s %-6s pitch %2.0f  tap %5.1f pt (node %d, platform %4.1f pt)  off %d hud %d" % [
+					code, md, r["pitch"], r["tap"], r["worst"], r["plat"], r["off"], r["hud"]]
 			if r["btn"] < INF:                               # RELAY V2
 				line += "  relay buttons: tap %.1f pt (pad %.1f pt) off/hud %d over-a-platform %d" % [r["btn"], r["pad"], r["bthud"], r["btclash"]]
 			print(line)
@@ -316,18 +290,15 @@ func _run_one(pt_w: float) -> void:
 			for f in range(2):
 				await get_tree().process_frame
 		# choice: no platform off-screen or under the HUD; then the biggest tap target; among pitches within
-		# 5% of it, the fewest badge problems, then the steepest (most bird's-eye)
+		# 5% of it, the steepest (most bird's-eye)
 		var ok := rows.filter(func(r): return r["off"] == 0 and r["hud"] == 0)
 		if ok.is_empty():
 			ok = rows
 		var best_tap: float = ok.map(func(r): return r["tap"]).max()
 		var near := ok.filter(func(r): return r["tap"] >= best_tap * 0.95)
-		near.sort_custom(func(a, b):
-			var pa: int = a["bover"] + a["bhit"] + a["bplat"]
-			var pb: int = b["bover"] + b["bhit"] + b["bplat"]
-			return pa < pb if pa != pb else a["pitch"] > b["pitch"])
+		near.sort_custom(func(a, b): return a["pitch"] > b["pitch"])
 		var c: Dictionary = near[0]
-		var line := tag + "CHOICE %s pitch %2.0f tap %.1f pt platform %.1f pt off %d hud %d badges %d/%d/%d" % [code, c["pitch"], c["tap"], c["plat"], c["off"], c["hud"], c["bover"], c["bhit"], c["bplat"]]
+		var line := tag + "CHOICE %s pitch %2.0f tap %.1f pt platform %.1f pt off %d hud %d" % [code, c["pitch"], c["tap"], c["plat"], c["off"], c["hud"]]
 		print(line)
 		out_lines.append(line)
 		var fa := FileAccess.open(out_path, FileAccess.WRITE)

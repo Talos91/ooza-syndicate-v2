@@ -7,16 +7,6 @@
 ##   socket [x, y] centre of a skill card's vessel socket in body px (null: none)
 
 const PARTS := {
-	"alert_sign_amber": {"file": "res://assets/ui/hud_noir/alert_sign_amber.png", "rim": "", "ooze": "", "shine": "", "size": [216, 246], "body": [48, 48, 120, 150], "slice": null, "drip": 0, "gel": 0, "socket": null},
-	"alert_sign_grey": {"file": "res://assets/ui/hud_noir/alert_sign_grey.png", "rim": "", "ooze": "", "shine": "", "size": [216, 246], "body": [48, 48, 120, 150], "slice": null, "drip": 0, "gel": 0, "socket": null},
-	"alert_sign_pulse": {"file": "res://assets/ui/hud_noir/alert_sign_pulse.png", "rim": "", "ooze": "", "shine": "", "size": [216, 246], "body": [48, 48, 120, 150], "slice": null, "drip": 0, "gel": 0, "socket": null},
-	"alert_sign_red": {"file": "res://assets/ui/hud_noir/alert_sign_red.png", "rim": "", "ooze": "", "shine": "", "size": [216, 246], "body": [48, 48, 120, 150], "slice": null, "drip": 0, "gel": 0, "socket": null},
-	"badge": {"file": "res://assets/ui/hud_noir/badge_fill.png", "rim": "res://assets/ui/hud_noir/badge_rim.png", "ooze": "", "shine": "", "size": [288, 240], "body": [48, 48, 192, 144], "slice": [93, 93, 93, 93], "drip": 0, "gel": 0, "socket": null},
-	"badge_attacked": {"file": "res://assets/ui/hud_noir/badge_attacked.png", "rim": "", "ooze": "", "shine": "", "size": [288, 240], "body": [48, 48, 192, 144], "slice": [93, 93, 93, 93], "drip": 0, "gel": 0, "socket": null},
-	"badge_hidden": {"file": "res://assets/ui/hud_noir/badge_hidden_fill.png", "rim": "res://assets/ui/hud_noir/badge_hidden_rim.png", "ooze": "", "shine": "", "size": [288, 240], "body": [48, 48, 192, 144], "slice": [93, 93, 93, 93], "drip": 0, "gel": 0, "socket": null},
-	"badge_mine": {"file": "res://assets/ui/hud_noir/badge_mine_fill.png", "rim": "res://assets/ui/hud_noir/badge_mine_rim.png", "ooze": "", "shine": "", "size": [288, 240], "body": [48, 48, 192, 144], "slice": [93, 93, 93, 93], "drip": 0, "gel": 0, "socket": null},
-	"build_bar_fill": {"file": "res://assets/ui/hud_noir/build_bar_fill.png", "rim": "", "ooze": "", "shine": "", "size": [246, 114], "body": [48, 48, 150, 18], "slice": [56, 56, 56, 56], "drip": 0, "gel": 0, "socket": null},
-	"build_bar_track": {"file": "res://assets/ui/hud_noir/build_bar_track.png", "rim": "", "ooze": "", "shine": "", "size": [246, 114], "body": [48, 48, 150, 18], "slice": [56, 56, 56, 56], "drip": 0, "gel": 0, "socket": null},
 	"catchup_tag": {"file": "res://assets/ui/hud_noir/catchup_tag.png", "rim": "", "ooze": "", "shine": "", "size": [606, 198], "body": [48, 48, 510, 102], "slice": [84, 84, 84, 84], "drip": 0, "gel": 0, "socket": null},
 	"hint_pill": {"file": "res://assets/ui/hud_noir/hint_pill_fill.png", "rim": "res://assets/ui/hud_noir/hint_pill_rim.png", "ooze": "", "shine": "", "size": [996, 228], "body": [48, 48, 900, 132], "slice": [101, 101, 101, 101], "drip": 0, "gel": 0, "socket": null},
 	"score_pill": {"file": "res://assets/ui/hud_noir/score_pill_fill.png", "rim": "res://assets/ui/hud_noir/score_pill_rim.png", "ooze": "", "shine": "", "size": [300, 207], "body": [48, 48, 204, 111], "slice": [86, 86, 86, 86], "drip": 0, "gel": 0, "socket": null},
@@ -42,5 +32,4 @@ const PARTS := {
 	"status_pill": {"file": "res://assets/ui/hud_noir/status_pill.png", "rim": "", "ooze": "", "shine": "", "size": [696, 186], "body": [48, 48, 600, 90], "slice": [82, 82, 82, 82], "drip": 0, "gel": 0, "socket": null},
 	"status_secs": {"file": "res://assets/ui/hud_noir/status_secs.png", "rim": "", "ooze": "", "shine": "", "size": [204, 168], "body": [48, 48, 108, 72], "slice": [78, 78, 78, 78], "drip": 0, "gel": 0, "socket": null},
 	"top_capsule": {"file": "res://assets/ui/hud_noir/top_capsule_fill.png", "rim": "res://assets/ui/hud_noir/top_capsule_rim.png", "ooze": "", "shine": "", "size": [1086, 270], "body": [48, 48, 990, 174], "slice": [99, 99, 99, 99], "drip": 0, "gel": 0, "socket": null},
-	"upgrade_chip": {"file": "res://assets/ui/hud_noir/upgrade_chip_fill.png", "rim": "res://assets/ui/hud_noir/upgrade_chip_rim.png", "ooze": "", "shine": "", "size": [196, 196], "body": [48, 48, 100, 100], "slice": null, "drip": 0, "gel": 0, "socket": null},
 }

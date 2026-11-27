@@ -273,11 +273,11 @@ func screen_at(p: Vector2, cam: Camera3D) -> int:
 
 
 func count_text(n: Dictionary) -> String:
-	## What the HUD badge would show for this node (Hud._badges): the count, "?" under a rival's Fog, "" when masked.
+	## What this node's count shows (the rule the deleted HUD badge used): the count, "?" under a rival's Fog, "" when masked.
 	var sim = main.sim
 	var human: String = hud.human
 	var owner: String = n["owner"]
-	var masked: bool = not (owner == "" or sim.allied(owner, human) or (not Rules.hide_enemy_counts and hud.shows("rival_counts")))   # Brawl only (as Hud._badges since the 0.25.2 cleanup)
+	var masked: bool = not (owner == "" or sim.allied(owner, human) or (not Rules.hide_enemy_counts and hud.shows("rival_counts")))   # Brawl only (the old HUD badge's rule since the 0.25.2 cleanup)
 	var fogged: bool = sim.node_hidden(n["id"], human) and (owner == "" or not sim.allied(owner, human))
 	if fogged:
 		return "?"

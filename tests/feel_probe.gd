@@ -187,11 +187,6 @@ func _zoom_phase() -> void:
 		for w in [["before (2 s)", z0 - 2.0, z0], ["during %.1f s" % (z1 - z0), z0, z1], ["after (2 s) ", z1, z1 + 2.0]]:
 			print("feel_probe zoom: %s  frame median %.1f / max %.1f ms  scripts median %.1f / max %.1f ms  draw calls max %d"
 					% [w[0], _median(w[1], w[2]), _max_ms(w[1], w[2]), _median(w[1], w[2], 3), _max_ms(w[1], w[2], 3), _max_dc(w[1], w[2])])
-		var hud: Hud = main.get("hud")
-		var t0 := Time.get_ticks_usec()
-		for i in range(5):
-			hud._layout_badges(main.get("cam"))
-		print("feel_probe zoom: one full badge layout (Hud._layout_badges) %.1f ms" % ((Time.get_ticks_usec() - t0) / 5000.0))
 		get_tree().quit(0)
 
 
