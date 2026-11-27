@@ -5,7 +5,8 @@
  "timeouts": {"test_ai_coop": 2000, "test_ai_curve": 2000},
  "args": {
   "test_ui_nav": ["--resolution", "1136x640", "--", "--mobile", "--no-notice", "--no-account"],
-  "test_ui_sweep": ["--resolution", "1136x640", "--", "--mobile", "--no-notice", "--no-account"]
+  "test_ui_sweep": ["--resolution", "1136x640", "--", "--mobile", "--no-notice", "--no-account"],
+  "test_hotfix_0253": ["--", "--map=res://maps4/G-02-fort.json"]
  },
  "known": {
   "test_map_pool": {
