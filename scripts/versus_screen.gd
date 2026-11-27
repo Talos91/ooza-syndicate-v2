@@ -563,8 +563,8 @@ func _info_line() -> String:
 	if mission_key != "":
 		return "%s  ·  CAMPAIGN  ·  %s" % [mp, str(main.ai_level).to_upper()]
 	if online and net != null:
-		return "%s  ·  %s  ·  ROOM %s  ·  ROUND %d" % [mp, Menu.MODE_NAMES.get(str(main.mode), str(main.mode)), str(net.room_code), int(net.match_round) + (1 if lobby else 0)]   # (a lobby card: the round about to start)
-	return "%s  ·  %s  ·  %s" % [mp, Menu.MODE_NAMES.get(str(main.mode), str(main.mode)), str(main.ai_level).to_upper()]
+		return "%s  ·  %s  ·  ROOM %s  ·  ROUND %d" % [mp, _mode_names().get(str(main.mode), str(main.mode)), str(net.room_code), int(net.match_round) + (1 if lobby else 0)]   # (a lobby card: the round about to start)
+	return "%s  ·  %s  ·  %s" % [mp, _mode_names().get(str(main.mode), str(main.mode)), str(main.ai_level).to_upper()]
 
 
 func _bar_faction() -> String:
@@ -655,3 +655,11 @@ func _shoot() -> void:
 	get_viewport().get_texture().get_image().save_png(_shot)
 	print("screenshot ", _shot)
 	get_tree().quit()
+
+
+static func _mode_names() -> Dictionary:
+	## Menu.MODE_NAMES looked up at RUN time (WP4, the test_net hang): net.gd -> LaunchCard -> VersusScreen -> menu.gd was a compile
+	## dependency, and menu.gd names the Net autoload (170 times), which does not exist yet while net.gd itself compiles
+	## ("Identifier not found: Net" at menu.gd:177; fixing that line alone moves the error to the next use). PROJECT.md
+	## autoload rule: what net.gd reaches must not name Net, so this script no longer names Menu.
+	return load("res://scripts/menu.gd").MODE_NAMES

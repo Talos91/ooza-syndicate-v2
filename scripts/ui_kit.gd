@@ -562,27 +562,87 @@ static func _arg_insets() -> Vector4:
 	return Vector4(-1, -1, -1, -1)
 
 
+static var test_orient := _arg_orient()            # screenshots / tests: --orient=90 | 270 (the screen's landscape angle; -1 unknown)
+static var insets_known := false                   # the last safe_insets() read real per-side insets (main: symmetric fallback when not)
+static var insets_how := ""                        # what the last read used: "test", "web", "web+angle", "native", "none" (probes / report)
+const FALLBACK_SIDE := 0.035                       # x the width: each side's band on a phone that reports no insets at all
+const NO_CUTOUT_PT := 0.0                          # the inset kept on the side away from the cut-out once the angle says which side it is
+
+
+static func _arg_orient() -> int:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--orient="):
+			return int(a.substr(9))
+	return -1
+
+
 static func safe_insets(vp: Vector2) -> Vector4:
-	## The device's unsafe bands in viewport px - left, top, right, bottom - from the same sources as main._apply_safe_area
-	## (the web page's env() insets via web/viewport-fix.js, a native phone's display safe area), without the HUD's own
-	## padding. Zero on desktop. The menu shell, VersusScreen and MatchScreens keep their controls inside them (the
-	## Architect's iPhone sweep, 0.21.5: only the battle HUD did).
-	if test_insets.x >= 0.0:
-		return test_insets
+	## The device's unsafe bands in viewport px - left, top, right, bottom - PER SIDE (Ooze 3.0 WP4, Daniele 2026-11-27: the HUD's
+	## side panels hug each edge by the real safe area of that side, in both landscape rotations - the cut-out can be left or
+	## right). Sources, the same for main._apply_safe_area, Hud43.zones, the menus, VersusScreen and MatchScreens:
+	##   - the web page's env() insets (web/viewport-fix.js OozeViewport.safe(), CSS px). Android Chrome reports the cut-out side
+	##     only (already per side). iOS Safari reports the SAME inset left and right in landscape (UIKit's symmetric safe area),
+	##     though the notch / Dynamic Island sits on one side only: with the screen's angle (OozeViewport.angle(): 90 = the
+	##     phone's top on the LEFT, 270 = on the RIGHT) the side away from the cut-out drops to NO_CUTOUT_PT;
+	##   - a native phone's display safe area (DisplayServer.get_display_safe_area, the engine's own per-side read) + its
+	##     screen orientation for the same symmetric case;
+	##   - --safe-insets=l,t,r,b (+ --orient=90 | 270) on a desktop window: the emulated devices of tests and shots.
+	## Symmetric (unresolved) insets stay as reported; insets_known is false when nothing was read (main falls back to a
+	## symmetric side margin). Zero on desktop.
 	var ins := Vector4.ZERO
-	if OS.has_feature("web") and Engine.has_singleton("JavaScriptBridge"):
-		var js = JavaScriptBridge.eval("window.OozeViewport ? OozeViewport.safe().concat(OozeViewport.size()).join(',') : ''", true)
-		var f := str(js).split(",")
-		if f.size() == 6 and float(f[4]) > 0.0:
-			var kw := vp.x / float(f[4])                 # CSS px -> viewport units
-			ins = Vector4(float(f[0]), float(f[1]), float(f[2]), float(f[3])) * kw
-	if OS.has_feature("mobile"):
-		var screen := Vector2(DisplayServer.screen_get_size())
-		var safe := Rect2(DisplayServer.get_display_safe_area())
-		safe.position -= Vector2(DisplayServer.screen_get_position())
-		var k := vp.x / maxf(screen.x, 1.0)
-		ins = Vector4(maxf(ins.x, safe.position.x * k), maxf(ins.y, safe.position.y * k),
-				maxf(ins.z, (screen.x - safe.end.x) * k), maxf(ins.w, (screen.y - safe.end.y) * k))
+	var angle := -1
+	insets_known = false
+	insets_how = "none"
+	if test_insets.x >= 0.0:
+		ins = test_insets
+		angle = test_orient
+		insets_known = true
+		insets_how = "test"
+	else:
+		if OS.has_feature("web") and Engine.has_singleton("JavaScriptBridge"):
+			var js = JavaScriptBridge.eval("window.OozeViewport ? OozeViewport.safe().concat(OozeViewport.size())" 					+ ".concat([OozeViewport.angle ? OozeViewport.angle() : -1]).join(',') : ''", true)
+			var f := str(js).split(",")
+			if f.size() >= 6 and float(f[4]) > 0.0:
+				var kw := vp.x / float(f[4])                 # CSS px -> viewport units
+				ins = Vector4(float(f[0]), float(f[1]), float(f[2]), float(f[3])) * kw
+				insets_known = true
+				insets_how = "web"
+				if f.size() >= 7:
+					angle = int(float(f[6]))
+		if OS.has_feature("mobile"):
+			var screen := Vector2(DisplayServer.screen_get_size())
+			var safe := Rect2(DisplayServer.get_display_safe_area())
+			safe.position -= Vector2(DisplayServer.screen_get_position())
+			var k := vp.x / maxf(screen.x, 1.0)
+			ins = Vector4(maxf(ins.x, safe.position.x * k), maxf(ins.y, safe.position.y * k),
+					maxf(ins.z, (screen.x - safe.end.x) * k), maxf(ins.w, (screen.y - safe.end.y) * k))
+			insets_known = true
+			insets_how = "native"
+			if angle < 0:
+				match DisplayServer.screen_get_orientation():
+					DisplayServer.SCREEN_LANDSCAPE:
+						angle = 90
+					DisplayServer.SCREEN_REVERSE_LANDSCAPE:
+						angle = 270
+	if not insets_known and (OS.has_feature("web_android") or OS.has_feature("web_ios")):
+		ins.x = vp.x * FALLBACK_SIDE                   # a phone browser that reported nothing (no OozeViewport): the old symmetric
+		ins.z = vp.x * FALLBACK_SIDE                   # side band on both sides, the only symmetric case left
+		insets_how = "fallback"
+	return resolve_sides(ins, angle, vp)
+
+
+static func resolve_sides(ins: Vector4, angle: int, vp: Vector2) -> Vector4:
+	## iOS-style symmetric side insets -> the real side: the cut-out keeps its inset, the other side NO_CUTOUT_PT. Asymmetric
+	## insets (Android, the engine's per-side read) and an unknown angle pass unchanged.
+	if ins.x <= 0.0 or ins.z <= 0.0 or absf(ins.x - ins.z) > 0.5 or not angle in [90, 270, -90]:
+		return ins
+	var keep := NO_CUTOUT_PT / maxf(pt_per_px(vp), 0.0001)
+	if angle == 90:                                    # the phone's top (its cut-out) on the left
+		ins.z = minf(ins.z, keep)
+	else:                                              # 270 / -90: on the right
+		ins.x = minf(ins.x, keep)
+	if insets_how == "web":
+		insets_how = "web+angle"
 	return ins
 
 

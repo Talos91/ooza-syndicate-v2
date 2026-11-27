@@ -57,7 +57,7 @@ func _ready() -> void:
 	lr["owner"] = human
 	lr["units"] = float(Rules.FORGE_COST) + 40.0
 	var pie := _pie(main, 4)
-	check("FORGE" in pie, "0.25.3 (b): a laser relay holding its laser offers FORGE (pie %s)" % [pie])
+	check("JUICER" in pie, "0.25.3 (b): a laser relay holding its laser offers the forge, shown JUICER in 3.0 (pie %s)" % [pie])
 	# (c) a sinkhole empties a T1 vat: the pie offers VAT again
 	var vid := -1
 	for n in sim.nodes:

@@ -1225,7 +1225,7 @@ const TRIM_Y := 0.1                  # strip centre above the deck plate
 const TRIM_HW := 0.07                # half width (0.14 m strip)
 const TRIM_HH := 0.035               # half height (0.07 m)
 const TRIM_MID_GAP := 0.15           # each half stops this short of the middle (Alpha 11's split)
-const RIM_R := 5.75                  # rim stripe radius: the dark band between the plate ring and the edge
+const RIM_R := Rules.R - 0.25        # rim stripe radius: the dark band between the plate ring and the edge (5.75 at R 6; WP3 note: follows R)
 const LEDGE_HW := 2.45               # Relay_Mount / Relay_Retract half width (kit 2.35 / 2.375) + clearance
 
 

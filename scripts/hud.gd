@@ -1094,7 +1094,7 @@ func _quota_sync() -> void:
 	## launches / points still on the board under it, in the top band beside the score capsule (left of it, else right of it,
 	## else under the status line), never over another HUD piece. Only in a quota match. (lab4 job 6: was a 13 pt bare line
 	## under the clock, over the status line.)
-	if not Rules.quota:
+	if not Rules.quota or (ai_screens != null and ai_screens.visible):   # 3.0: the score is on the AI screens' plates (AiScreens._draw_quota)
 		if _quota_box:
 			_quota_box.visible = false
 		return
@@ -1207,8 +1207,11 @@ func sync(dt: float, cam: Camera3D) -> void:
 		status_label.text = ""
 	elif sim.very_last_stand_active:
 		# 0.23.23 (Daniele: "last stand message is too long"): the line says what drops when, nothing more
-		status_label.text = ((("VERY LAST STAND · LAUNCH EVERY %d s" if Rules.quota else "VERY LAST STAND · DROP EVERY %d s") % int(round(sim.very_last_stand_gap)))
-				if sim.very_last_stand_gap > 0.0 else "VERY LAST STAND · CONQUEST DECIDES")
+		# 3.0 (Daniele 11-27, "Last Stand = the quota"): the line names the quota and what still launches
+		if Rules.quota:
+			status_label.text = ("VERY LAST STAND · QUOTA · LAUNCH EVERY %d s" % int(round(sim.very_last_stand_gap))) 					if sim.very_last_stand_gap > 0.0 else "VERY LAST STAND · QUOTA DECIDES"
+		else:
+			status_label.text = ("VERY LAST STAND · DROP EVERY %d s" % int(round(sim.very_last_stand_gap))) 					if sim.very_last_stand_gap > 0.0 else "VERY LAST STAND · CONQUEST DECIDES"
 	elif sim.last_stand_active:
 		var next := ""
 		var pending: int = sim.last_stand_waves.size() if sim.v3 else sim.last_stand_order.size()
@@ -1221,10 +1224,14 @@ func sync(dt: float, cam: Camera3D) -> void:
 		else:
 			next = "QUOTA DECIDES" if Rules.quota else "CONQUEST DECIDES"
 		# the method and how it falls only while the announcement pulses (HUD_LS_PULSE s); then just the next drop
-		status_label.text = ("LAST STAND · %s · %s" % [sim.last_stand_method.to_upper(), _ls_how]) if _ls_pulse > 0.0 and _ls_how != "" 				else "LAST STAND · %s" % next
+		# (3.0 quota: "LAST STAND · QUOTA · NEXT LAUNCH 6 s · 4 LEFT"; the score itself is on the AI screens' plates)
+		if Rules.quota and not (_ls_pulse > 0.0 and _ls_how != ""):
+			status_label.text = "LAST STAND · QUOTA · %s" % next if next != "QUOTA DECIDES" else "LAST STAND · QUOTA DECIDES"
+		else:
+			status_label.text = ("LAST STAND · %s · %s" % [sim.last_stand_method.to_upper(), _ls_how]) if _ls_pulse > 0.0 and _ls_how != "" 					else "LAST STAND · %s" % next
 	elif Rules.last_stand and not sim.over and sim.time > Rules.LAST_STAND_TIME - 15.0 and sim.time < Rules.LAST_STAND_TIME and not (sim.v3 and (sim._map_last_stand.get("methods", []) as Array).is_empty()):
 		# mirrors sim._step_last_stand: no countdown when the Last Stand is off, over, or the map has none
-		status_label.text = "LAST STAND in %d s" % int(ceil(Rules.LAST_STAND_TIME - sim.time))
+		status_label.text = ("QUOTA LAST STAND in %d s" if Rules.quota else "LAST STAND in %d s") % int(ceil(Rules.LAST_STAND_TIME - sim.time))
 	else:
 		status_label.text = ""
 	_fit_status()
@@ -1280,7 +1287,7 @@ func _badges(cam: Camera3D) -> bool:
 		if sim.collapsed.get(n["id"], false) or n.get("node_kind", "") == "junction":   # JUNCTION: no badge
 			panel.visible = false
 			continue
-		if not bool(Rules.lab_opt("hud_badge")):         # LAB card COUNT SIZE: the count is on the vat screen (vat_count.gd)
+		if main.get("vat_count") != null:                # OOZE 3.0 (WP4): the count is on the node's count screen (vat_count.gd), no badge
 			panel.visible = false
 			continue
 		# ui-neon (Daniele 2026-11-02, "unit count HUD disappearing"): a warned node keeps its badge - the count stays readable
@@ -1335,7 +1342,7 @@ func _badges(cam: Camera3D) -> bool:
 				st = sim.proto_tag(n["id"])
 			what = Rules.RELAY_GLYPH[n["relay"]] + (("OUT" if st == "out" else "IN" if st == "retract" else st.to_upper()) if shows("relay") else "")
 			if n["relay"] == "laser_relay":                     # LASER RELAY: ⊛LASER / ⊛FORGE while one stands (0.25.3: a forge too)
-				what = Rules.RELAY_GLYPH["laser_relay"] + (str(n["structure"]).to_upper() if n["structure"] in ["laser", "forge"] and shows("relay") else "")
+				what = Rules.RELAY_GLYPH["laser_relay"] + (str(STRUCT_LABEL[n["structure"]]).get_slice(" ", 0) if n["structure"] in ["laser", "forge"] and shows("relay") else "")
 			if n["relay"] == "launcher":                  # LAUNCHER TURRET: its tier first (➶T2 LOAD 40/100)
 				what = Rules.RELAY_GLYPH["launcher"] + "T%d " % int(n["tier"]) + (st.to_upper() if shows("relay") else "")
 		elif n["structure"] == "machinegoon":
@@ -1629,8 +1636,8 @@ func inspect(id: int, cam: Camera3D) -> void:
 	_refresh_inspector(cam)
 
 
-const STRUCT_LABEL := {"vat": "VAT", "machinegoon": "GOOGATLING", "laser": "LASER TOWER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
-const BUILD_LABEL := {"machinegoon": "GOOGATLING", "vat": "VAT", "laser": "LASER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
+const STRUCT_LABEL := {"vat": "VAT", "machinegoon": "GOOGATLING", "laser": "LASER TOWER", "forge": "JUICER", "monster_hub": "MONSTER HUB"}
+const BUILD_LABEL := {"machinegoon": "GOOGATLING", "vat": "VAT", "laser": "LASER", "forge": "JUICER", "monster_hub": "MONSTER HUB"}   # 3.0: the forge is the JUICER (Rules.JUICER)
 const RELAY_ACCENT := Color("ffb238")   # 0.19.0: SWITCH's own accent (Daniele: "add some visibility to the
                                          # buttons / models of the relays") - distinct from the seat colour
 
@@ -2037,7 +2044,7 @@ class ActionWedge:
 				_ci.draw_colored_polygon(PackedVector2Array([p + Vector2(0.2, -1.0) * r, p + Vector2(-0.5, 0.12) * r,
 						p + Vector2(-0.02, 0.12) * r, p + Vector2(-0.2, 1.0) * r, p + Vector2(0.5, -0.15) * r,
 						p + Vector2(0.02, -0.15) * r]), col)
-			"FORGE":
+			"FORGE", "JUICER":
 				_ci.draw_colored_polygon(PackedVector2Array([p + Vector2(-0.8, -0.75) * r, p + Vector2(0.35, -0.75) * r,
 						p + Vector2(0.35, -0.25) * r, p + Vector2(-0.8, -0.25) * r]), col)
 				_ci.draw_line(p + Vector2(-0.15, -0.25) * r, p + Vector2(0.55, 0.95) * r, col, w * 1.3, true)
@@ -2109,9 +2116,15 @@ func _inspector_actions(n: Dictionary) -> void:
 	## allied troops are stored. Costs and disabled reasons come straight from the Sim (can_build /
 	## can_upgrade) in _refresh_inspector, so a greyed button always explains itself.
 	var id: int = n["id"]
+	# OOZE 3.0 NODE CATEGORIES (Daniele 2026-11-27, Sim.node_category): normal = vat or Googatling T1-T3 (UPGRADE to T3, swap);
+	# SPECIAL = the T4 vat, nothing to build, upgrade or swap; relay = LASER or JUICER (+ its bridge's SWITCH); relay special
+	# = the launcher (LOAD / UPGRADE, nothing to build).
+	var cat := Sim.node_category(n)
 	# (TUTORIAL: each action shows once its lesson is reached - shows(); outside the tutorial, always)
-	if n["relay"] != "":
-		if shows("relay") and not sim.relay_fixed(id):  # RELAYS 3.0: a ferry without the hold / a fixed belt runs on its own
+	if cat == "special":
+		pass
+	elif n["relay"] != "" or cat in ["relay", "relay_special"]:
+		if n["relay"] != "" and shows("relay") and not sim.relay_fixed(id):  # RELAYS 3.0: a ferry without the hold / a fixed belt runs on its own
 			var verb: String = {"launcher": "LOAD", "ferry": "HOLD"}.get(n["relay"], "SWITCH")   # round 3: the ferry HOLDS; the
 			_add_action("SWITCH", "%s\n%s" % [verb, Rules.RELAY_GLYPH[n["relay"]]], 0, "switch", id)   # turret LOADS, then fires
 		if n["relay"] == "launcher" and int(n["tier"]) < Rules.LAUNCHER_MAX_TIER and shows("upgrade"):   # LAUNCHER TURRET: T2 / T3
@@ -2120,13 +2133,13 @@ func _inspector_actions(n: Dictionary) -> void:
 			_add_action("UPGRADE", "UPGRADE T%d" % (int(n["tier"]) + 1), sim.upgrade_cost(n), "upgrade", id)   # (Sim has no hub upgrade: greyed with its reason)
 		# Daniele 2026-11-13: relay = SWITCH, LASER, FORGE; a special relay (the launcher, a MONSTER HUB) = SWITCH, UPGRADE - MONSTER
 		# HUB is a special relay, no longer a relay action (hud-lab: the player's pie only; Sim / AI rules untouched, OPEN-QUESTIONS)
-		var special: bool = n["relay"] == "launcher" or n["structure"] == "monster_hub"
+		var special: bool = cat == "relay_special" or n["relay"] == "launcher" or n["structure"] == "monster_hub"
 		for kind in ([] if special else ["laser", "forge"]):
 			if kind in n["buildable"] and n["structure"] != kind and shows("relay_build"):
 				_add_action(BUILD_LABEL[kind], BUILD_LABEL[kind], sim.build_cost(n, kind), "build", id, {"kind": kind})
 		# (hud-lab: LAUNCH left the hub's pie - max 3 slices, SWITCH + UPGRADE; the monster icon still launches it)
 	elif n["structure"] == "vat":
-		if n["tier"] < 4 and shows("upgrade"):
+		if n["tier"] < Rules.VAT_MAX_UPGRADE and shows("upgrade"):   # 3.0: normal vats stop at T3 (a T4 is a SPECIAL node)
 			_add_action("UPGRADE", "UPGRADE T%d" % (n["tier"] + 1), sim.upgrade_cost(n), "upgrade", id)
 		if "machinegoon" in n["buildable"] and shows("machinegoon"):
 			_add_action("MACHINEGOON", BUILD_LABEL["machinegoon"], sim.build_cost(n, "machinegoon"), "build", id, {"kind": "machinegoon"})
@@ -2659,7 +2672,7 @@ func _structure_word(n: Dictionary) -> String:
 	if n["relay"] == "launcher":
 		return "LAUNCHER"
 	if n["relay"] == "laser_relay":                           # LASER RELAY (2026-11-09): one title; 0.25.3: + FORGE when it holds one
-		return "LASER RELAY" + (" + FORGE" if n["structure"] == "forge" else "")
+		return "LASER RELAY" + (" + JUICER" if n["structure"] == "forge" else "")
 	if n["relay"] != "":
 		return "%s RELAY" % str(n["relay"]).to_upper() + (" + %s" % STRUCT_LABEL.get(n["structure"], str(n["structure"]).to_upper()) if n["structure"] != "" else "")
 	if n["structure"] == "machinegoon":
@@ -2798,11 +2811,11 @@ func gat_line(n: Dictionary) -> String:
 	var ammo := float(n["units"])
 	var line := "ammo %d/%d · +%.1f/s · fires %.1f/s" % [Rules.shown(ammo), Rules.shown(Sim.gat_cap(n)),
 			Rules.shown_f(sim.gat_rate(n)), Rules.shown_f(Sim.gat_fire_rate(n))]
-	if float(Rules.lab_opt("gat_range")) > 0.0:        # LAB gat_range: its reach in m (Sim.gat_reach)
-		line += " · reach %d m" % int(round(Sim.gat_reach()))
-	elif bool(Rules.lab_opt("gat_own_platform")):      # LAB: it fires only over its own platform (Sim.gat_reach)
+	if is_equal_approx(Sim.gat_reach(), Rules.R):      # 3.0 (Rules.GAT_REACH = R): it fires only over its own platform
 		line += " · own platform"
-	if not is_equal_approx(Sim.gat_ammo(), 1.0):       # LAB gat_ammo: the own units each kill costs
+	else:                                             # (legacy reach, the old tests' 0.25 rules)
+		line += " · reach %d m" % int(round(Sim.gat_reach()))
+	if not is_equal_approx(Sim.gat_ammo(), 1.0):       # 3.0 Rules.GAT_AMMO: the own units each kill costs
 		line += " · " + ("ammo free" if Sim.gat_ammo() <= 0.0 else "1 unit / %d kills" % int(round(1.0 / Sim.gat_ammo())))
 	return line + (" · EMPTY" if ammo < 0.5 * Rules.SCALE and Sim.gat_ammo() > 0.0 else "")
 
@@ -2822,7 +2835,7 @@ func _structure_line(n: Dictionary) -> String:
 	if n["relay"] == "launcher":
 		return "LAUNCHER T%d" % int(n["tier"])
 	if n["relay"] == "laser_relay":
-		return "LASER RELAY" + ("" if n["structure"] == "laser" else (" + FORGE" if n["structure"] == "forge" else " (empty socket)"))
+		return "LASER RELAY" + ("" if n["structure"] == "laser" else (" + JUICER" if n["structure"] == "forge" else " (empty socket)"))
 	if n["relay"] != "":
 		return "%s RELAY" % n["relay"].to_upper() + (" + %s" % STRUCT_LABEL.get(n["structure"], str(n["structure"]).to_upper()) if n["structure"] != "" else " (empty socket)")
 	if n["structure"] == "machinegoon":

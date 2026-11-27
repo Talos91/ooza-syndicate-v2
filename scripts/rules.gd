@@ -1392,6 +1392,39 @@ static func colour_blind() -> bool:
 	return _colour_blind == 1
 
 
+# COUNT SIZE (Ooze 3.0 WP4, Daniele 2026-11-27: "OPTIONS stepper, 5 sizes (lab 3 + 2 smaller), default 1.0"): the size of the
+# unit count on each node's count screen (slots/count_screen.tscn, VatCount). A client setting saved with the others, never sent
+# over the net. x1.0 = VatCount.DIGIT_H (digits >= 12.5 pt on an 812 x 375 pt phone at the Board3 camera, tests/count_probe.gd).
+const COUNT_SIZES := [0.7, 0.85, 1.0, 1.15, 1.3]
+const COUNT_SIZE_NAMES := ["XS", "S", "M", "L", "XL"]
+const COUNT_SIZE_DEFAULT := 2
+static var _count_size := -1                          # index into COUNT_SIZES; -1 until read
+
+
+static func count_size() -> int:
+	if _count_size < 0:
+		var c := ConfigFile.new()
+		_count_size = clampi(int(c.get_value("display", "count_size", COUNT_SIZE_DEFAULT)) if c.load(settings_path) == OK else COUNT_SIZE_DEFAULT,
+				0, COUNT_SIZES.size() - 1)
+		for arg in OS.get_cmdline_user_args():        # probes / shots: --count-size=0..4 for this run, nothing saved
+			if arg.begins_with("--count-size="):
+				_count_size = clampi(int(arg.substr(13)), 0, COUNT_SIZES.size() - 1)
+	return _count_size
+
+
+static func count_scale() -> float:
+	return float(COUNT_SIZES[count_size()])
+
+
+static func set_count_size(i: int) -> bool:
+	## Saved next to the other settings. False when nothing could be saved.
+	_count_size = clampi(i, 0, COUNT_SIZES.size() - 1)
+	var c := ConfigFile.new()
+	c.load(settings_path)
+	c.set_value("display", "count_size", _count_size)
+	return c.save(settings_path) == OK
+
+
 static func set_colour_blind(on: bool) -> bool:
 	## Saved next to the other settings (PerfProfile / Sfx keep their own sections). False when nothing could be saved.
 	_colour_blind = 1 if on else 0

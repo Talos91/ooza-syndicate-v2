@@ -59,8 +59,13 @@ const SIGN_COL := [Color(1.0, 0.17, 0.22), Color(1.0, 0.82, 0.12), Color(0.64, 0
 # top rim first (under it only when the top is taken).
 const SIGN_PT := [22.0, 17.0, 14.0]   # plate circumradius in points per tier (red 44 pt across)
 const SIGN_FONT_PT := [20.0, 16.0, 13.5]   # the seconds (text >= 12.5 pt on a phone)
-const SIGN_CAPTION := "NEXT DROP"     # over the red sign
+const SIGN_CAPTION_DROP := "NEXT DROP"   # over the red sign (3.0 quota: NEXT LAUNCH, sign_caption())
 const SIGN_CAPTION_PT := 12.5
+
+
+static func sign_caption() -> String:
+	## LAST STAND = QUOTA (3.0): platforms launch, they do not drop.
+	return "NEXT LAUNCH" if Rules.quota else SIGN_CAPTION_DROP
 const SIGN_ALPHA := [1.0, 0.95, 0.8]
 const SIGN_PULSE_S := 1.5             # seconds a sign (or the upgrade chip) pulses after it changes state
 const SIGN_PULSE_BEATS := 3.0
@@ -887,7 +892,7 @@ func sign_rect(id: int) -> Rect2:
 
 func _caption_size() -> Vector2:
 	var f := int(round(SIGN_CAPTION_PT * _pt()))
-	return Vector2(Hud.UI_FONT.get_string_size(SIGN_CAPTION, HORIZONTAL_ALIGNMENT_LEFT, -1, f).x + 6.0, Hud.UI_FONT.get_height(f))
+	return Vector2(Hud.UI_FONT.get_string_size(sign_caption(), HORIZONTAL_ALIGNMENT_LEFT, -1, f).x + 6.0, Hud.UI_FONT.get_height(f))
 
 
 var _signs := {}                       # node id -> [plate centre, circumradius, tier]: laid out this frame
@@ -965,11 +970,11 @@ func _draw_danger_symbols(_cam: Camera3D) -> void:
 		words.append([(s[0] as Vector2) + Vector2(-sz.x / 2.0, Hud.UI_FONT.get_ascent(f) * 0.5 - 1.0), txt, f, col, a])
 		if tier == 0:                                       # NEXT DROP over the beacon, outlined so it reads on any floor
 			var cf := int(round(SIGN_CAPTION_PT * _pt()))
-			var cs := Hud.UI_FONT.get_string_size(SIGN_CAPTION, HORIZONTAL_ALIGNMENT_LEFT, -1, cf)
+			var cs := Hud.UI_FONT.get_string_size(sign_caption(), HORIZONTAL_ALIGNMENT_LEFT, -1, cf)
 			var top := (s[0] as Vector2).y - float(s[1]) * 1.65
 			var at := Vector2((s[0] as Vector2).x - cs.x / 2.0, top - Hud.UI_FONT.get_descent(cf) - 1.0)
-			draw_string_outline(Hud.UI_FONT, at, SIGN_CAPTION, HORIZONTAL_ALIGNMENT_LEFT, -1, cf, maxi(2, int(round(3.0 * _pt()))), Color(0, 0, 0, 0.85 * a))
-			draw_string(Hud.UI_FONT, at, SIGN_CAPTION, HORIZONTAL_ALIGNMENT_LEFT, -1, cf, Color(col.lightened(0.35), a))
+			draw_string_outline(Hud.UI_FONT, at, sign_caption(), HORIZONTAL_ALIGNMENT_LEFT, -1, cf, maxi(2, int(round(3.0 * _pt()))), Color(0, 0, 0, 0.85 * a))
+			draw_string(Hud.UI_FONT, at, sign_caption(), HORIZONTAL_ALIGNMENT_LEFT, -1, cf, Color(col.lightened(0.35), a))
 	for w in words:                                      # (no outline pass: the plate is dark - every glyph is an object)
 		var wc: Color = (w[3] as Color).darkened(0.45) if UiTheme.light() else (w[3] as Color).lightened(0.55)   # Alpha 24: a pale plate in LIGHT
 		draw_string(Hud.UI_FONT, w[0], w[1], HORIZONTAL_ALIGNMENT_LEFT, -1, w[2], Color(wc, w[4]))

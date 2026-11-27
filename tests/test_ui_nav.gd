@@ -99,5 +99,51 @@ func _ready() -> void:
 		if path[path.size() - 2] == "main":
 			want = "home"
 		check(m._page == want, "%s: %s lands on %s (got %s)" % [" > ".join(path), "one tap on BACK" if back != null else "back", want, m._page])
+	await _count_size_stepper()
+	# OOZE 3.0 (WP4): BRAWL 1v1 only, no LAB screen
+	check(m.MODES_OFFERED == ["1v1"], "3.0: the menu offers 1v1 only (%s)" % [m.MODES_OFFERED])
+	check(m._pool_modes() == ["1v1"], "3.0: the map picker's mode chips = 1v1 only (%s)" % [m._pool_modes()])
+	check(m.mode == "1v1", "3.0: the match setup's mode is 1v1 (%s)" % m.mode)
+	check(main.find_children("*", "", true, false).all(func(c): return not str(c.get_script().resource_path if c.get_script() else "").ends_with("lab_menu.gd")),
+			"3.0: no LAB screen in the tree")
 	print("test_ui_nav: ", "PASS" if failures == 0 else "%d FAILED" % failures, " (%d tab taps)" % tabs_seen)
 	get_tree().quit(1 if failures > 0 else 0)
+
+
+func _key(label_prefix: String) -> Control:
+	for c in m.content.find_children("*", "Control", true, false):
+		if str(c.name).begins_with(label_prefix):
+			return c
+	return null
+
+
+func _count_size_stepper() -> void:
+	## OOZE 3.0 WP4: SETTINGS > GAME > Count size: "+" / "-" step through Rules.COUNT_SIZES (5 sizes, default index 2 = x1.0), the
+	## pick is saved and read back after a reload (the static cache dropped, as a new page load starts).
+	var keep_path: String = Rules.settings_path
+	Rules.settings_path = "user://test_ui_nav_settings.cfg"
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(Rules.settings_path))
+	Rules._count_size = -1
+	check(Rules.count_size() == Rules.COUNT_SIZE_DEFAULT and is_equal_approx(Rules.count_scale(), 1.0), "count size default = x1.0 (%s)" % Rules.count_scale())
+	check(Rules.COUNT_SIZES.size() == 5, "count size: 5 sizes (%s)" % [Rules.COUNT_SIZES])
+	m._opt_tab = "display"
+	m.show_options()
+	await _settle()
+	var plus := _key("Step+ ")
+	var minus := _key("Step- ")
+	check(plus != null and minus != null, "SETTINGS > GAME has the Count size stepper")
+	if plus != null and minus != null:
+		await _tap(minus)
+		minus = _key("Step- ")
+		await _tap(minus)
+		check(Rules.count_size() == 0, "two taps on - reach the smallest size (%d)" % Rules.count_size())
+		minus = _key("Step- ")
+		check(minus != null and minus.get("disabled") == true, "- is greyed at the smallest size")
+		plus = _key("Step+ ")
+		await _tap(plus)
+		check(Rules.count_size() == 1, "+ steps up one (%d)" % Rules.count_size())
+		Rules._count_size = -1                         # a reload: the setting comes back from the file
+		check(Rules.count_size() == 1, "the count size is kept across a reload (%d)" % Rules.count_size())
+	Rules.set_count_size(Rules.COUNT_SIZE_DEFAULT)
+	Rules.settings_path = keep_path
+	Rules._count_size = -1
