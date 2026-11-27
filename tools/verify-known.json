@@ -43,9 +43,9 @@
    "note": "hud.gd names the Net autoload, which does not exist under -s; the suite still prints PASS (PROJECT.md autoload rule)"
   },
   "test_ui_tap": {
-   "fails": ["FAIL  a second tap while the first is being answered does nothing (got 0)", "FAIL  a swipe scrolls the list and presses nothing (scroll 0, presses 0)", "FAIL  a tap that wobbles 5 px still presses it (got 0)", "FAIL  one still tap presses a page button once (got 0)", "FAIL  one tap presses a button inside a scrolling list (got 0)"],
+   "fails": ["re:^FAIL  a second tap while the first is being answered does nothing \\(got [01]\\)$", "FAIL  a swipe scrolls the list and presses nothing (scroll 0, presses 0)", "FAIL  a tap that wobbles 5 px still presses it (got 0)", "FAIL  one still tap presses a page button once (got 0)", "FAIL  one tap presses a button inside a scrolling list (got 0)"],
    "errors": ["re:Compile Error: Identifier not found: Net$", "re:Compile Error: Failed to compile depended scripts\\.$"],
-   "note": "Net autoload missing under -s, so no taps register; main f1b184cc"
+   "note": "Net autoload missing under -s, so no taps register; main f1b184cc. got 1 since ooze3-screens-fix: UiKit.acknowledge no longer waits for frame_post_draw headless, so the two emitted presses answer once"
   },
   "test_ui_nav": {
    "errors": ["re:Invalid assignment of property or key 'content_margin_left' with value of type 'float' on a base object of type 'Nil'"],

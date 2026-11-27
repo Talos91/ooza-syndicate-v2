@@ -293,7 +293,8 @@ static func acknowledge(b: Control, call: Callable) -> void:
 	var tree := b.get_tree()
 	if tree != null:
 		await tree.process_frame
-		await RenderingServer.frame_post_draw
+		if DisplayServer.get_name() != "headless":    # headless (the suites) draws nothing, so frame_post_draw never comes
+			await RenderingServer.frame_post_draw
 	call.call()
 	if is_instance_valid(b):                          # a pick that stays on the page (a toggle): back to normal
 		b.modulate = Color.WHITE
