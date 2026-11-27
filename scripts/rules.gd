@@ -29,8 +29,13 @@ static func version_label() -> String:
 	return "%s v%s" % [VERSION_NAME.to_upper(), VERSION]
 
 # kit geometry (metres)
-const R := 6.0                       # platform radius
-const PIER := 1.6                    # connector length beyond the rim
+# OOZE 3.0 SIZES (Daniele 2026-11-27, Hub Desk: "platform r 6 -> 7.6 without the pier connector"; plan 3.0-ARCHITECTURE-PLAN
+# 2026-11-27 sec 2.1): the platform swallows the pier, so R + PIER stays 7.6 and every deck keeps its end point (span() unchanged).
+# Radii that belong to the PLATFORM scale with R (ratio from R 6 kept); radii that belong to the centre STRUCTURE (EXIT_R, the
+# door at the tank) stay, because structures are not scaled in this build. Was R 6.0, PIER 1.6.
+const R := 7.6                       # platform radius
+const PIER := 0.0                    # connector length beyond the rim (none in 3.0)
+const R_SCALE := R / 6.0             # platform radius against the 2.0 platform (6.0 m): scales the platform-bound radii below
 const S := 4.0                       # one deck module (short bridge)
 const W := 2.8                       # deck width
 # OVERPASS (GAME-RULES sec 7: "overpasses cross at different heights without joining"): an L deck
@@ -47,8 +52,8 @@ const ROUTE_NODE_SECONDS := 1.0      # routing: what crossing a node adds to a r
 # lip walked off it this step (view only); a line pouring into its target enters at least POUR_MIN_RATE units/s
 const POUR_STEP := 1.0
 const POUR_MIN_RATE := 4.0
-const ARC_R := 3.8                   # hordes flow around a node's centre structure at this radius
-const EXIT_R := 2.2                  # hordes leave from the tank bottoms (sends start at the tower)
+const ARC_R := 3.8 * R_SCALE         # (4.81 m; 3.8 at R 6) hordes flow around a node's centre structure at this radius
+const EXIT_R := 2.2                  # hordes leave from the tank bottoms (sends start at the tower); structure-bound, not scaled
 const PATCH_SPACING := 1.8           # metres between sample points along a line (Sim cuts, probes)
 
 # UNITS LEAVE THE VAT ONLY AS THEY ARE EMITTED (Daniele, 2026-09-25): a send is an order; the door
@@ -72,7 +77,7 @@ const BRAWL_DOOR_RATE := 115.0 / 12.0 * 5.0               # internal units/s out
 # Alpha 11's route (simulation.gd route/arc): out of the vat's FRONT (the side facing the camera),
 # round the platform on its route ring to the bridge, and at the target round the ring back to the
 # front and in. Its ring is 122 px (~ the platform edge); here 4.8 m inside the 6 m platform.
-const BRAWL_RING := 4.8
+const BRAWL_RING := 4.8 * R_SCALE    # (6.08 m; 4.8 at R 6) the route ring stays at the same share of the platform
 const BRAWL_SPACING := BRAWL_SPEED / BRAWL_DOOR_RATE * 5.0   # metres between bodies: speed / Alpha 11 rate (the door rate is not
                                                              # production and stays: bodies walk slower out of the same door, so
                                                              # they stand 15 % closer, 0.50 m per shown unit - speed-15 trial)
@@ -193,7 +198,7 @@ const _LAB_OFF := {"joints": false, "gat_own_platform": false, "gat_start": fals
 const LAB_CAM_PITCH := 45.0
 const LAB_CAM_DIST := 74.5
 const LAB_CAM_AIM_Z := 0.4            # probe: 0.57 (844 x 390) / 0.18 (812 x 375); the box below is the two phones' overlap
-const LAB_BOX_RIM := 6.14
+const LAB_BOX_RIM := R + 0.14          # the platform rim (Look.RIM_OUT; 6.14 at R 6)
 const LAB_BOX_FAR_Z := -27.2          # probe: -27.95 / -27.48 from each phone's own aim (the tower top sets it, not the ground)
 const LAB_BOX_NEAR_Z := 27.2          # probe: 27.95 / 27.48
 const LAB_BOX_FAR_HALF_W := 51.8      # probe: 52.79 / 52.06 at the far edge
@@ -396,12 +401,12 @@ const RELAY_MOVE := 1.4              # seconds the deck visibly moves/dissolves 
 # build_relay_v2.py): one standard BUTTON PLATFORM per relay off the rim (Relay_Button_<Kind>_v2, the tap target),
 # a MECHANISM on the pier of every relay bridge, marked relay decks and violet GHOSTS of where the bridge will be.
 # The node centre holds the structure (laser / forge / monster hub); a double-tap on the button or the node fires it.
-const RELAY_RIM_DIST := 8.45         # json RIM_DIST: the pad centre from the node centre (R + pad + 0.45)
+const RELAY_RIM_DIST := R + 2.0 + 0.45   # json RIM_DIST: the pad centre from the node centre (R + pad + 0.45; 10.05 m, was 8.45)
 const RELAY_PAD_R := 2.0             # json pad_radius
 const RELAY_BUTTON_Y := 0.22         # json buttons[*][2]: the "Button" empty (tap target) above the pad
 const RELAY_BUTTON_CLEAR := RELAY_PAD_R + W / 2.0 + 0.3   # pad radius + half a deck + 0.3 m: pad and bridge never touch
-const RELAY_MIN_SEP := 25.97         # json min_separation_deg_from_any_bridge = asin(CLEAR / RIM_DIST): a node needs a
-                                     # 51.9 deg gap between two bridges (json node_needs_a_gap_of_deg; test_maps4 checks it);
+const RELAY_MIN_SEP := 21.60         # json min_separation_deg_from_any_bridge = asin(CLEAR / RIM_DIST) = asin(3.7 / 10.05) (25.97 at
+                                     # RIM_DIST 8.45): a node needs a 43.2 deg gap (51.9 at R 6) between two bridges (json node_needs_a_gap_of_deg; test_maps4 checks it);
                                      # a smaller gap moves the pad out to CLEAR / sin(gap / 2) and stretches its Strut
 const RELAY_HIT_PT := 44.0           # the button's tap disc on a phone, points across (Apple's minimum; tests/phone_fit)
 const RELAY_HIT_PAD := 1.15          # the disc is at least the pad's projected radius x this (desktop / close-ups)
