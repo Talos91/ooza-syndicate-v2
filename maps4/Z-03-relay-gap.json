@@ -38,7 +38,7 @@
    "ring": 1,
    "category": "normal",
    "relay": null,
-   "nodeCategory": "special",
+   "nodeCategory": "normal",
    "home": true,
    "neutral": null,
    "buildable": [
@@ -111,7 +111,7 @@
    "ring": 1,
    "category": "normal",
    "relay": null,
-   "nodeCategory": "special",
+   "nodeCategory": "normal",
    "home": true,
    "neutral": null,
    "buildable": [
@@ -163,12 +163,12 @@
    "plaza": null,
    "socket": null,
    "ring": 1,
-   "category": "normal",
+   "category": "strategic",
    "relay": null,
-   "nodeCategory": "normal",
+   "nodeCategory": "special",
    "home": false,
    "neutral": {
-    "tier": 1,
+    "tier": 4,
     "structure": "vat"
    },
    "buildable": [
@@ -182,12 +182,12 @@
    "plaza": null,
    "socket": null,
    "ring": 1,
-   "category": "normal",
+   "category": "strategic",
    "relay": null,
-   "nodeCategory": "normal",
+   "nodeCategory": "special",
    "home": false,
    "neutral": {
-    "tier": 1,
+    "tier": 4,
     "structure": "vat"
    },
    "buildable": [
@@ -456,7 +456,7 @@
    }
   ]
  },
- "nodeCategoryNote": "SPECIAL (vat T4, indestructible) at each home = WP2 proposal, not a rule yet (Daniele confirms)",
+ "nodeCategoryNote": "SPECIAL = a neutral vat T4 hotspot (huge garrison, most production), mirrored fair; never a home (Daniele 2026-11-27)",
  "note": "Z-03 Relay Gap: 10 platforms, 13 bridges, decks 2.93-19.6 m, 91 x 50 m.",
  "ruleWaivers": {
   "G05": "3.0: deck lengths off the kit tiers on purpose (short inside a side, long across)",

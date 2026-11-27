@@ -38,7 +38,7 @@
    "ring": 0,
    "category": "normal",
    "relay": null,
-   "nodeCategory": "special",
+   "nodeCategory": "normal",
    "home": true,
    "neutral": null,
    "buildable": [
@@ -71,12 +71,12 @@
    "plaza": null,
    "socket": null,
    "ring": 0,
-   "category": "normal",
+   "category": "strategic",
    "relay": null,
-   "nodeCategory": "normal",
+   "nodeCategory": "special",
    "home": false,
    "neutral": {
-    "tier": 2,
+    "tier": 4,
     "structure": "vat"
    },
    "buildable": [
@@ -111,7 +111,7 @@
    "ring": 0,
    "category": "normal",
    "relay": null,
-   "nodeCategory": "special",
+   "nodeCategory": "normal",
    "home": true,
    "neutral": null,
    "buildable": [
@@ -556,7 +556,7 @@
    }
   ]
  },
- "nodeCategoryNote": "SPECIAL (vat T4, indestructible) at each home = WP2 proposal, not a rule yet (Daniele confirms)",
+ "nodeCategoryNote": "SPECIAL = a neutral vat T4 hotspot (huge garrison, most production), mirrored fair; never a home (Daniele 2026-11-27)",
  "note": "Z-04 Grid: 11 platforms, 18 bridges, decks 1.4-11.45 m, 82 x 55 m.",
  "ruleWaivers": {
   "G05": "3.0: deck lengths off the kit tiers on purpose (short inside a side, long across)",
