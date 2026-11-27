@@ -138,8 +138,8 @@ func _apply() -> void:
 	if sky_mat == null:
 		return
 	sky_mat.set_shader_parameter("cloud_amt", amt["cloud"])
-	sky_mat.set_shader_parameter("cloud_col", WorldLayer.LAB_FAR.lightened(amt["ctone"]))
-	wl.center_fog_mat.set_shader_parameter("cloud_col", WorldLayer.LAB_FAR.lightened(amt["ctone"]))
+	sky_mat.set_shader_parameter("cloud_col", WorldLayer.SLATE_FAR.lightened(amt["ctone"]))
+	wl.center_fog_mat.set_shader_parameter("cloud_col", WorldLayer.SLATE_FAR.lightened(amt["ctone"]))
 	sky_mat.set_shader_parameter("fog_amt", amt["fog"])
 	wl.center_fog_mat.set_shader_parameter("cloud_amt", amt["ccloud"])
 	wl.center_fog_mat.set_shader_parameter("fog_amt", amt["cfog"])

@@ -665,43 +665,6 @@ func _init() -> void:
 	check(sim27.nodes[1]["owner"] == "B" or sim27.nodes[0]["owner"] == "A",
 			"...and fight at the nodes instead")
 
-	# TEAM AND FFA MODES (Alpha 14): allies never fight each other, reinforce each other's nodes, and
-	# a team wins together; FFA up to five seats plays to the end
-	var tx_map := MapBuilder.load_map("res://maps/047-trident-exchange.json")
-	var tx_pos := MapBuilder.layout(tx_map)
-	var tseats := {}
-	var tteams := {}
-	for s in tx_map["seats"]["2v2"]:
-		tseats[int(s["node"])] = s["seat"]
-		tteams[s["seat"]] = int(s["team"])
-	var sim31 := Sim.new()
-	sim31.setup(tx_map, tx_pos, tseats, {"A": "null", "B": "vex", "C": "ember", "D": "solar"}, 2, tteams)
-	var ally: String = tteams.keys().filter(func(k): return k != "A" and tteams[k] == tteams["A"])[0]
-	check(sim31.allied("A", ally) and not sim31.allied("A", tteams.keys().filter(func(k): return tteams[k] != tteams["A"])[0]),
-			"2v2: A and %s are allies, the other team is not" % ally)
-	var ally_home: int = tseats.keys().filter(func(id): return tseats[id] == ally)[0]
-	var a_home: int = tseats.keys().filter(func(id): return tseats[id] == "A")[0]
-	var before_ally: float = sim31.nodes[ally_home]["units"]
-	sim31.nodes[a_home]["units"] = 100.0
-	var hally := sim31.send(a_home, ally_home, 1.0)
-	check(not hally.is_empty(), "A can send to an ally's node")
-	run_until(sim31, func(): return not (hally in sim31.hordes), 40.0)
-	# (TWO DOORS - the arriving troops are stored as allies (n["allies"]); "units" grew past +50 only through the
-	# ally's own production over a 10 s+ walk, which the top door's shorter walk no longer gives)
-	var stored_a: float = float(sim31.nodes[ally_home].get("allies", {}).get("A", 0.0))
-	check(sim31.nodes[ally_home]["owner"] == ally and sim31.nodes[ally_home]["units"] + stored_a > before_ally + 50.0,
-			"sending to an ally reinforces it, never captures it (%.0f of A's troops stored there)" % stored_a)
-	var ais_t := []
-	for s in tseats.values():
-		ais_t.append(SeatAI.new(s, 2.0, "Standard"))
-	var steps_t := 0
-	while not sim31.over and steps_t < 20 * 60 * 8:
-		for ai in ais_t:
-			ai.think(sim31, 0.1)
-		sim31.step(0.1)
-		steps_t += 1
-	print("      2v2 047: over=%s winner=%s (team %s) at %.0f s" % [sim31.over, sim31.winner, str(tteams.get(sim31.winner, "?")), sim31.time])
-	check(sim31.over, "2v2 AI match on Trident Exchange finishes")
 	# outward is only offered on maps that author an outward final
 	var seen_methods := {}
 	for seed_value in range(12):
@@ -768,53 +731,13 @@ func _init() -> void:
 	check(absf(enter_rate - Rules.exit_rate()) / Rules.exit_rate() < 0.1, "BRAWL: units enter at the rate they left (Alpha 11 spacing)")
 
 	# ---------------------------------------------------------------- Alpha 16: colours read per player
-	Rules.assign_colors(["A", "B", "C", "D"], {"A": "null", "B": "null", "C": "null", "D": "null"}, "A", "A", {})
-	var cols := ["A", "B", "C", "D"].map(func(s): return Rules.seat_color(s))
+	Rules.assign_colors(["A", "B"], {"A": "null", "B": "null"}, "A", "A")
+	var cols := ["A", "B"].map(func(s): return Rules.seat_color(s))
 	var min_gap := 1.0
 	for i in range(cols.size()):
 		for j in range(i + 1, cols.size()):
 			min_gap = minf(min_gap, Rules._hue_gap(cols[i], cols[j]))
-	check(min_gap > 0.12, "FFA4: every player a clearly different hue (closest %.2f)" % min_gap)
-	Rules.assign_colors(["A", "B", "C", "D"], {"A": "null", "B": "null", "C": "null", "D": "null"}, "A", "A", {"A": 0, "B": 0, "C": 1, "D": 1})
-	var ta := Rules._hue_gap(Rules.seat_color("A"), Rules.seat_color("B"))
-	var tc := Rules._hue_gap(Rules.seat_color("C"), Rules.seat_color("D"))
-	check(ta > 0.12 and tc > 0.12, "2v2: team-mates have different hues too (%.2f / %.2f)" % [ta, tc])
-	check(Rules._hue_gap(Rules.seat_color("A"), Rules.seat_color("C")) > 0.2, "2v2: the other team is another colour family")
-	# 2v2v2: three teams, three families (cool / warm / violet) - two opposing teams never share a colour
-	var six := ["A", "B", "C", "D", "E", "F"]
-	var t3 := {"A": 0, "B": 0, "C": 1, "D": 1, "E": 2, "F": 2}
-	var fam_of := func(c: Color) -> int:
-		var best := 0
-		var best_gap := 1.0
-		for fi in range(Rules.TEAM_FAMILIES_3.size()):
-			for k in Rules.TEAM_FAMILIES_3[fi]:
-				var fg := Rules._hue_gap(c, Rules.HUES[k])
-				if fg < best_gap:
-					best_gap = fg
-					best = fi
-		return best
-	for pick in ["A", "B", "C", "D", "E", "F", "faction"]:
-		Rules.assign_colors(six, {"A": "null", "B": "null", "C": "null", "D": "null", "E": "null", "F": "null"}, "A", pick, t3)
-		var c3 := {}
-		var html := {}
-		for s in six:
-			c3[s] = Rules.seat_color(s)
-			html[(c3[s] as Color).to_html()] = true
-		check(html.size() == 6, "2v2v2 pick %s: six distinct colours" % pick)
-		var opp_gap := 1.0
-		for i in range(six.size()):
-			for j in range(i + 1, six.size()):
-				if t3[six[i]] != t3[six[j]]:
-					opp_gap = minf(opp_gap, Rules._hue_gap(c3[six[i]], c3[six[j]]))
-		check(opp_gap > 0.07, "2v2v2 pick %s: no two opposing players share a hue (closest %.3f)" % [pick, opp_gap])
-		var mates := [Rules._hue_gap(c3["A"], c3["B"]), Rules._hue_gap(c3["C"], c3["D"]), Rules._hue_gap(c3["E"], c3["F"])]
-		check(mates.min() > 0.12, "2v2v2 pick %s: team-mates differ (%.2f / %.2f / %.2f)" % [pick, mates[0], mates[1], mates[2]])
-		var fams := {}
-		for pair in [["A", "B"], ["C", "D"], ["E", "F"]]:
-			var fa: int = fam_of.call(c3[pair[0]])
-			if fa == fam_of.call(c3[pair[1]]):
-				fams[fa] = true
-		check(fams.size() == 3, "2v2v2 pick %s: each team reads as one family, three distinct families" % pick)
+	check(min_gap > 0.12, "1v1: the rival a clearly different hue (%.2f)" % min_gap)
 
 	# ---------------------------------------------------------------- 0.18.6: a one-deck remote toggles
 	var mr := MapBuilder.load_map("res://maps4/M-08-neon-delta.json")
@@ -1081,7 +1004,7 @@ func _init() -> void:
 	quit(1 if failures else 0)
 
 
-# ------------------------------------------------------------------ 0.18.10: rules, structures 2.1, teams, the end
+# ------------------------------------------------------------------ 0.18.10: rules, structures 2.1, the end
 func _uniq_count(a: Array) -> int:
 	var d := {}
 	for x in a:
@@ -1089,11 +1012,11 @@ func _uniq_count(a: Array) -> int:
 	return d.size()
 
 
-func _tp(seats := {3: "A", 4: "B"}, factions := {"A": "null", "B": "null"}, teams := {}) -> Sim:
+func _tp(seats := {3: "A", 4: "B"}, factions := {"A": "null", "B": "null"}) -> Sim:
 	## Two Piers (004): 3 - 1 - 0 (centre, T3) - 2 - 4, every link one deck.
 	var m := MapBuilder.load_map("res://maps/004-two-piers.json")
 	var s := Sim.new()
-	s.setup(m, MapBuilder.layout(m), seats, factions, 1, teams)
+	s.setup(m, MapBuilder.layout(m), seats, factions, 1)
 	return s
 
 
@@ -1134,86 +1057,21 @@ func _catchup_tests() -> void:
 	_own(s, {3: "A", 4: "B", 2: "B", 0: "B"})
 	s.step(0.05)
 	check(not s.catchup_active("A") and absf(s.production(s.nodes[3]) - base_a) < 0.001, "catch-up: off when the match turns it off (catchup_on false)")
-	# 2v2 counts sides (teams), not seats: A 1 + C 3 = 4 vs B 3 + D 3 = 6 -> nobody (A alone would trail 1 vs 3)
-	var m := MapBuilder.load_map("res://maps4/N-06-ring-road.json")
-	var seats := {}
-	var teams := {}
-	for st in m["seats"]["2v2"]:
-		seats[int(st["node"])] = st["seat"]
-		teams[st["seat"]] = int(st["team"])
-	s = Sim.new()
-	s.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "null", "C": "null", "D": "null"}, 1, teams)
-	var home := {}
-	for id in seats:
-		home[seats[id]] = id
-	var free: Array = s.nodes.map(func(n): return int(n["id"])).filter(func(id): return not seats.has(id))
-	var own := {home["A"]: "A", home["B"]: "B", home["C"]: "C", home["D"]: "D"}
-	for i in range(2):
-		own[free[i]] = "C"
-	for i in range(2, 4):
-		own[free[i]] = "B"
-	for i in range(4, 6):
-		own[free[i]] = "D"
-	_own(s, own)
-	s.step(0.05)
-	check(not s.catchup_active("A") and not s.catchup_active("C") and not s.catchup_active("B"),
-			"catch-up 2v2: sides are counted (team 4 vs 6 nodes: nobody, though seat A alone holds 1 vs 3)")
-	own.erase(free[0])                                  # team A + C: 3 nodes vs 6 -> still exactly half: nobody
-	own.erase(free[1])                                  # 2 vs 6 -> both A and C produce +15 %
-	_own(s, own)
-	s.step(0.05)
-	var hb: float = Rules.PROD[s.nodes[home["C"]]["tier"]] * s.stat("C", "production")
-	check(s.catchup_active("A") and s.catchup_active("C") and not s.catchup_active("B") and not s.catchup_active("D")
-			and absf(s.production(s.nodes[home["C"]]) - hb * Rules.CATCHUP_PRODUCTION) < 0.001,
-			"catch-up 2v2: a trailing team (2 vs 6 nodes) gets it on both seats, the leading team on neither")
 
 
 # ------------------------------------------------------------------ 2026-09-28: the audit fix pass (audit-sim A1-A5, Daniele's rule fixes)
 func _audit_fixes() -> void:
-	# Core Meltdown against an allied store: the kills split by troop share, the node falls only at total 0
-	# (TWO DOORS - the fixture casts 12 m before arrival and counts on the whole line being out by then; the top
-	# door's shorter walk on Two Piers casts it mid-emission, so the fixture keeps the one-door path it was built on)
-	var doors_was: bool = Rules.TWO_DOORS
-	Rules.TWO_DOORS = false
-	for c in [[200.0, 200.0, false], [30.0, 30.0, true]]:
-		var s := _tp({3: "A", 4: "B"}, {"A": "ember", "B": "null"}, {"A": 0, "B": 1, "C": 1})
-		_ready_skills(s)
-		s.nodes[1]["owner"] = "B"
-		s.nodes[1]["units"] = c[0]
-		s.nodes[1]["allies"] = {"C": c[1]}
-		s.nodes[1]["arrivals"] = ["C"]
-		s.nodes[3]["units"] = 200.0
-		_charged(s, "A")
-		var h := s.send(3, 1, 1.0)
-		run_until(s, func(): return float(h["L"]) - float(h["s"]) <= 12.0, 20.0)
-		var line: float = h["units"]
-		var b0: float = s.nodes[1]["units"]
-		var c0: float = s.nodes[1]["allies"].get("C", 0.0)
-		var lost_c0: float = s.combat_losses.get("C", 0.0)
-		var kills: float = minf(maxf(line * 0.25, 20.0) * 4.0, 450.0)       # 0.23.21 set R1: 4 per unit, cap 90 shown (0.23.15: 3 / 70)
-		check(s.cast("A", "ultimate", h["id"]), "Core Meltdown vs an allied store: cast")
-		if c[2]:
-			check(s.nodes[1]["owner"] == "A" and s.nodes[1]["allies"].is_empty() and s.combat_losses.get("C", 0.0) - lost_c0 > c0 - 0.01,
-					"Core Meltdown: the owner's and the ally's troops both gone (%.0f + %.0f vs %.0f kills) -> captured, the ally's losses counted" % [b0, c0, kills])
-		else:
-			var frac: float = kills / (b0 + c0)
-			check(s.nodes[1]["owner"] == "B" and absf(s.nodes[1]["units"] - b0 * (1.0 - frac)) < 0.01
-					and absf(float(s.nodes[1]["allies"]["C"]) - c0 * (1.0 - frac)) < 0.01
-					and absf(s.combat_losses.get("C", 0.0) - lost_c0 - c0 * frac) < 0.01,
-					"Core Meltdown: %.0f kills split by share over the owner's %.0f and the ally's %.0f stored" % [kills, b0, c0])
-	Rules.TWO_DOORS = doors_was
-	# a split line's front does not drain its source (_split_front: no eject_left / ghost_left)
+	# a split line's front does not drain its source (_split_front: no ghost_left)
 	var sp := _tp()
 	sp.nodes[3]["units"] = 200.0
 	var hs := sp.send(3, 4, 1.0)
 	_steps(sp, 3.0)
-	hs["eject_left"] = 40.0
 	hs["ghost_left"] = 10.0
 	var n_before := sp.hordes.size()
 	sp._split_front(hs, 5.0)
 	var fr: Dictionary = sp.hordes[-1]
-	check(sp.hordes.size() == n_before + 1 and not fr.has("eject_left") and float(fr.get("ghost_left", 0.0)) == 0.0
-			and float(hs["eject_left"]) == 40.0, "a split-off front carries no EJECT / decoy feed of its own")
+	check(sp.hordes.size() == n_before + 1 and float(fr.get("ghost_left", 0.0)) == 0.0,
+			"a split-off front carries no decoy feed of its own")
 	# capture: the hub forgets the old owner's monster; ONE MONSTER PER PLAYER - a second hub taken is destroyed
 	var s1 := _tp()
 	s1.nodes[2]["owner"] = "B"
@@ -1233,17 +1091,6 @@ func _audit_fixes() -> void:
 			and s1.fx_events.any(func(e): return e["type"] == "hub_destroyed" and e["seat"] == "A"),
 			"one Monster hub per player: a second hub captured is destroyed on capture (slot empty, hub_destroyed event)")
 	check(s1.can_build(1, "A", "monster_hub") != "", "... and the empty slot can't take a second hub either")
-	var s2 := _tp({3: "A", 4: "B"}, {"A": "null", "B": "null"}, {"A": 0, "B": 1, "C": 1})
-	s2.nodes[2]["owner"] = "C"
-	s2.nodes[2]["structure"] = "monster_hub"
-	s2.nodes[1]["owner"] = "B"
-	s2.nodes[1]["structure"] = "monster_hub"
-	s2.nodes[1]["units"] = 0.0
-	s2.nodes[1]["allies"] = {"C": 30.0}
-	s2.nodes[1]["arrivals"] = ["C"]
-	s2._check_handovers()
-	check(s2.nodes[1]["owner"] == "C" and s2.nodes[1]["structure"] == "" and s2.events.any(func(e): return e["type"] == "hub_destroyed"),
-			"one Monster hub per player: a hub handed over to a seat that has one is destroyed too")
 	# towers fire at a line anywhere within range, not only its head (Daniele, 2026-09-28)
 	for kind in ["laser", "machinegoon"]:
 		var st := _tp()
@@ -1781,54 +1628,6 @@ func _rules_0_18_10() -> void:
 	_steps(s, Rules.MONSTER_FALL_TIME + 0.7)
 	check(s.monsters.is_empty() and s.nodes[0]["owner"] == "B", "it is gone and takes nothing")
 	Rules.MONSTER_REACH = 1                           # (the monster scenarios above were staged over 2-3 decks)
-	# ---------------------------------------------------------------- teams (GAME-RULES sec11)
-	var ts := _tp({3: "A", 4: "B", 0: "C", 2: "D"}, {"A": "null", "B": "null", "C": "null", "D": "null"}, {"A": 0, "B": 0, "D": 0, "C": 1})
-	var tn: Dictionary = ts.nodes[3]
-	tn["units"] = 50.0
-	ts._arrive(tn, {"owner": "B"}, 40.0)
-	check(tn["units"] == 50.0 and tn["allies"] == {"B": 40.0} and tn["arrivals"] == ["B"], "an ally's reinforcement is stored there and stays theirs")
-	check(ts.halo_tier(3, "B") == 2 and ts.halo_tier(3, "D") == 0 and ts.halo_tier(3, "") == 2, "halo tier by share of the cap: 40 of 150 = 27 % -> tier 2")
-	tn["allies"]["B"] = 20.0
-	check(ts.halo_tier(3, "B") == 1, "under 25 % -> tier 1")
-	tn["allies"]["B"] = 120.0
-	check(ts.halo_tier(3, "B") == 3, "over 75 % -> tier 3")
-	tn["allies"]["B"] = 40.0
-	tn["units"] = 120.0
-	var u_before: float = tn["units"]
-	ts.step(0.5)
-	check(absf(tn["units"] - u_before) < 0.01 and ts.garrison_total(tn) > Rules.CAPS[1], "allied troops count against the cap: no production over it")
-	tn["units"] = 50.0
-	ts._land_classic(tn, "C", 60.0)
-	check(absf(tn["units"] - (50.0 - 60.0 * 50.0 / 90.0)) < 0.05 and absf(tn["allies"]["B"] - (40.0 - 60.0 * 40.0 / 90.0)) < 0.05 and tn["owner"] == "A",
-			"attackers fight the whole garrison; losses split by troop ratio (A %.1f, B %.1f)" % [tn["units"], tn["allies"]["B"]])
-	tn["units"] = 0.0
-	tn["allies"] = {"B": 20.0, "D": 30.0}
-	tn["arrivals"] = ["B", "D"]
-	var changes := []
-	ts.captured.connect(func(id, o, p): changes.append([id, o, p]))
-	ts.step(0.05)
-	check(tn["owner"] == "D" and absf(tn["units"] - 30.0) < 0.5 and tn["allies"].has("B") and not tn["allies"].has("D") and changes.has([3, "D", "A"]),
-			"the owner's troops at zero: the ally with the largest garrison takes the node")
-	tn["units"] = 0.0
-	tn["allies"] = {"A": 20.0, "B": 20.0}
-	tn["arrivals"] = ["B", "A"]
-	ts.step(0.05)
-	check(tn["owner"] == "B" and ts.events.any(func(e): return e["type"] == "handover"), "a tie goes to the ally whose troops arrived first")
-	# EJECT: every ally's stored troops go home by the fastest route
-	var en: Dictionary = ts.nodes[1]
-	en["owner"] = "A"
-	en["units"] = 30.0
-	en["allies"] = {"B": 40.0}
-	en["arrivals"] = ["B"]
-	check(ts.can_build(1, "D", "eject") == "Not your node" and ts.can_build(1, "A", "eject") == "", "only the owner may EJECT")
-	ts.fx_events.clear()
-	check(ts.build(1, "A", "eject"), "EJECT (kind \"eject\") sends the allied troops out")
-	var ej := ts.hordes.filter(func(h): return h["owner"] == "B" and h["route"][0] == 1)
-	check(ej.size() == 1 and ej[0]["target"] == tn["id"] and ts.fx_events.any(func(e): return e["type"] == "eject" and e["node"] == 1),
-			"...toward B's nearest own node (%s)" % str(ej.map(func(h): return h["route"])))
-	_steps(ts, 1.5)
-	check(en["allies"].is_empty() and en["arrivals"].is_empty() and ej[0]["units"] > 35.0 and en["units"] >= 30.0,
-			"the store empties into the line; the owner's troops stay (%s, line %.1f, owner %.1f)" % [str(en["allies"]), ej[0]["units"], en["units"]])
 	# ---------------------------------------------------------------- a fallen remote console freezes its decks
 	var rem_map := MapBuilder.load_map("res://maps/011-remote-span.json")
 	var rs := Sim.new()
@@ -1924,18 +1723,6 @@ func _rules_0_18_10() -> void:
 		else:
 			check(s.monsters.size() == 1 and s.monsters[0]["target"] == 0, "Veteran launches its monster at the big enemy garrison in reach")
 	Rules.MONSTER_REACH = 1
-	# EJECT: only to save stored allied troops from a node about to drop
-	var te := _tp({3: "A", 4: "B"}, {"A": "null", "B": "null"}, {"A": 0, "B": 0})
-	te.nodes[1]["owner"] = "A"
-	te.nodes[1]["allies"] = {"B": 50.0}
-	te.nodes[1]["arrivals"] = ["B"]
-	var ai_e := SeatAI.new("A", 2.0, "Veteran")
-	ai_e._ejects(te)
-	check(not te.nodes[1]["allies"].is_empty() and te.hordes.is_empty(), "the AI leaves stored allied troops alone...")
-	te.last_stand_active = true
-	te.last_stand_warn_node = 1
-	ai_e._ejects(te)
-	check(te.hordes.size() == 1 and te.hordes[0]["owner"] == "B", "...and EJECTs them from a node about to drop")
 
 	Rules.last_stand = false
 	s = _tp()
@@ -2159,7 +1946,7 @@ func _goo_territory() -> void:
 func _mk(m: Dictionary, fa: String, fb: String, lo := {}, seats := {}) -> Sim:
 	var s := Sim.new()
 	var st: Dictionary = seats if not seats.is_empty() else {int(m["seats"]["1v1"][0]["node"]): "A", int(m["seats"]["1v1"][1]["node"]): "B"}
-	s.setup(m, MapBuilder.layout(m), st, {"A": fa, "B": fb}, 1, {}, lo)
+	s.setup(m, MapBuilder.layout(m), st, {"A": fa, "B": fb}, 1, lo)
 	_ready_skills(s)
 	return s
 
@@ -2706,11 +2493,9 @@ func _skills_tests() -> void:
 	_steps(s, 1.0, 0.5)
 	check(s.charge("A") >= 1.0, "ready at 90 s with enough kills")
 	s = _mk(tp, "null", "null", {}, {3: "A", 4: "B"})
-	s.teams = {"A": 0, "B": 0}
 	s._credit("A", "", 5000.0)                          # neutral
-	s._credit("A", "B", 5000.0)                         # an ally
 	s.step(0.5)
-	check(absf(s.charge("A") - 0.5 / Rules.ULT_CHARGE_TIME) < 0.0001, "no charge from neutrals or allies")
+	check(absf(s.charge("A") - 0.5 / Rules.ULT_CHARGE_TIME) < 0.0001, "no charge from neutrals")
 	s = _mk(tp, "null", "null")
 	s.nodes[3]["units"] = 200.0
 	s.nodes[1]["owner"] = "B"
@@ -2986,14 +2771,14 @@ func _powers_tests() -> void:
 	for seed_i in range(6):
 		var sa := Sim.new()
 		sa.ai_builds = true
-		sa.setup(tp, MapBuilder.layout(tp), {3: "A", 4: "B"}, {"A": "ember", "B": "ember"}, 50 + seed_i, {}, {"A": {}})
+		sa.setup(tp, MapBuilder.layout(tp), {3: "A", 4: "B"}, {"A": "ember", "B": "ember"}, 50 + seed_i, {"A": {}})
 		if seed_i == 0:
 			check(sa.loadouts["A"]["active"] == Rules.FACTION_LOADOUT["ember"]["active"], "loadouts: a player with no pick gets the faction default")
 		var key := "%s+%s" % [sa.loadouts["B"]["active"], sa.loadouts["B"]["map"]]
 		builds[key] = true
 		var sb := Sim.new()
 		sb.ai_builds = true
-		sb.setup(tp, MapBuilder.layout(tp), {3: "A", 4: "B"}, {"A": "ember", "B": "ember"}, 50 + seed_i, {}, {})
+		sb.setup(tp, MapBuilder.layout(tp), {3: "A", 4: "B"}, {"A": "ember", "B": "ember"}, 50 + seed_i, {})
 		if "%s+%s" % [sb.loadouts["A"]["active"], sb.loadouts["A"]["map"]] == "%s+%s" % [sb.loadouts["B"]["active"], sb.loadouts["B"]["map"]]:
 			clash = true
 	check(builds.size() >= 2 and not clash, "loadouts: AI seats mix their builds across matches (%s) and two AIs of one faction never share one" % str(builds.keys()))
@@ -3059,8 +2844,6 @@ func _relays_proto() -> void:
 		var bf3: Array = MapPool.battlefield().map(func(p): return p.get_file().substr(0, 4))
 		check(not bf3.is_empty() and bf3.all(func(c): return c in pool3),
 				"OOZE 3.0: the battlefield pool is the Z maps only (POOL3), no kept P maps (%s)" % str(bf3))
-	elif Rules.lab and not MapPool.LAB.is_empty():    # LAB BUILD: battlefield() is MapPool.LAB only (no G maps)
-		print("SKIP  RELAYS 3.0: kept P maps in the battlefield pool (lab build, battlefield() = MapPool.LAB %s)" % [MapPool.LAB])
 	else:
 		check(MapPool.battlefield().any(func(p): return MapBuilder.load_map(p).get("was", "").begins_with("P-")), "RELAYS 3.0: the kept P maps (G-07 / G-08 / G-09) are in the battlefield pool")
 
@@ -3400,7 +3183,7 @@ func _proto_map(kind: String) -> Dictionary:
 
 func _sim_of(m: Dictionary, lo := {}) -> Sim:
 	var s := Sim.new()
-	s.setup(m, MapBuilder.layout(m), {3: "A", 5: "B"}, {"A": "null", "B": "null"}, 1, {}, lo)
+	s.setup(m, MapBuilder.layout(m), {3: "A", 5: "B"}, {"A": "null", "B": "null"}, 1, lo)
 	_ready_skills(s)
 	return s
 
@@ -3421,7 +3204,7 @@ func _ferry_reach() -> float:
 func _check_r6(cond: bool, what: String) -> void:
 	## OOZE 3.0 (WP1): a timing check of the 0.25 relay PROTOTYPES on the P-9x maps, baked at R 6. At R 7.6 the route ring is
 	## wider (Rules.BRAWL_RING 6.08), so a line reaches the relay later than these timings assume. 3.0 retires both relays
-	## (tilt is archived, Rules.LAB_RELAY_ARCHIVED; the ferry is a hazard with no owner or hold), so a miss is reported, not
+	## (tilt is archived, Rules.RELAY_ARCHIVED; the ferry is a hazard with no owner or hold), so a miss is reported, not
 	## failed. PASS when it still holds.
 	if cond:
 		check(true, what)

@@ -15,7 +15,6 @@ var adj: Dictionary = {}       # node id -> Array of [neighbour id, edge index]
 var hordes: Array = []         # see _new_horde()
 var factions: Dictionary = {}  # seat -> faction
 var homes: Dictionary = {}     # seat -> home node id
-var teams: Dictionary = {}     # seat -> team id (team modes only; empty = everyone for themselves)
 var time := 0.0
 var over := false
 var winner := ""
@@ -68,7 +67,7 @@ var match_seed := 0                  # the setup seed (the 7:00 draw line is pic
 # STRUCTURES 2.1 (0.18.10) - see the STRUCTURES 2.1 block before _setup_skills for the whole contract
 var monsters: Array = []             # live monsters, see launch_monster()
 var _next_monster := 1
-# LAST STAND = QUOTA (Rules.quota, lab option quota_tier): side (teams.get(seat, seat)) -> quota points; launches pay at liftoff
+# LAST STAND = QUOTA (Rules.quota, lab option quota_tier): side (the seat) -> quota points; launches pay at liftoff
 var quota: Dictionary = {}
 var quota_last_side = ""             # the side that held the latest platform to launch ("" = neutral / none yet)
 var quota_reason := ""               # how a quota match ended: "unreachable" | "final" | "" (elimination, or not over)
@@ -90,11 +89,10 @@ var _popped: Array = []              # decoys that touched an enemy this step (t
 var _down_seen: Dictionary = {}      # POWERS: edges whose "down" timer was set this step (_step_skills)
 var ai_builds := false               # POWERS: set before setup() - a seat with no loadout gets a Rules.AI_LOADOUTS build
 var catchup_on := true               # CATCH-UP (Rules.CATCHUP_*): lessons and campaign missions set it false (opt-in: true)
-var _catchup: Dictionary = {}        # side (team id, or the seat) -> true while it trails; refreshed every step
+var _catchup: Dictionary = {}        # side (the seat) -> true while it trails; refreshed every step
 
 
-func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_factions: Dictionary, seed_value: int = -1, seat_teams: Dictionary = {}, seat_loadouts: Dictionary = {}) -> void:
-	teams = seat_teams
+func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_factions: Dictionary, seed_value: int = -1, seat_loadouts: Dictionary = {}) -> void:
 	rng.seed = seed_value if seed_value >= 0 else int(Time.get_unix_time_from_system()) % 100000
 	match_seed = int(rng.seed)
 	factions = resolve_factions(seat_factions, seats.values() if not seats.is_empty() else seat_factions.keys(), match_seed)
@@ -112,7 +110,7 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 		if owner != "":
 			homes[owner] = id
 		var relay: String = n["relay"] if n.get("relay") != null else ""
-		if relay in Rules.LAB_RELAY_ARCHIVED and Rules.RELAY_SET:   # 3.0 RELAY SET (was lab relay_set): archived kinds never play
+		if relay in Rules.RELAY_ARCHIVED and Rules.RELAY_SET:   # 3.0 RELAY SET (was lab relay_set): archived kinds never play
 			push_warning("3.0 relay set: node %d's %s relay is archived; it plays as a plain node" % [id, relay])
 			relay = ""
 		# a relay node has no vat (GAME-RULES sec6, centreHasNoVat): it is a modest neutral
@@ -151,8 +149,6 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			"node_loss": {},        # seat -> units/s lost on this platform last step (view)
 			"buildable": [] if kind == "junction" else (Rules.NODE_BUILDS[kind] as Array).duplicate(),   # what the owner may place here
 			"structure": "" if kind in ["relay", "junction"] else "vat",   # "vat" / "machinegoon" / "laser" / "forge" / "monster_hub" / ""
-			"allies": {},           # seat -> allied troops stored here (GAME-RULES sec11; "units" is the owner's)
-			"arrivals": [],         # allied seats in the order their troops arrived (ownership tie-break)
 			"shot": {},             # laser / machinegoon fire for the fx: {"t", "target_horde", "kills", "pos"}
 			"load": {},             # LAUNCHER TURRET: seat -> {"units", "faction"} loaded in the cannon this salvo
 			"monster_ready_t": 0.0, # monster hub: match time from which its next monster may launch
@@ -521,20 +517,20 @@ func _base_production(n: Dictionary) -> float:
 	var p: float = (Rules.SPECIAL_PROD if is_special(n) else float(Rules.PROD[n["tier"]])) * stat(n["owner"], "production")   # 3.0: SPECIAL = the most
 	if Rules.proto_debug and not debug_prod.is_empty():   # PROTO DEBUG: MY PRODUCTION (readouts follow it too)
 		p *= float(debug_prod.get(n["owner"], 1.0))
-	return p * Rules.CATCHUP_PRODUCTION if _catchup.has(teams.get(n["owner"], n["owner"])) else p
+	return p * Rules.CATCHUP_PRODUCTION if _catchup.has(n["owner"]) else p
 
 
 func catchup_sides() -> Dictionary:
 	## CATCH-UP: side -> true for every side holding fewer than Rules.CATCHUP_NODE_RATIO of the leading side's nodes
-	## (owned nodes of any kind; a side = a team in team modes, else the seat). Off: {}.
+	## (owned nodes of any kind; a side = the seat). Off: {}.
 	if not catchup_on:
 		return {}
 	var held := {}
 	for s in factions.keys():
-		held[teams.get(s, s)] = 0
+		held[s] = 0
 	for n in nodes:
 		if n["owner"] != "" and not collapsed.get(n["id"], false):
-			var side = teams.get(n["owner"], n["owner"])
+			var side: String = n["owner"]
 			held[side] = int(held.get(side, 0)) + 1
 	var lead := 0
 	for side in held:
@@ -550,7 +546,7 @@ func catchup_active(seat: String) -> bool:
 	## CATCH-UP: is this seat's side producing +15 % now (the HUD tag)? Recounts from the nodes: an online guest never
 	## steps its Sim (Net snapshots carry the owners), so the HUD's call keeps its tag and production readout current.
 	_catchup = catchup_sides()
-	return _catchup.has(teams.get(seat, seat))
+	return _catchup.has(seat)
 
 
 func node_cap(n: Dictionary) -> float:
@@ -558,32 +554,6 @@ func node_cap(n: Dictionary) -> float:
 	if is_special(n):                                    # 3.0 SPECIAL T4 hotspot (Rules.SPECIAL_CAP)
 		return float(Rules.SPECIAL_CAP)
 	return float(Rules.CAPS.get(n["tier"], Rules.CAPS[1]))
-
-
-func allied_units(n: Dictionary, seat := "") -> float:
-	## Allied troops stored here: one seat's, or ("") everybody's.
-	if seat != "":
-		return float(n["allies"].get(seat, 0.0))
-	var t := 0.0
-	for k in n["allies"]:
-		t += float(n["allies"][k])
-	return t
-
-
-func garrison_total(n: Dictionary) -> float:
-	## Everything defending the node: the owner's troops plus every ally's stored troops (GAME-RULES sec11).
-	return float(n["units"]) + allied_units(n)
-
-
-func halo_tier(node_id: int, seat: String) -> int:
-	## Allied halo size for `seat`'s troops stored on this node (seat "" = all allies together): 0 none,
-	## 1 under 25 % of the node's cap, 2 from 25 to 75 %, 3 over 75 % (Daniele, 2026-09-27: "Cap share").
-	var n: Dictionary = nodes[node_id]
-	var u := allied_units(n, seat)
-	if u <= 0.0001:
-		return 0
-	var share := u / maxf(node_cap(n), 1.0)
-	return 1 if share < 0.25 else (2 if share <= 0.75 else 3)
 
 
 func build_cost(n: Dictionary, kind: String) -> int:
@@ -621,7 +591,7 @@ const STRUCTURE_NAMES := {"vat": "Vat", "machinegoon": "Googatling", "laser": "L
 
 func can_build(node_id: int, seat: String, kind: String) -> String:
 	## "" if `seat` may build `kind` on this node now, else the refusal line for a toast. Kinds: "vat" (a
-	## machinegoon back to its vat), "machinegoon", "laser", "forge", "monster_hub", and "eject" (the team action).
+	## machinegoon back to its vat), "machinegoon", "laser", "forge", and "monster_hub".
 	if kind == "machingoon":                          # 0.19.2 spelling fix; old id accepted for one release
 		kind = "machinegoon"
 	if not _node_open(node_id):
@@ -629,8 +599,6 @@ func can_build(node_id: int, seat: String, kind: String) -> String:
 	var n: Dictionary = nodes[node_id]
 	if n["owner"] != seat:
 		return "Not your node"
-	if kind == "eject":
-		return "" if allied_units(n) > 0.0001 else "No allied troops to eject here"
 	if n["build_kind"] != "":
 		return "Construction already in progress"
 	if not kind in STRUCTURE_NAMES:
@@ -657,13 +625,11 @@ func can_build(node_id: int, seat: String, kind: String) -> String:
 func build(node_id: int, seat: String, kind: String) -> bool:
 	if kind == "machingoon":                          # 0.19.2 spelling alias (see can_build)
 		kind = "machinegoon"
-	## Start building `kind` (see can_build; "eject" runs EJECT at once). Paid from the node's garrison when
+	## Start building `kind` (see can_build). Paid from the node's garrison when
 	## it starts; completes after Rules.BUILD_SECONDS. A swap (vat <-> machinegoon, or one relay structure for
 	## another) keeps the tier and starts Rules.SWAP_COOLDOWN when it completes.
 	if can_build(node_id, seat, kind) != "":
 		return false
-	if kind == "eject":
-		return eject(node_id, seat)
 	var n: Dictionary = nodes[node_id]
 	n["units"] -= build_cost(n, kind)
 	var build_kind := "vat_restore" if kind == "vat" else kind
@@ -730,7 +696,7 @@ func upgrade_cost(n: Dictionary) -> int:
 func structure_order(seat: String, action: String, node_id: int, args := {}) -> Array:
 	## One structure order for `seat`, validated here: [accepted, feedback line] (main.perform can hand its
 	## structure orders - offline and guests' via Net - straight to this). action: "upgrade"; "build" (args
-	## "kind"); "launch_monster" (args "to"); "eject"; and the pre-2.1 names "build_cannon" (-> laser),
+	## "kind"); "launch_monster" (args "to"); and the pre-2.1 names "build_cannon" (-> laser),
 	## "build_forge", "restore" (-> vat).
 	var kind := ""
 	match action:
@@ -747,8 +713,6 @@ func structure_order(seat: String, action: String, node_id: int, args := {}) -> 
 			if why != "":
 				return [false, why]
 			return [true, "Monster launched - %d units, next in %d s" % [Rules.shown(Rules.MONSTER_COST), int(Rules.MONSTER_COOLDOWN)]]
-		"eject":
-			kind = "eject"
 		"build":
 			kind = str(args.get("kind", ""))
 		"build_cannon":
@@ -762,10 +726,8 @@ func structure_order(seat: String, action: String, node_id: int, args := {}) -> 
 	var why2 := can_build(node_id, seat, kind)
 	if why2 != "":
 		return [false, why2]
-	var cost2 := build_cost(nodes[node_id], kind) if kind != "eject" else 0
+	var cost2 := build_cost(nodes[node_id], kind)
 	build(node_id, seat, kind)
-	if kind == "eject":
-		return [true, "Allied troops ejected"]
 	return [true, "%s construction started - %d units, %d s" % [STRUCTURE_NAMES[kind], Rules.shown(cost2), int(Rules.BUILD_SECONDS)]]
 
 
@@ -1527,8 +1489,7 @@ func _split_front(h: Dictionary, units_front: float) -> void:
 	f["pour_lip"] = -1.0
 	f["pour_k"] = 0.0
 	f.erase("pending_loss")
-	f.erase("eject_left")                             # the source feeds only the part behind the lip (audit 2026-09-28):
-	if f.has("ghost_left"):                           # an EJECT / decoy door keeps emitting into `h`, never the front
+	if f.has("ghost_left"):                           # the source feeds only the part behind the lip (audit 2026-09-28): a decoy door keeps emitting into `h`, never the front
 		f["ghost_left"] = 0.0
 	h["units"] = maxf(0.0, h["units"] - units_front)
 	hordes.append(f)
@@ -2061,10 +2022,9 @@ func step(dt: float) -> void:
 		_force_end()
 	if over:
 		return
-	_check_handovers()                                # (an owner at zero hands over before producing again)
 	_catchup = catchup_sides()                        # CATCH-UP: who trails, from this step's node count
 	for n in nodes:                                   # production (vat nodes only), up to the cap
-		if n["owner"] != "" and (has_vat(n) or n["structure"] == "machinegoon") and garrison_total(n) < Rules.CAPS[n["tier"]]:   # allied troops count (sec11); a GooGat grows its ammo (half rate)
+		if n["owner"] != "" and (has_vat(n) or n["structure"] == "machinegoon") and n["units"] < Rules.CAPS[n["tier"]]:   # a GooGat grows its ammo (half rate)
 			_produce(n, dt)
 		elif Rules.NEUTRAL_REGEN and n["owner"] == "" and n["structure"] == "machinegoon" and not collapsed.get(n["id"], false) \
 				and n["units"] < float(n.get("regen_cap", Rules.NEUTRAL_UNITS.get(n["tier"], 0))):   # a neutral GooGat regrows its ammo (half rate)
@@ -2090,7 +2050,6 @@ func step(dt: float) -> void:
 			_end_streaming(n, "done")
 	_emit_decoys(dt)
 	_emit_evacs(dt)                                   # POWERS: Emergency Evac bursts out of the door
-	_emit_ejects(dt)
 	_step_breaks(dt)
 	_check_missing_decks()
 	for h in hordes:
@@ -2184,7 +2143,6 @@ func step(dt: float) -> void:
 			h["state"] = "fight"
 	_step_decoys()
 	_step_portals()                                   # POWERS: a carry whose line has fully gone through stops streaming
-	_check_handovers()
 	_step_forges()
 	_step_charge(dt)
 	if not _ferry_tally.is_empty():
@@ -2442,8 +2400,7 @@ func _end_streaming(n: Dictionary, why: String) -> void:
 
 
 func _arrive(n: Dictionary, h: Dictionary, x: float) -> void:
-	## The line pours onto the platform. Own node: reinforce the garrison. An ally's node: the troops are
-	## stored there and stay theirs (GAME-RULES sec11, "allies"). Otherwise they land Alpha 11 style
+	## The line pours onto the platform. Own node: reinforce the garrison. Otherwise they land Alpha 11 style
 	## (_land_classic); the whole platform is the node.
 	var owner: String = h["owner"]
 	if h.has("portal") and n["id"] == int(h["portal"]["node"]):
@@ -2455,18 +2412,9 @@ func _arrive(n: Dictionary, h: Dictionary, x: float) -> void:
 	if n["owner"] == owner:                            # own node: reinforce it
 		n["units"] += x
 		return
-	if allied(n["owner"], owner):                      # an ally's node: stored, still ours (arrivals may overfill)
-		_store_ally(n, owner, x)
-		return
 	_att_mult = tilt_mult(h, n) if h.has("tilt_by") else 1.0   # RELAYS 3.0 round 3: a TILT-redirected line
 	_land_classic(n, owner, x)
 	_att_mult = 1.0
-
-
-func _store_ally(n: Dictionary, seat: String, x: float) -> void:
-	n["allies"][seat] = float(n["allies"].get(seat, 0.0)) + x
-	if not seat in n["arrivals"]:
-		n["arrivals"].append(seat)                     # first to arrive wins an ownership tie
 
 
 func _land_classic(n: Dictionary, seat: String, x: float) -> void:
@@ -2476,25 +2424,12 @@ func _land_classic(n: Dictionary, seat: String, x: float) -> void:
 	## of them is gone - an attacker kills attack / (health x garrison) defenders before dying, and takes
 	## the defender's attack / its own health per exchange. At baseline that is one-for-one. When the
 	## garrison reaches zero the survivors take the node. Nothing sits outside.
-	## Team modes (GAME-RULES sec11, 0.18.10): the attackers fight the whole garrison - the owner's troops
-	## and every ally's stored troops - whose stats mix by troop share; the losses split by troop ratio.
 	var att: float = attack_of(seat) * _att_mult
 	var hp_att: float = stat(seat, "health")
 	var d_seat: String = n["owner"]
-	var total: float = garrison_total(n)
-	var tough := 0.0                                   # health x garrison stat, weighted by troop share
-	var d_att := 0.0                                   # defender attack, weighted by troop share
-	if total > 0.0001 and not n["allies"].is_empty():
-		var shares := {d_seat: float(n["units"])}
-		for k in n["allies"]:
-			shares[k] = float(n["allies"][k])
-		for k in shares:
-			var w: float = shares[k] / total
-			tough += w * stat(k, "health") * stat(k, "garrison")
-			d_att += w * (attack_of(k) if k != "" else 1.0)
-	else:
-		tough = stat(d_seat, "health") * stat(d_seat, "garrison")
-		d_att = attack_of(d_seat) if d_seat != "" else 1.0
+	var total: float = float(n["units"])
+	var tough: float = stat(d_seat, "health") * stat(d_seat, "garrison")   # health x garrison stat
+	var d_att: float = attack_of(d_seat) if d_seat != "" else 1.0           # defender attack
 	var kill_per: float = att / (tough * garrison_div(n))                 # defenders per exchange (Fortify / Aegis / forge divide it)
 	var cost_per: float = d_att / hp_att                                  # attacker per exchange
 	var ratio: float = kill_per / maxf(cost_per, 0.0001)                  # defenders killed per attacker
@@ -2506,131 +2441,14 @@ func _land_classic(n: Dictionary, seat: String, x: float) -> void:
 	if d_seat != "":
 		combat_losses[d_seat] = combat_losses.get(d_seat, 0.0) + own_killed
 	_credit(seat, d_seat, own_killed)
-	for k in n["allies"].keys():                       # the allies' share of the losses
-		var lost: float = float(n["allies"][k]) * frac
-		n["allies"][k] = float(n["allies"][k]) - lost
-		combat_losses[k] = combat_losses.get(k, 0.0) + lost
-		_credit(seat, k, lost)
-		if n["allies"][k] <= 0.0001:
-			_drop_ally(n, k)
 	combat_losses[seat] = combat_losses.get(seat, 0.0) + spent
 	_credit(d_seat, seat, spent)
 	var left: float = x - spent
-	if garrison_total(n) <= 0.0001 and left > 0.0001:
+	if float(n["units"]) <= 0.0001 and left > 0.0001:
 		var old: String = n["owner"]
 		_capture(n, seat, left)
 		events.append({"t": time, "type": "capture", "node": n["id"], "seat": seat, "from": old})
 		captured.emit(n["id"], seat, old)
-
-
-func _drop_ally(n: Dictionary, seat: String) -> void:
-	n["allies"].erase(seat)
-	n["arrivals"].erase(seat)
-
-
-func _check_handovers() -> void:
-	## GAME-RULES sec11: when the owner's troops reach zero while allies remain stored there, the node passes
-	## to the ally with the largest garrison there; a tie goes to the ally whose troops arrived first. The
-	## tier and the structure stay (it is no conquest); the old owner's construction and order end.
-	for n in nodes:
-		if n["allies"].is_empty() or n["owner"] == "" or float(n["units"]) > 0.0001:
-			continue
-		var best := ""
-		for k in n["arrivals"]:                        # arrival order: the earlier wins a tie
-			if float(n["allies"].get(k, 0.0)) > 0.0001 and (best == "" or float(n["allies"][k]) > float(n["allies"][best]) + 0.0001):
-				best = k
-		for k in n["allies"]:                          # (anyone missing from the order, last)
-			if best == "" and float(n["allies"][k]) > 0.0001:
-				best = k
-		if best == "":
-			continue
-		var old: String = n["owner"]
-		if not n["streaming"].is_empty():
-			_end_streaming(n, "lost")
-		n["build_kind"] = ""
-		n["build_target"] = {}
-		var second_hub := _second_hub(n, best)
-		n["owner"] = best
-		n["units"] = float(n["allies"][best])
-		n["hub_monster"] = -1
-		_drop_ally(n, best)
-		if second_hub:                                 # one Monster hub per player, handovers too
-			_destroy_hub(n, best)
-			_sync_legacy(n)
-		_capture_effects(n, best)
-		events.append({"t": time, "type": "handover", "node": n["id"], "seat": best, "from": old})
-		fx_events.append({"type": "capture", "node": n["id"], "seat": best, "handover": true})
-		captured.emit(n["id"], best, old)
-
-
-func _emit_ejects(dt: float) -> void:
-	## EJECT lines stream out of the door at the door rate, taken from their seat's stored troops.
-	for h in hordes:
-		if float(h.get("eject_left", 0.0)) <= 0.0:
-			continue
-		var n: Dictionary = nodes[h["route"][0]]
-		var store: float = allied_units(n, h["owner"])
-		if collapsed.get(n["id"], false) or not allied(n["owner"], h["owner"]) or n["owner"] == h["owner"] or store <= 0.0:
-			_eject_done(h)
-			continue
-		var x: float = minf(minf(float(h["eject_left"]), Rules.exit_rate() * dt), store)
-		h["units"] += x
-		h["eject_left"] = float(h["eject_left"]) - x
-		n["allies"][h["owner"]] = store - x
-		if n["allies"][h["owner"]] <= 0.0001:
-			_drop_ally(n, h["owner"])
-		if float(h["eject_left"]) <= 0.001 or not n["allies"].has(h["owner"]):
-			_eject_done(h)
-
-
-func _eject_done(h: Dictionary) -> void:
-	h["eject_left"] = 0.0
-	if h["streaming"]:
-		h["streaming"] = false
-		h["ordered"] = h["units"]
-		h["start_units"] = maxf(h["units"], 1.0)
-	if h["units"] <= 0.0 and h in hordes:
-		hordes.erase(h)
-
-
-func eject(node_id: int, seat: String) -> bool:
-	## EJECT (GAME-RULES sec11): the owner sends every ally's stored troops out, each toward its owner's
-	## nearest own node by the fastest route. Allowed during warnings. A seat with no node to go to keeps its
-	## troops stored. Returns true if at least one line went out.
-	if not _node_open(node_id):
-		return false
-	var n: Dictionary = nodes[node_id]
-	if n["owner"] != seat or allied_units(n) <= 0.0001:
-		return false
-	var any := false
-	for k in n["arrivals"].duplicate() + n["allies"].keys():
-		var count: float = allied_units(n, k)
-		if count <= 0.0001 or hordes.any(func(x): return float(x.get("eject_left", 0.0)) > 0.0 and x["owner"] == k and x["route"][0] == node_id):
-			continue
-		var best: Array = []
-		var best_t := INF
-		for m in nodes:
-			if m["owner"] != k or m["id"] == node_id or collapsed.get(m["id"], false):
-				continue
-			var r := find_route(node_id, m["id"])
-			if r.size() < 2:
-				continue
-			var t := 0.0
-			for i in range(r.size() - 1):
-				t += edge_cost(_edge_index(r[i], r[i + 1])) + 1.0
-			if t < best_t:
-				best_t = t
-				best = r
-		if best.is_empty():
-			continue
-		var h := _new_horde(k, count, best)
-		h["eject_left"] = count
-		hordes.append(h)
-		any = true
-	if any:
-		events.append({"t": time, "type": "eject", "node": node_id, "seat": seat})
-		fx_events.append({"type": "eject", "node": node_id, "seat": seat})
-	return any
 
 
 func _capture(n: Dictionary, seat: String, garrison: float) -> void:
@@ -2655,8 +2473,6 @@ func _capture(n: Dictionary, seat: String, garrison: float) -> void:
 	n["owner"] = seat
 	n["units"] = garrison
 	_reset_armour(n)                                   # VAT ARMOUR: a captured vat (T4 included) starts again at 1.0
-	n["allies"] = {}                                   # stored allied troops fell with the garrison
-	n["arrivals"] = []
 	n["hub_monster"] = -1                              # the old owner's monster out is not this owner's to wait for
 	if second_hub:
 		_destroy_hub(n, seat)
@@ -3448,13 +3264,9 @@ func _drop_node(id: int) -> void:
 		_end_streaming(n, "collapsed")
 	if old != "" and n["units"] > 0.0:
 		fall_losses[old] = fall_losses.get(old, 0.0) + n["units"]
-	for k in n["allies"]:                               # stored allied troops fall with it
-		fall_losses[k] = fall_losses.get(k, 0.0) + float(n["allies"][k])
 	n["owner"] = ""
 	n["units"] = 0.0
 	n["transit"] = {}
-	n["allies"] = {}
-	n["arrivals"] = []
 	n["structure"] = ""                                 # the structure goes with it
 	n["shot"] = {}
 	_sync_legacy(n)
@@ -3495,15 +3307,12 @@ func _drop_node(id: int) -> void:
 
 
 func _alive_seats() -> Dictionary:
-	## Seats with anything left on the board: a node, a line (not a decoy), stored allied troops or a
+	## Seats with anything left on the board: a node, a line (not a decoy) or a
 	## monster out (Daniele, 2026-09-27: "Lines keep you alive" - collapse included).
 	var alive := {}
 	for n in nodes:
 		if n["owner"] != "":
 			alive[n["owner"]] = true
-		for k in n["allies"]:
-			if float(n["allies"][k]) > 0.0001:
-				alive[k] = true
 	for h in hordes:
 		if not h.get("decoy", false):                 # a seat is never kept alive by a Ghost Line
 			alive[h["owner"]] = true
@@ -3517,7 +3326,7 @@ func _alive_seats() -> Dictionary:
 
 
 func _check_eliminations(alive := {}) -> void:
-	## A seat is out only when it has no nodes and no lines left (and no monster, no stored troops). `alive`:
+	## A seat is out only when it has no nodes and no lines left (and no monster). `alive`:
 	## this step's _alive_seats() when the caller already has it.
 	if alive.is_empty():
 		alive = _alive_seats()
@@ -3529,17 +3338,16 @@ func _check_eliminations(alive := {}) -> void:
 
 
 func is_out(seat: String) -> bool:
-	## 0.19.2: this seat is out of the match (no nodes, no lines, no monster, no stored troops left) - the HUD
+	## 0.19.2: this seat is out of the match (no nodes, no lines, no monster left) - the HUD
 	## offers SPECTATE / MAIN MENU. Guests read it from the host's snapshots ("eliminated"), so it works online.
 	return eliminated.has(seat)
 
 
 func _force_end() -> void:
 	## 7:00 (Daniele, 2026-09-27: "simply should follow the very last stand rule, team who owns last vat
-	## wins"): the side owning the last platform the Very Last Stand left wins, its owner named the winner. A
+	## wins"): the seat owning the last platform the Very Last Stand left wins, its owner named the winner. A
 	## still-neutral last platform is a DRAW with a call-out line (draw_line, Rules.DRAW_LINES, picked by the
-	## match seed). If several platforms somehow remain (the VLS could not finish), the strongest side (team
-	## total) wins; its strongest seat is named the winner.
+	## match seed). If several platforms somehow remain (the VLS could not finish), the strongest seat wins.
 	if Rules.quota:
 		_quota_end(true)
 		return
@@ -3554,20 +3362,13 @@ func _force_end() -> void:
 		events.append({"t": time, "type": "end", "winner": winner, "forced": true, "draw": winner == ""})
 		finished.emit(winner)
 		return
-	var side_total := {}
-	var side_seat := {}
-	for s in factions.keys():
-		var side = teams.get(s, s)
-		var v := seat_strength(s)
-		side_total[side] = side_total.get(side, 0.0) + v
-		if not side_seat.has(side) or v > seat_strength(side_seat[side]):
-			side_seat[side] = s
 	var best := ""
 	var best_v := -1.0
-	for side in side_total:
-		if side_total[side] > best_v:
-			best_v = side_total[side]
-			best = side_seat[side]
+	for s in factions.keys():
+		var v := seat_strength(s)
+		if v > best_v:
+			best_v = v
+			best = s
 	winner = best
 	events.append({"t": time, "type": "end", "winner": winner, "forced": true})
 	finished.emit(winner)
@@ -3583,9 +3384,9 @@ func _check_end() -> void:
 			alive[s] = true
 	for s in eliminated:
 		alive.erase(s)
-	var sides := {}                                   # team modes: one side per team
+	var sides := {}
 	for s in alive:
-		sides[teams.get(s, s)] = s
+		sides[s] = s
 	if sides.size() <= 1 and time > 1.0:
 		over = true
 		winner = sides.values()[0] if sides.size() == 1 else ""
@@ -3595,12 +3396,12 @@ func _check_end() -> void:
 
 # ---------------------------------------------------------- LAST STAND = QUOTA (Rules.quota; demo bd016a0d, lab tier points)
 func side_of(seat: String):
-	## The side a seat scores for: its team in a team mode, else itself ("" = neutral).
-	return teams.get(seat, seat) if seat != "" else ""
+	## The side a seat scores for: itself ("" = neutral).
+	return seat
 
 
 func quota_of(seat: String) -> int:
-	## The quota of the seat's side (team mates share it).
+	## The quota of the seat's side.
 	return int(quota.get(side_of(seat), 0)) if seat != "" else 0
 
 
@@ -3656,7 +3457,7 @@ func quota_standing() -> Dictionary:
 
 
 func _check_quota_end() -> void:
-	## A lead nobody can catch ends it (FFA: the leader against every other side); so does the last launch.
+	## A lead nobody can catch ends it; so does the last launch.
 	var st := quota_standing()
 	if (st["sides"] as Array).size() < 2:
 		return                                        # one side left: elimination (_check_end) decides
@@ -3687,7 +3488,7 @@ func _quota_end(forced: bool) -> void:
 
 
 func _side_seat(side) -> String:
-	## The seat named the winner for a side: itself, or the team's strongest seat still in the match.
+	## The seat named the winner for a side (the side is the seat).
 	var best := ""
 	for s in factions.keys():
 		if str(side_of(s)) != str(side):
@@ -3703,7 +3504,6 @@ func seat_strength(seat: String) -> float:
 	for n in nodes:
 		if n["owner"] == seat:
 			total += n["units"]
-		total += float(n["allies"].get(seat, 0.0))     # troops stored in an ally's node
 	for h in hordes:
 		if h["owner"] == seat and not h.get("decoy", false):
 			total += h["units"]
@@ -3711,12 +3511,8 @@ func seat_strength(seat: String) -> float:
 
 
 func allied(a: String, b: String) -> bool:
-	## Same seat, or team-mates in a team mode (2v2). Neutral ("") is nobody's ally.
-	if a == "" or b == "":
-		return false
-	if a == b:
-		return true
-	return teams.has(a) and teams.has(b) and teams[a] == teams[b]
+	## Same seat (BRAWL is 1v1: no teams). Neutral ("") is nobody's ally.
+	return a != "" and a == b
 
 
 func _ring_order(ids: Array, centre: Vector3, far_first: bool) -> Array:
@@ -3745,22 +3541,20 @@ func _ring_order(ids: Array, centre: Vector3, far_first: bool) -> Array:
 	return out
 
 
-# ================================================================== STRUCTURES 2.1 + TEAMS (0.18.10)
+# ================================================================== STRUCTURES 2.1 (0.18.10)
 # Daniele, 2026-09-27 (GAME-BIBLE sec17, OPEN-QUESTIONS "Structures 2.1 numbers"; numbers in Rules).
 # PUBLIC API (HUD, main, Net, AI and tests use these; keep the names)
 #   can_build(node_id, seat, kind) -> String   "" = ok, else the refusal line. kinds: "vat" (a machinegoon back
-#                                         to its vat), "machinegoon", "laser", "forge", "monster_hub", "eject"
-#   build(node_id, seat, kind) -> bool    starts it (paid now, Rules.BUILD_SECONDS); "eject" runs EJECT at once
+#                                         to its vat), "machinegoon", "laser", "forge", "monster_hub"
+#   build(node_id, seat, kind) -> bool    starts it (paid now, Rules.BUILD_SECONDS)
 #   can_upgrade(node_id, seat) -> String / upgrade(node_id, seat) -> bool / upgrade_cost(n) -> int
 #                                         vat T1 -> T3 (never T3 -> T4), machinegoon T1 -> T3
 #   build_cost(n, kind) -> int            units a build of `kind` costs here
 #   structure_order(seat, action, node_id, args) -> [accepted, line]   "upgrade" | "build" {"kind"} |
-#                                         "launch_monster" {"to"} | "eject" (+ "build_cannon", "build_forge", "restore")
+#                                         "launch_monster" {"to"} (+ "build_cannon", "build_forge", "restore")
 #   launch_monster(hub_id, seat, target_id) -> String   "" = launched, else the refusal line
 #   monster_reach(hub_id) -> Array        node ids a monster from this hub may be sent to (<= MONSTER_REACH bridges)
-#   eject(node_id, seat) -> bool          the owner sends every ally's stored troops home
-#   halo_tier(node_id, seat) -> int       0..3 allied halo size by the seat's share of the node's cap ("" = all allies)
-#   allied_units(n, seat = "") / garrison_total(n) / node_cap(n) / has_hub(seat) / forge_defence(seat) / skill_div(n)
+#   node_cap(n) / has_hub(seat) / forge_defence(seat) / skill_div(n)
 #   has_vat(n) (static): a producing vat stands here
 #   pre-2.1 wrappers kept for old callers: upgrade_vat, build_attachment ("cannon" -> laser), restore_vat,
 #   upgrade_structure
@@ -3768,7 +3562,6 @@ func _ring_order(ids: Array, centre: Vector3, far_first: bool) -> Array:
 #   "node_kind": "common" | "relay" | "special" (fixed at setup; special = strategic / final / map-placed T4)
 #   "structure": "vat" | "machinegoon" | "laser" | "forge" | "monster_hub" | "" (a relay without a build, or collapsed)
 #   "tier": the vat's or machinegoon's tier; "buildable": Rules.NODE_BUILDS[node_kind]
-#   "allies": {seat: units} allied troops stored here ("units" is the owner's own); "arrivals": [seat] their order
 #   "shot": {"t", "target_horde", "kills" (sim units this step), "pos"} the laser / machinegoon's latest fire
 #   "monster_ready_t": match time from which the hub may launch; "hub_monster": its monster's id out (-1 none)
 #   "build_kind": "" | "vat" (upgrade) | "vat_restore" (machinegoon -> vat) | "machinegoon" | "laser" | "forge" |
@@ -3785,9 +3578,7 @@ func _ring_order(ids: Array, centre: Vector3, far_first: bool) -> Array:
 #       bodies on its decks and bodies of lines in transit over the platforms it crosses (never a garrison there)
 #   {"type": "monster_take", "id", "seat", "node", "friendly": bool} (friendly: the node lost a tier)
 #   {"type": "monster_fall", "id", "seat", "pos"}
-#   {"type": "forge_lost", "seat"}   {"type": "eject", "node", "seat"}   {"type": "draw", "line"}
-#   {"type": "capture", "node", "seat", "handover": true} (fx) / {"type": "handover", "node", "seat", "from"} (events):
-#       the owner's troops reached zero and an ally took the node over (GAME-RULES sec11)
+#   {"type": "forge_lost", "seat"}   {"type": "draw", "line"}
 
 
 func monster_speed() -> float:
@@ -4065,9 +3856,9 @@ func _monster_gone(m: Dictionary) -> void:
 
 
 func _monster_end(m: Dictionary) -> void:
-	## The end node: an enemy's or a neutral one is taken empty - its garrison (and any stored allied troops)
+	## The end node: an enemy's or a neutral one is taken empty - its garrison
 	## kicked off, conquest's tier rule applied (a T4 keeps its tier) - unless it holds more than Rules.MONSTER_TAKE_MAX:
-	## then that many are kicked (each group its share) and the node keeps its owner ("held"); a friendly one (own or an ally's) loses
+	## then that many are kicked and the node keeps its owner ("held"); a friendly one (own) loses
 	## a tier instead (min 1, a T4 excepted) and keeps its troops. Then the monster is gone.
 	var n: Dictionary = nodes[m["target"]]
 	if collapsed.get(n["id"], false):
@@ -4082,17 +3873,13 @@ func _monster_end(m: Dictionary) -> void:
 	else:
 		var old: String = n["owner"]
 		var kicked := {old: float(n["units"])}
-		for k in n["allies"]:
-			kicked[k] = kicked.get(k, 0.0) + float(n["allies"][k])
 		var total := 0.0
 		for k in kicked:
 			total += maxf(float(kicked[k]), 0.0)
 		held = total > Rules.MONSTER_TAKE_MAX + 0.0001     # Rules.MONSTER_TAKE_MAX: more defenders than it can kick - the node holds
 		if held:
-			var f := Rules.MONSTER_TAKE_MAX / total        # every defender group loses its share of the 40
+			var f := Rules.MONSTER_TAKE_MAX / total        # the defenders lose the 40
 			n["units"] = float(n["units"]) * (1.0 - f)
-			for k in n["allies"]:
-				n["allies"][k] = float(n["allies"][k]) * (1.0 - f)
 			for k in kicked:
 				kicked[k] = float(kicked[k]) * f
 		for k in kicked:
@@ -4108,7 +3895,7 @@ func _monster_end(m: Dictionary) -> void:
 			events.append({"t": time, "type": "capture", "node": n["id"], "seat": seat, "from": old, "monster": true})
 			captured.emit(n["id"], seat, old)
 	fx_events.append({"type": "monster_take", "id": m["id"], "seat": seat, "node": n["id"], "friendly": friendly, "held": held,
-			"left": Rules.shown(garrison_total(n)) if held else 0})
+			"left": Rules.shown(float(n["units"])) if held else 0})
 	events.append({"t": time, "type": "monster_take", "id": m["id"], "seat": seat, "node": n["id"], "friendly": friendly, "held": held})
 	m["state"] = "done"
 	m["t"] = 0.0
@@ -4411,7 +4198,7 @@ func _prod_info(n: Dictionary) -> Array:
 func _produce(n: Dictionary, dt: float) -> void:
 	var base := _base_production(n)
 	var info := _prod_info(n)
-	var cap: float = Rules.CAPS[n["tier"]] - allied_units(n)   # stored allied troops count against the cap
+	var cap: float = Rules.CAPS[n["tier"]]
 	var before: float = n["units"]
 	var bloom = info[1]
 	var add: float = base * float(info[0]) * dt
@@ -4486,7 +4273,7 @@ func _cannon_mult(h: Dictionary) -> float:
 # ------------------------------------------------------------------ ultimate charge
 func _credit(killer: String, victim: String, units: float) -> void:
 	## An enemy combat kill (troops, garrison, cannon, Scorch) speeds the killer's ultimate. Neutrals,
-	## allies, decoys, sacrifices, ultimate kills and falls never reach here.
+	## own troops, decoys, sacrifices, ultimate kills and falls never reach here.
 	if killer == "" or victim == "" or units <= 0.0 or allied(killer, victim):
 		return
 	_kill_credit[killer] = _kill_credit.get(killer, 0.0) + units
@@ -4797,7 +4584,7 @@ func cast(seat: String, slot: String, target = null) -> bool:
 		"core_meltdown":                               # POWERS (0.22.2): armed now, goes off on arrival (_step_armed)
 			var hm := _horde(_as_int(target))
 			var goal: Dictionary = nodes[line_goal(hm)]
-			ev["affects"] = _hostile_list(seat, [goal["owner"]] + goal["allies"].keys())
+			ev["affects"] = _hostile_list(seat, [goal["owner"]])
 			hm["armed"] = true
 		"relay_aegis":
 			_aegis(seat, _as_int(target))
@@ -5011,28 +4798,20 @@ func _meltdown(seat: String, h: Dictionary) -> void:
 	## Core Meltdown (sec5.2): sacrifice share of the line (at least min_shown, no upper cap); each unit
 	## sacrificed kills kills_per defenders (cap_shown at most; Fortify / Aegis divide it); a garrison at zero
 	## -> the rest of the line captures. No charge from any of it.
-	## Team modes (audit 2026-09-28): the kills hit the whole garrison - the owner's troops and every ally's
-	## stored troops - split by troop share as in _land_classic; the node falls only once all of it is gone.
 	var sk: Dictionary = Rules.SKILLS["core_meltdown"]
 	var n: Dictionary = nodes[h["target"]]
 	var sac: float = minf(h["units"], maxf(h["units"] * float(sk["share"]), float(sk["min_shown"]) * Rules.SCALE))
 	h["units"] -= sac
 	combat_losses[seat] = combat_losses.get(seat, 0.0) + sac
-	var total: float = garrison_total(n)
+	var total: float = float(n["units"])
 	var kills: float = minf(minf(sac * float(sk["kills_per"]), float(sk["cap_shown"]) * Rules.SCALE) / garrison_div(n), total)
 	var frac: float = kills / total if total > 0.0001 else 0.0
 	var own_killed: float = float(n["units"]) * frac
 	n["units"] = maxf(0.0, float(n["units"]) - own_killed)
 	if n["owner"] != "":
 		combat_losses[n["owner"]] = combat_losses.get(n["owner"], 0.0) + own_killed
-	for k in n["allies"].keys():                       # the allies' share of the losses
-		var lost: float = float(n["allies"][k]) * frac
-		n["allies"][k] = float(n["allies"][k]) - lost
-		combat_losses[k] = combat_losses.get(k, 0.0) + lost
-		if n["allies"][k] <= 0.0001:
-			_drop_ally(n, k)
 	var took := false
-	if garrison_total(n) <= 0.0001:
+	if float(n["units"]) <= 0.0001:
 		n["units"] = 0.0
 		var rest: float = h["units"]
 		if rest > 0.0:
@@ -6717,7 +6496,7 @@ func _tilt_child(h: Dictionary, n: Dictionary, ex: int) -> Dictionary:
 	f["pour"] = false
 	f["pour_lip"] = -1.0
 	f["pour_k"] = 0.0
-	for key in ["pending_loss", "eject_left", "tilt_catch", "tilt_child", "launch", "conv"]:
+	for key in ["pending_loss", "tilt_catch", "tilt_child", "launch", "conv"]:
 		f.erase(key)
 	if f.has("ghost_left"):
 		f["ghost_left"] = 0.0

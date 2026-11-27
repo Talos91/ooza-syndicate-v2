@@ -4,7 +4,7 @@ class_name Board3
 ## Kept out of rules.gd so the map worker and the rules worker never share a file.
 ##
 ## CAMERA: yaw 0, pitch CAM_PITCH, distance CAM_DIST, aimed CAM_AIM_Z m (+z, towards the viewer) off the map frame's centre
-## (layout 0, 0 = the generator's frame point (80, 40)). Start values = lab4's locked camera (Rules.LAB_CAM_*, Daniele's
+## (layout 0, 0 = the generator's frame point (80, 40)). Start values = lab4's locked camera (the lab4 locked camera, Daniele's
 ## phone test of lab3: "the maps need to be buildt at zoom in target").
 ## BOX: the ground a platform RIM (BOX_RIM = the owner band's outer edge, Rules.R + 0.14) may reach at that camera and still show
 ## inside main.pit_rect() (HUD columns, top band, bottom strip and side safe areas out) on BOTH reference phones (844 x 390 pt with

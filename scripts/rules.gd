@@ -5,14 +5,15 @@ extends RefCounted
 ## SCALE (PARAMETERS.md: army scale ~5x; vat caps are still an open question) - change here only.
 ##
 ## SIEGE was deactivated in 0.18.7 (Daniele: "brawl is our game") and DELETED from the code 2026-11-23 (owner
-## decision), with the 5-6 seat modes (FFA5, 3v3, 2v2v2): the game is BRAWL, max 4 seats (1v1, 2v2, FFA3, FFA4).
+## decision), with the 5-6 seat modes (FFA5, 3v3, 2v2v2); 2v2 (teams, allies, EJECT) and FFA 3 / 4 were deleted 2026-11-27 (Daniele, 3.0 plan:
+## "Modes: BRAWL 1v1 only").
 ## Both come back from git tag archive-2026-11-23 (SIEGE_ON, bridge_combat, the deck / platform / door /
 ## platform-fight tunables, recall, tug-of-war, sieges, goo-patch lines).
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
 const VERSION := "0.30.0-lab5"   # OOZE 3.0 WP0 (branch ooze3): main 0.25.2 (cleanup) + lab4 61c2eb6e merged, lab still on; LAB 4: zoom box + locked camera, unit speed card, Googatling range/power/ammo options, relay-kill L09R redo, count on the vat screen (LAB 1-3: rule options, joint edges, cluster ladder); history in CHANGELOG.md
-const WORLD_LAB_FLOOR := true   # the demo's lab5 floor on every map (the fog / tube work was tuned on it); was Rules.demo only
+const WORLD_PIC_FLOOR := true   # the demo's lab5 floor on every map (the fog / tube work was tuned on it); was Rules.demo only
 const LOOK_LAB2 := true   # the lab2 world look (cream decks, owner rim band, lab floor + surround) is the default (Daniele 2026-11-12: "the new status quo"); dev --look-old = the 0.24.1 look, --look=lab = test v1
 const HUD_LAB := true    # hud-lab (2026-11-13): the round-29/30 lab HUD pack (HudLab) is THE in-match HUD (false = the pre-lab HUD)
 const VERSION_NAME := "Alpha 23"
@@ -168,68 +169,24 @@ static var proto_debug: bool = VERSION.contains("-proto") or VERSION.contains("-
 static var demo: bool = VERSION.contains("-demo")
 # LAB BUILD (Daniele 2026-11-23: "build the lab with all the test so we test and tweak the game"; 05 Handoff/handoffs/LAB-BUILD-PLAN
 # 2026-11-23.md): VERSION "...-lab<n>" = grey-box test cards at oozesyndicate.com/lab/. Turns on proto_debug, NOT demo or quota.
-# Every lab rule sits behind lab_opts (read through lab_opt(): off when lab is false), never a deletion.
-# OOZE 3.0 (plan 3.0-ARCHITECTURE-PLAN sec 2.2, WP1): the lab rules ARE the game now. lab is false in every build (the VERSION
-# may still say "-lab<n>" while ooze3 is built, which only keeps proto_debug on); lab_opt() is a shim that answers the 3.0
-# values below, so files not yet ported (main, hud, map_pool) see the 3.0 game. No rule in sim.gd / seat_ai.gd reads lab_opts.
-# The shim, lab_opts and the LAB_* names go in WP6.
-static var lab: bool = false
+# OOZE 3.0 (plan 3.0-ARCHITECTURE-PLAN sec 2.2): the lab rules ARE the game now. The lab build, its cards, the lab option shim and
+# the lab-prefixed names were deleted in WP6 (2026-11-27; tag ooze3-pre-wp6 / lab4-final keep them). A VERSION "-lab<n>" only keeps
+# proto_debug on.
 # ---- OOZE 3.0 RULES (Daniele 2026-11-27, Hub Desk answers). Static vars, so old tests can run the legacy game (comments say what
 # the 0.25 game did).
 static var JOINTS := true            # joint edges (clusters): no deck, unbreakable, vat-to-vat path (0.25: no joints)
-static var RELAY_SET := true         # LAB_RELAY_ARCHIVED kinds (lift, tilt, remote, laser_relay) play as plain nodes (0.25: all kinds)
+static var RELAY_SET := true         # RELAY_ARCHIVED kinds (lift, tilt, remote, laser_relay) play as plain nodes (0.25: all kinds)
 static var GAT_REACH: float = R      # Googatling reach from its node centre = its own platform, 7.6 m (0.25: MACHINEGOON_RANGE 10 m)
 static var GAT_POWER := 1.0          # x Googatling fire rate (MACHINEGOON_RATE[tier] x this)
 static var GAT_AMMO := 1.0 / 3.0     # own garrison units spent per unit killed: 1 unit per 3 kills (0.25: 1.0, one per kill)
 static var UNIT_SPEED := 0.75        # x BRAWL unit speed and door rate: 3.0 trial, Daniele 11-27 "x0.75 (try)" (0.25: 1.0)
-static var lab_opts := {
-	"joints": true,             # joint edges (clusters): no deck, unbreakable, vat-to-vat path
-	"gat_own_platform": true,   # the Googatling fires only over its own platform
-	"gat_start": false,         # card GOOGATLING: each seat starts with a T1 Googatling next to home (Sim._setup_lab_gat_start)
-	"quota_tier": false,        # quota: 1 point per tier, relays do not launch (on by the QUOTA card only: it changes the end)
-	"relay_set": true,          # the lab relay set (rotate, retract, switch, launcher; ferry / belt as hazards)
-	"count_on_screen": false,   # lab4 job 3 (WP 6): the unit count on each vat's screen, in the world (vat_count.gd). Card COUNT SIZE
-	"count_scale": 1.0,         # vat-screen digit size x (1.0 = VatCount.DIGIT_H 1.15 m; card choices x1.0 / x1.15 / x1.3)
-	"hud_badge": true,          # the HUD count badge (Hud._badges); off only with count_on_screen (card COUNT SIZE)
-	"cam_lock": true,           # LAB ZOOM BOX: lab maps (MapPool.LAB) start at the fixed camera below, not fitted to the map
-	# lab4 jobs 2 + 5 (Daniele's phone test of lab3, points 5 and 8): numbers picked on a card's choice sheet (lab_cards "choices").
-	"unit_speed": 1.0,          # x BRAWL unit travel speed AND door rate (Rules.move_speed / exit_rate; spacing kept). Card CLUSTER HOP
-	"gat_range": 0.0,           # Googatling reach, m from its node centre; 0 = as before (gat_own_platform: R 6 m, else MACHINEGOON_RANGE 10 m)
-	"gat_power": 1.0,           # x Googatling fire rate (kills/s = MACHINEGOON_RATE[tier] x this; Sim.gat_fire_rate)
-	"gat_ammo": 1.0,            # own garrison units spent per unit killed (1 = before: one per kill; 0.5 = 1 per 2 kills; 0 = free)
-}
-const _LAB_OFF := {"joints": false, "gat_own_platform": false, "gat_start": false, "quota_tier": false, "relay_set": false,
-		"count_on_screen": false, "count_scale": 1.0, "hud_badge": true, "cam_lock": false,
-		"unit_speed": 1.0, "gat_range": 0.0, "gat_power": 1.0, "gat_ammo": 1.0}   # what the real game does (lab off)
 
 
-# LAB ZOOM BOX (lab4 job 1; Daniele's phone test of lab3: "if we trying maps more zoomed in the maps need to be buildt at zoom in
-# target ... the map size needs to allow for that zoom"). With lab_opt("cam_lock") a lab map's start view is ONE fixed camera
-# (main._lab_cam_locked): yaw 0, pitch LAB_CAM_PITCH, distance LAB_CAM_DIST, aimed LAB_CAM_AIM_Z m (+z, towards the viewer) off the map frame's centre
-# (layout 0, 0 = the generator's frame point (80, 40); a map may sit off-centre to use the wider far side). LAB_CAM_DIST = pool G's median start-view platform size x 1.18 (the half-bridge zoom gain of
-# MAP-PLANNING-NUMBERS 2026-11-22): 69.4 pt x 1.18 = 81.9 pt at 844 x 390 pt (no notch), tests/lab_box_probe.gd ref=1 (lab3's own
-# fits: L09P 68.8 m, L09C 73.5, L11P 78.7, L13C 106.2). The BOX is the ground a platform RIM
-# (LAB_BOX_RIM, Look.RIM_OUT) may reach at that camera and still show inside main.pit_rect() (the HUD columns, the top band, the
-# bottom strip and the side safe areas out) on BOTH reference phones (844 x 390 pt, 47 pt notch insets; 812 x 375 pt, 44 pt):
-# a trapezoid in metres from the frame centre, +z towards the viewer (the screen's bottom, the map's +y): far edge z = FAR_Z
-# (half-width FAR_HALF_W), near edge z = NEAR_Z (half-width NEAR_HALF_W); the far edge also keeps a 7.5 m tower in view.
-# The lab map generator (References/Ooze Syndicate maps - lab 2026-11/generator/labmaps.py) reads these lines and refuses
-# a map outside the box. Re-measure with tests/lab_box_probe.gd after changing the camera, the pit or the HUD bands.
-const LAB_CAM_PITCH := 45.0
-const LAB_CAM_DIST := 74.5
-const LAB_CAM_AIM_Z := 0.4            # probe: 0.57 (844 x 390) / 0.18 (812 x 375); the box below is the two phones' overlap
-const LAB_BOX_RIM := R + 0.14          # the platform rim (Look.RIM_OUT; 6.14 at R 6)
-const LAB_BOX_FAR_Z := -27.2          # probe: -27.95 / -27.48 from each phone's own aim (the tower top sets it, not the ground)
-const LAB_BOX_NEAR_Z := 27.2          # probe: 27.95 / 27.48
-const LAB_BOX_FAR_HALF_W := 51.8      # probe: 52.79 / 52.06 at the far edge
-const LAB_BOX_NEAR_HALF_W := 30.5     # probe: 30.75 / 30.55 at the near edge (inscribed rectangle 61.0 x 54.4 m)
-
-
-# LAB RELAY SET (option relay_set; Daniele 2026-11-23: "keep rotate, retract, switch and launcher; turn ferry and conveyor to hazard
+# RELAY SET (3.0 rule, was the lab option relay_set; Daniele 2026-11-23: "keep rotate, retract, switch and launcher; turn ferry and conveyor to hazard
 # only; replace laser relay with simply nodes starting at googatling T3 and archive the rest"): the relay kinds a lab match never
-# creates nor offers (Sim.setup turns such a node into a plain one; tests/test_lab_rules.gd checks no lab map uses them). Their
-# code stays (options, not deletions).
-const LAB_RELAY_ARCHIVED := ["lift", "tilt", "remote", "laser_relay"]
+# creates nor offers (Sim.setup turns such a node into a plain one while RELAY_SET is on; tests/test_rules3.gd checks no 3.0 map
+# uses them). Their code stays for the old maps.
+const RELAY_ARCHIVED := ["lift", "tilt", "remote", "laser_relay"]
 
 
 # LAST STAND = QUOTA (Daniele 2026-11-15, the demo prototype bd016a0d in ooze-wt/demo-river-quota; ported to the lab by WP4 with
@@ -237,9 +194,8 @@ const LAB_RELAY_ARCHIVED := ["lift", "tilt", "remote", "laser_relay"]
 # they do)"). A platform's Last Stand drop is a LAUNCH: it pays its NODE TIER (T1 1 ... T4 4; a tower / forge node its node tier)
 # to its owner's side at liftoff (neutral: nobody). Relay nodes never launch (nor fall) and junctions never score. The Very
 # Last Stand runs down to the last platform. The match ends on elimination, on a lead nobody can catch (lead > the points still
-# on the board; FFA: against the leader) or after the last launch: most quota wins, a tie goes to the side that held the last
-# platform (neutral: DRAW). On only in a lab build with lab_opt("quota_tier") (its card); a map's lastStand.quota block (rings
-# + orders) is its launch order. Main play is untouched.
+# on the board) or after the last launch: most quota wins, a tie goes to the side that held the last
+# platform (neutral: DRAW). A map's lastStand.quota block (rings + orders) is its launch order.
 # OOZE 3.0: the quota IS the Last Stand (Daniele 11-27 "Last Stand = the quota"); false = the 0.25 ring collapse (old tests).
 static var quota: bool = true
 const QUOTA_END_SPARE := 1.0         # s: the Very Last Stand's last launch lands this long before the hard end (Sim._vls_queue_next)
@@ -250,26 +206,6 @@ const QUOTA_AI_ARRIVE := 2.0         # s: the AI's line must land at least this 
 const QUOTA_AI_KEEP := 3.0           # shown units the AI leaves on its own doomed platform when it evacuates (to hold it)
 
 
-static func lab_opt(key: String) -> Variant:
-	## SHIM (OOZE 3.0, until WP6 removes it): a lab option's lab_opts value in a lab build, else the 3.0 game's value - the
-	## rule vars above for the rule keys, the 3.0 view choices for the rest. Rules never call it; views not yet ported do.
-	if lab:
-		return lab_opts.get(key)
-	match key:
-		"joints": return JOINTS
-		"relay_set": return RELAY_SET
-		"quota_tier": return quota
-		"unit_speed": return UNIT_SPEED
-		"gat_own_platform": return true
-		"gat_range": return GAT_REACH
-		"gat_power": return GAT_POWER
-		"gat_ammo": return GAT_AMMO
-		"count_on_screen": return true      # the count on every vat screen (WP4)
-		"count_scale": return 1.0           # default count size (WP4: OPTIONS stepper, Rules.COUNT_SIZES)
-		"hud_badge": return false           # the HUD count badge goes (the screen count replaces it)
-		"cam_lock": return true             # every 3.0 map starts at the fixed camera (WP2 / WP4)
-		"gat_start": return false           # lab card only, dropped
-	return _LAB_OFF.get(key)
 # KIT2 at drill node SIZE D (Daniele 2026-11-18 "also in staging gogogogo"; kit2-staging, from bg-44b4 ea662788 / demo2-kit 24c346f):
 # the platform + vats baked from Models/2.0/kit-v2-detail at x0.68 (bake_demo2.py) and the full-size column (r 1.088) with its
 # wine bands (bake_demo2_D.py) in assets/kit/kit2/. VIEW ONLY and STATIC on staging: no launcher, no QUOTA, no river (the collar,
@@ -505,36 +441,14 @@ const AI_RELAY_VALUE := 10.0         # target-score bonus for a relay node (cont
 # least AI_TRICKLE_RAIDS hostile lines of at most AI_TRICKLE_UNITS sim units in the last AI_TRICKLE_WINDOW s - and
 # never on its home or its only vats (it needs AI_MACHINEGOON_VATS vats). Monsters: Veteran / Expert launch at the
 # best target worth AI_MONSTER_VALUE sim units (garrison taken + hostile bodies kicked); the lower levels launch
-# rarely (AI_MONSTER_CHANCE per think with a ready hub) at any hostile node in reach. EJECT (team modes): only to
-# save stored allied troops from a node about to drop in the Last Stand.
+# rarely (AI_MONSTER_CHANCE per think with a ready hub) at any hostile node in reach.
 const AI_TRICKLE_UNITS := 100.0
 const AI_TRICKLE_RAIDS := 2
 const AI_TRICKLE_WINDOW := 60.0
 const AI_MACHINEGOON_VATS := 4
 const AI_MONSTER_VALUE := 60.0
 const AI_MONSTER_CHANCE := {"Training": 0.05, "Casual": 0.08, "Standard": 0.12}
-# AI TEAMWORK (0.21.5, Daniele 2026-09-28: "make sure ai take advantage of coop mode and is more strong (but not
-# unbeatable)"). Team modes only; decisions only - no economy or combat number changes. The AI seats of one team
-# share a board on the match (SeatAI._board): who is on it, the team's common enemy and open calls for a joint
-# offensive. AI_LEVELS "teamwork" tiers: 1 reinforces an ally's node that would fall from its nodes next door (it
-# covers "assist" of the ally's shortfall, after leaving the ally one think to answer, and only if it can cover most
-# of it); 2 also from any node whose help lands in time, goes after the team's common enemy (target-score bonus
-# "focus"), backs up an ally's offensive that is short, answers an ally's call (bringing its own offensive forward by
-# up to "sync" s) and moves rear surplus to the team front; 3 also calls joint offensives on the common enemy's nodes
-# it cannot take alone (it pledges its share and sends once an answer is on the way). The common enemy is the
-# weakest, most exposed rival seat, a human preferred (AI_TEAM_HUMAN_BONUS), held AI_TEAM_FOCUS_HOLD s (a current
-# focus keeps AI_TEAM_FOCUS_STICK). Measured by tests/test_ai_coop.gd (teamwork on vs off, same level).
-const AI_TEAM_FOCUS_HOLD := 20.0
-const AI_TEAM_FOCUS_STICK := 3.0
-const AI_TEAM_HUMAN_BONUS := 4.0
-const AI_TEAM_HUMAN_AFTER := 6.0       # s: a seat no AI thinks for by then is a human (every level thinks within 5 s)
-const AI_TEAM_CALL_TTL := 8.0          # s an ally's call for a joint offensive stays open
-const AI_TEAM_CALL_BONUS := 40.0       # target-score bonus for answering an ally's call (and it is taken first)
-const AI_TEAM_JOIN_BONUS := 10.0       # target-score bonus for a node an ally's line is already attacking, short
-const AI_TEAM_JOINT_SHARE := 0.35      # a joint offensive: the caller brings at least this share of what it needs
-const AI_TEAM_SURPLUS := 0.9           # a rear node this full (of its cap) sends surplus to the team front
-const AI_TEAM_SURPLUS_TRAVEL := 25.0   # s: the farthest front a surplus send goes to
-const AI_TEAM_DEFEND_LATE := 4.0       # s: an ally's node is reinforced only if help lands at most this long after the threat
+const AI_GUARD_LATE := 4.0             # s: a node is reinforced only if help lands at most this long after the threat
 
 # LAST STAND (GAME-RULES sec10; Daniele 2026-09-25: 2:00 "seems ok" for now, not 3:00). The method
 # (inward / outward / chaos, from the map's eligible list) is hidden until the start, then the
@@ -611,7 +525,7 @@ static var PROD := {1: 5.0 * BRAWL_TRIAL_15, 2: 8.0 * BRAWL_TRIAL_15, 3: 12.0 * 
 # WorldLocals sends no Local to a neutral node (its line and its match-start march wait for the capture).
 const NEUTRAL_REGEN := false
 # CATCH-UP (Daniele, 2026-10-27: "include both in 0.23.15: the +15 % catch-up for the trailing side"; balance study: the node
-# leader at 2:00 won 77 %): while a side (a seat, or a team in team modes) holds fewer than CATCHUP_NODE_RATIO of the leading
+# leader at 2:00 won 77 %): while a side (a seat) holds fewer than CATCHUP_NODE_RATIO of the leading
 # side's nodes, its vats produce x CATCHUP_PRODUCTION (vats only: not forges, not neutral regen). Strictly under half: exactly
 # half gets nothing. Re-checked every step (Sim._catchup); lessons and campaign missions keep it off (Sim.catchup_on).
 const CATCHUP_PRODUCTION := 1.15
@@ -695,7 +609,7 @@ static var forge_bonus: float = FORGE_BONUS_DEFAULT  # live-tunable (Alpha 11: +
 # MONSTER_SPEED of the BRAWL unit speed, kicks every unit on its decks off the bridge (friend or foe), passes
 # through the nodes on the way (their garrisons untouched; lines crossing those platforms are kicked too) and takes the end node empty (a friendly end node loses a tier instead). Nothing
 # can shoot it; only a fall kills it. MONSTER_TAKE_MAX (Daniele 2026-10-27, Ooze Desk: "a monster kills up to 40 defenders"): at
-# the end node it kicks off at most this many defenders (garrison + stored allied troops, shared in proportion); a node holding
+# the end node it kicks off at most this many defenders (its garrison); a node holding
 # more keeps its owner and the rest of its troops. The decks on the way are not capped.
 const MONSTER_TAKE_MAX := 200.0           # 40 shown
 static var MONSTER_HUB_COST := 150        # 30 shown
@@ -1207,10 +1121,7 @@ static func skill_slot_id(faction: String, loadout: Dictionary, slot: String) ->
 # 0 never, 1 reacts to enemies on its decks, 2 also fires ahead (where lines will be when the deck
 # moves), 3 also opens shorter routes to its targets. intel (0.18.10, Daniele 2026-09-27: "Veteran + Expert only"):
 # 1 = its garrison estimates count the defender's forge (attack and the -20 % defence), Fortify / Aegis and faction
-# stats (health, garrison, attack); 0 keeps the blind spot (the defender's health only). Teamwork (0.21.5, team
-# modes only, see AI_TEAM_*): "teamwork" 0-3 how much it plays with its allies, "focus" the target-score bonus for the
-# team's common enemy, "assist" the share of an ally's shortfall it covers when an allied node is attacked, "sync" the
-# seconds it brings its next offensive forward to answer an ally's call. Training and Casual barely coordinate.
+# stats (health, garrison, attack); 0 keeps the blind spot (the defender's health only).
 # Expert's coordination is 2 since 0.21.5 (Daniele 2026-09-28: the five levels must be "a nice scale for a new
 # player"): a third, farther node in each offensive left it thin and made Expert win less vs Standard than
 # Veteran (67 vs 72 %); with 2 the curve is strictly monotonic (tests/test_ai_curve.gd).
@@ -1235,23 +1146,23 @@ const AI_GUARD_COVER := 0.8                  # guard 2+: reinforce only if the h
 const AI_LEVELS := {
 	"Training": {"period": 5.0, "coordination": 1, "error": 0.40, "observe": 10.0, "grace": 75.0, "attack_gap": 22.0,
 			"forecast": 0.0, "choice": 4, "invest": 26.0, "margin": 1.5, "relays": 0, "intel": 0,
-			"teamwork": 0, "focus": 0.0, "assist": 0.0, "sync": 0.0, "guard": 0, "guard_share": 1.0, "guard_ahead": 0.0,
+			"guard": 0, "guard_share": 1.0, "guard_ahead": 0.0,
 			"shortcut": 0.0},
 	"Casual": {"period": 4.0, "coordination": 1, "error": 0.32, "observe": 8.0, "grace": 50.0, "attack_gap": 17.0,
 			"forecast": 0.2, "choice": 3, "invest": 22.0, "margin": 1.35, "relays": 0, "intel": 0,
-			"teamwork": 1, "focus": 0.0, "assist": 0.3, "sync": 0.0, "guard": 1, "guard_share": 1.0, "guard_ahead": 12.0,
+			"guard": 1, "guard_share": 1.0, "guard_ahead": 12.0,
 			"shortcut": 0.0},
 	"Standard": {"period": 2.5, "coordination": 2, "error": 0.27, "observe": 7.0, "grace": 45.0, "attack_gap": 15.0,
 			"forecast": 0.4, "choice": 3, "invest": 18.0, "margin": 1.2, "relays": 1, "intel": 0,
-			"teamwork": 2, "focus": 10.0, "assist": 0.9, "sync": 3.0, "guard": 2, "guard_share": 0.5, "guard_ahead": 20.0,
+			"guard": 2, "guard_share": 0.5, "guard_ahead": 20.0,
 			"shortcut": 0.0},
 	"Veteran": {"period": 1.8, "coordination": 2, "error": 0.18, "observe": 4.0, "grace": 20.0, "attack_gap": 9.0,
 			"forecast": 0.6, "choice": 2, "invest": 15.0, "margin": 1.1, "relays": 2, "intel": 1,
-			"teamwork": 3, "focus": 16.0, "assist": 1.0, "sync": 6.0, "guard": 3, "guard_share": 0.4, "guard_ahead": 25.0,
+			"guard": 3, "guard_share": 0.4, "guard_ahead": 25.0,
 			"shortcut": 3.0},
 	"Expert": {"period": 1.3, "coordination": 2, "error": 0.12, "observe": 3.0, "grace": 12.0, "attack_gap": 6.5,
 			"forecast": 0.9, "choice": 1, "invest": 12.0, "margin": 1.2, "relays": 3, "intel": 1,
-			"teamwork": 3, "focus": 18.0, "assist": 1.0, "sync": 8.0, "guard": 3, "guard_share": 0.35, "guard_ahead": 30.0,
+			"guard": 3, "guard_share": 0.35, "guard_ahead": 30.0,
 			"shortcut": 2.5},
 }
 
@@ -1275,7 +1186,7 @@ static func stat(faction: String, key: String) -> float:
 
 # SEAT COLOURS for the current match (Daniele, Alpha 14: "implement faction colour selection").
 # Filled by assign_colors() at match start: your pick, the rest from the palette; "faction" mode uses
-# each seat's faction colour (Alpha 11 style); team modes give each team one hue, light and dark.
+# each seat's faction colour (Alpha 11 style).
 static var seat_colors: Dictionary = SEATS.duplicate()
 
 
@@ -1283,30 +1194,20 @@ static func seat_color(seat: String) -> Color:
 	return seat_colors.get(seat, SEATS.get(seat, NEUTRAL))
 
 
-# Player colours, Alpha 16 (Daniele: "in 2v2 and team matches the hue must be very recognisable from
-# one player to another, and in FFA the colours very different - green, red, blue, purple"). FFA: each
-# seat takes the next far-apart hue. Teams: each team is one family (cool / warm; in three-team modes
-# cool, warm and violet) and every player in it still has a clearly different hue, so you read both
-# "which team" and "which player".
+# Player colours, Alpha 16 (Daniele: "the colours very different - green, red, blue, purple"): each seat
+# takes the next far-apart hue of FFA_ORDER (BRAWL is 1v1 only since 2026-11-27: the rival takes the first
+# hue far from yours; the name FFA_ORDER stays from the free-for-all days).
 const HUES := {
 	"red": Color("#ff4545"), "green": Color("#6dff4a"), "blue": Color("#4a78ff"), "gold": Color("#ffd23f"),
 	"purple": Color("#b36bff"), "cyan": Color("#2ee6ff"), "rose": Color("#ff5ab8"), "orange": Color("#ff9a2e"),
 }
 const FFA_ORDER := ["red", "green", "blue", "gold", "purple", "cyan", "rose", "orange"]
-const TEAM_FAMILIES := [["cyan", "green", "blue"], ["red", "gold", "rose"]]   # 2v2: cyan+green vs red+gold
-const TEAM_FAMILIES_3 := [["cyan", "green", "blue"], ["red", "gold", "orange"], ["purple", "rose"]]   # three teams (2v2v2 deleted 2026-11-23; kept so 3-team map data still colours)
-const FAMILY_NAMES := {"cyan": "COOL", "red": "WARM", "purple": "VIOLET"}   # a family by its first hue
 
 
 # ONLINE ROOM COLOURS (Daniele, 0.18.7: "my gf saw herself blue in her game and me i saw myself blue";
 # his decision: the same colours on every screen). Every player picks a hue (a HUES key) in the room
-# lobby, unique in the room; in team modes each team shares one family above and every teammate has a
-# different hue of it. The host sends the seat -> hue map with the launch (Net.room_colours) and every
+# lobby, unique in the room. The host sends the seat -> hue map with the launch (Net.room_colours) and every
 # browser applies it with use_colours, so nobody is recoloured on their own screen.
-static func colour_families(team_count: int) -> Array:
-	return TEAM_FAMILIES if team_count <= 2 else TEAM_FAMILIES_3
-
-
 static func use_colours(keys: Dictionary) -> void:
 	seat_colors = {}
 	for s in keys:
@@ -1318,44 +1219,10 @@ static func _hue_gap(a: Color, b: Color) -> float:
 	return minf(d, 1.0 - d)
 
 
-static func assign_colors(seats: Array, factions: Dictionary, human: String, choice: String, teams: Dictionary) -> void:
+static func assign_colors(seats: Array, factions: Dictionary, human: String, choice: String) -> void:
 	## choice: a palette key ("A".."F") for your colour, or "faction".
 	seat_colors = {}
 	var mine: Color = FACTIONS[factions.get(human, "null")][1] if choice == "faction" else SEATS.get(choice, SEATS["A"])
-	if not teams.is_empty():
-		# your team takes the family closest to your pick (your pick first), every other team one of the
-		# remaining families in seat order (a tie keeps the first family, as before)
-		var team_ids := []
-		for s in seats:
-			if not (teams.get(s, 0) in team_ids):
-				team_ids.append(teams.get(s, 0))
-		var fams: Array = (TEAM_FAMILIES if team_ids.size() <= 2 else TEAM_FAMILIES_3).map(func(f): return f.map(func(k): return HUES[k]))
-		var best := 0
-		var best_gap: float = fams[0].map(func(c): return _hue_gap(c, mine)).min()
-		for i in range(1, fams.size()):
-			var g: float = fams[i].map(func(c): return _hue_gap(c, mine)).min()
-			if g < best_gap:
-				best_gap = g
-				best = i
-		var rest := []
-		for i in range(fams.size()):
-			if i != best:
-				rest.append(fams[i])
-		var own: Array = [mine] + fams[best].filter(func(c): return _hue_gap(c, mine) > 0.07)
-		var family := {teams.get(human, 0): own}
-		var r := 0
-		for s in seats:
-			if not family.has(teams.get(s, 0)):
-				family[teams.get(s, 0)] = rest[r % rest.size()]
-				r += 1
-		var count := {}
-		for s in ([human] + seats.filter(func(x): return x != human)):
-			var t = teams.get(s, 0)
-			var list: Array = family.get(t, rest[0])
-			var i: int = count.get(t, 0)
-			seat_colors[s] = list[i % list.size()] if i < list.size() else (list[i % list.size()] as Color).darkened(0.35)
-			count[t] = i + 1
-		return
 	var used := [mine]
 	seat_colors[human] = mine
 	for s in seats:
@@ -1381,12 +1248,9 @@ static func assign_colors(seats: Array, factions: Dictionary, human: String, cho
 # COLOUR-BLIND MODE (Daniele 2026-09-28: "yes add color blind mode in settings"; SETTINGS > DISPLAY, saved on the
 # device). At match start every seat takes its colour from these palettes instead - on your screen only (an online
 # room still sends the same hue keys to everyone). Picked so every pair a mode puts on one board stays apart under
-# protanopia, deuteranopia and tritanopia (Machado 2009 simulation, CIEDE2000; 🧩 UI's cvd.py): free-for-all pairs
-# >= 15 (the default palette's worst: 1.1, blue / purple), 2v2 / 3v3 teams >= 26 apart and teammates >= 14 (27 in
-# 2v2), 2v2v2 teams >= 21 apart and teammates >= 11. You take the first colour (your team the first family).
+# protanopia, deuteranopia and tritanopia (Machado 2009 simulation, CIEDE2000; 🧩 UI's cvd.py): every pair
+# >= 15 (the default palette's worst: 1.1, blue / purple). You take the first colour, the rival the next.
 const CB_FFA := [Color("#ff4019"), Color("#8cbcff"), Color("#ffd400"), Color("#d977a8"), Color("#19ffb2"), Color("#a666ff")]
-const CB_TEAMS := [[Color("#9077d9"), Color("#00ffea"), Color("#77b8d9")], [Color("#d95f36"), Color("#ffff66"), Color("#d9b816")]]
-const CB_TEAMS_3 := [[Color("#ff4000"), Color("#d97790")], [Color("#8c8cff"), Color("#40ffef")], [Color("#ffe28c"), Color("#ffff00")]]
 static var settings_path := "user://settings.cfg"   # tests point this elsewhere ([display] colour_blind)
 static var _colour_blind := -1                        # -1 until read
 
@@ -1442,7 +1306,7 @@ static func set_colour_blind(on: bool) -> bool:
 	return c.save(settings_path) == OK
 
 
-static func apply_colour_blind(seats: Array, teams: Dictionary, human: String) -> void:
+static func apply_colour_blind(seats: Array, human: String) -> void:
 	## After assign_colors / use_colours: COLOUR-BLIND MODE's palettes for this match's seats (nothing when it's off).
 	if not colour_blind():
 		return
@@ -1450,23 +1314,9 @@ static func apply_colour_blind(seats: Array, teams: Dictionary, human: String) -
 	for s in seats:
 		if not (s in order):
 			order.append(s)
-	if teams.is_empty():
-		for i in range(order.size()):
-			var c: Color = CB_FFA[i % CB_FFA.size()]
-			seat_colors[order[i]] = c if i < CB_FFA.size() else c.darkened(0.35)
-		return
-	var team_ids := []                                 # in order of first seat: yours first
-	for s in order:
-		if not (teams.get(s, 0) in team_ids):
-			team_ids.append(teams.get(s, 0))
-	var fams: Array = CB_TEAMS if team_ids.size() <= 2 else CB_TEAMS_3
-	var count := {}
-	for s in order:
-		var t = teams.get(s, 0)
-		var fam: Array = fams[team_ids.find(t) % fams.size()]
-		var i: int = count.get(t, 0)
-		seat_colors[s] = fam[i % fam.size()] if i < fam.size() else (fam[i % fam.size()] as Color).darkened(0.35)
-		count[t] = i + 1
+	for i in range(order.size()):
+		var c: Color = CB_FFA[i % CB_FFA.size()]
+		seat_colors[order[i]] = c if i < CB_FFA.size() else c.darkened(0.35)
 
 
 static func state_color(state: String) -> Color:
@@ -1633,7 +1483,7 @@ const PERF_BUDGET_FULL_OBJECTS := 1400
 # HudCallouts: a short callout at the node / deck / spot it is about (an outlined line + a small icon), one per
 # place, an edge arrow when that place is off screen; sizes in canvas units x Hud.ui_scale, phones floored in real
 # points (UiKit.pt_per_px). Seconds include the fade.
-const HUD_CALLOUT_LIFE := 2.6          # a map callout (monster, forge, handover, eject, a refused order at its node)
+const HUD_CALLOUT_LIFE := 2.6          # a map callout (monster, forge, a refused order at its node)
 const HUD_CALLOUT_POP := 0.16          # pop-in
 const HUD_CALLOUT_FADE := 0.45         # fade-out at the end of its life
 const HUD_CALLOUT_RISE := 14.0         # canvas units it drifts up over its life
@@ -1783,14 +1633,13 @@ const LS_RING_BREATHE := 2.4             # rad/s of its slow breath (0.6..1 of L
 const LS_RING_R := 0.35                  # m beyond the platform radius
 const LS_FRAGMENTS := 18                 # fall pieces a dropping node's decks break into (Fx._collapse; at least 1 a module; was 6 a module)
 # Under attack (CombatFx._alarm; "we need an animation that shows when a building is under attack"): YOUR node while
-# an enemy line pours in at its door - the rim on the side it comes from flickers red and short sparks jump there;
-# an ally's node the same, dimmer (team modes). On the platform's lip, never over the count badge (beside the node).
+# an enemy line pours in at its door - the rim on the side it comes from flickers red and short sparks jump there.
+# On the platform's lip, never over the count badge (beside the node).
 const ALARM_COLOR := Color("#ff3b30")
 const ALARM_ARC := 0.34                  # fraction of the rim lit, centred on the attack's side
 const ALARM_R := 1.2                     # m beyond the platform radius: the arc's outer edge (just outside the lip's bumpers)
 const ALARM_INNER := 0.9                 # its inner edge, x its outer radius (a band ~0.7 m wide)
 const ALARM_POWER := 1.5                 # your node's brightness (additive)
-const ALARM_ALLY := 0.45                 # an ally's node: x this (the arc and its sparks)
 const ALARM_FLICKER := 3.5               # Hz: bright / dim steps while it pours in
 const ALARM_DIM := 0.3                   # the dim step's brightness
 const ALARM_HOLD := 0.6                  # s the cue fades out after the last unit poured in
@@ -1822,9 +1671,4 @@ const VERSUS_ONLINE_MIN := 2.5
 const VERSUS_ONLINE_PREDRAW_FRAMES := 2     # frames the online VERSUS card is drawn before the map build starts (0.23.0)
 const VERSUS_LOBBY_MAX := 45.0             # s a DEPLOY-raised VERSUS card waits for the launch before giving the lobby back (0.23.2)
 const VERSUS_ONLINE_MAX := 20.0
-# Badges during camera motion (the Last Stand zoom "still slows the game down"): Hud._layout_badges scores 24 spots x 3
-# reaches against every platform, deck and badge (~10 ms a frame on M-39 on desktop, every frame of the 1.5 s zoom);
-# while the camera moves the badges now follow their platforms' screen position and scale, and the full layout runs
-# once the camera has held still this many frames.
-const BADGE_SETTLE_FRAMES := 2
 # --- end MATCH FEEL ---

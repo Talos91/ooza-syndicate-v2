@@ -81,7 +81,7 @@ func make(seed_value := 7) -> Array:
 		seats[int(s["node"])] = s["seat"]
 	var sim := Sim.new()
 	sim.setup(map, MapBuilder.layout(map), seats, {"A": TutorialDirector.PLAYER_FACTION, "B": TutorialDirector.RIVAL_FACTION},
-			seed_value, {}, {"A": d.loadout_for()})
+			seed_value, {"A": d.loadout_for()})
 	d.ui_fraction = d.fraction_start(0.5)
 	d.begin(sim, map, TutorialDirector.PLAYER_FACTION)
 	return [d, sim]
@@ -342,7 +342,7 @@ func test_reveal() -> void:
 	check("relay" in TutorialDirector.reveal_for(1, 3) and not "danger" in TutorialDirector.reveal_for(1, 3), "reveal B: the relay at chapter 3")
 	check("status_line" in TutorialDirector.reveal_for(1, 4) and "danger" in TutorialDirector.reveal_for(1, 4) and "send_panel" in TutorialDirector.reveal_for(1, 4),
 			"reveal C: the status line and the danger marks at chapter 4, cumulative")
-	for k in ["dock", "halos", "eject", "relay_build", "monster", "out_panel"]:
+	for k in ["dock", "relay_build", "monster", "out_panel"]:
 		check(not k in TutorialDirector.reveal_for(1, 4), "reveal: the quick start never shows '%s'" % k)
 	var r := make()
 	var d: TutorialDirector = r[0]

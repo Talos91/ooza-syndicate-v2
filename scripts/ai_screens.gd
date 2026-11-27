@@ -2,8 +2,7 @@ class_name AiScreens
 extends Control
 ## hud-43 AI SCREENS (Daniele 11-18 screen layout: "AI moods on the AI screens, no top banners"): two screens in the top corners of his
 ## frame, tilted -12 / +12 deg, each the faction AI's screen (Daniele's 2026-11-17 frame + the ai-clean AI) + its MOOD on a cream plate.
-## Who shows: 1v1 = left you (your faction's AI), right the enemy AI. 2v2 = left your team, right the other team (the face = the team
-## seat the reaction is about). FFA = left you, right the AI with the biggest reaction (queued, biggest first).
+## Who shows: 1v1 = left you (your faction's AI), right the enemy AI. (FFA deleted 2026-11-27.)
 ##
 ## AI REACTIONS (ai-reactions 2026-11-18, Daniele: "ai reactions lets implement more now is too flat"): the screen is drawn from LAYERS
 ## (assets/art/ui/ai_layers, tools/prep_ai_layers.py: glass, glitch, glow, body, eyes, shut eyes, frame), so a reaction animates the
@@ -87,7 +86,6 @@ static var _tex := {}
 
 var hud
 var sides: Array = []                       # [[seats...], [seats...]]: left, right
-var ffa := false
 var shown := ["", ""]                       # the seat each screen shows now
 var mood := ["CALM", "CALM"]                # the baseline mood (share of the map) when no reaction plays
 var cur := ["", ""]                         # the reaction playing on each screen ("" = none)
@@ -119,16 +117,7 @@ func setup(h) -> void:
 	rng.seed = 7
 	var groups: Array = hud._seat_groups()
 	var me := str(hud.human)
-	ffa = groups.size() > 2
-	if ffa:
-		var others := []
-		for g in groups:
-			for s in g:
-				if str(s) != me:
-					others.append(str(s))
-		sides = [[me], others]
-	else:
-		sides = [groups[0].map(func(s): return str(s)), (groups[1] if groups.size() > 1 else groups[0]).map(func(s): return str(s))]
+	sides = [[me], (groups[1] if groups.size() > 1 else groups[0]).map(func(s): return str(s))]
 	shown = [str(sides[0][0]), str(sides[1][0])]
 	_build_rigs()
 	if hud.sim != null:
@@ -302,8 +291,6 @@ func _rivals_of(seat: String) -> Array:
 	for s in hud.sim.factions.keys():
 		if str(s) == seat:
 			continue
-		if hud.sim.teams.has(seat) and hud.sim.teams.get(s, -1) == hud.sim.teams.get(seat, -2):
-			continue
 		out.append(str(s))
 	return out
 
@@ -328,7 +315,7 @@ func _read_events() -> void:
 				if s != "" and u >= 8.0 and u >= 0.2 * (maxf(float(hud.sim.seat_strength(s)), 0.0) + u):
 					react(s, "ARMY_LOST")
 					var rv := _rivals_of(s)
-					if rv.size() <= 2:                     # 1v1 / 2v2: the other side won that fight (FFA: nobody can tell)
+					if rv.size() == 1:                     # 1v1: the other side won that fight
 						for r in rv:
 							react(r, "ARMY_WON")
 			"collapse":
@@ -354,7 +341,7 @@ func _end(winner: String) -> void:
 		return
 	for s in hud.sim.factions.keys():
 		var seat := str(s)
-		var won: bool = seat == winner or (winner != "" and hud.sim.teams.has(seat) and hud.sim.teams.get(seat) == hud.sim.teams.get(winner, -9))
+		var won: bool = seat == winner
 		react(seat, "WIN" if won else ("LOSE" if winner != "" else "SLUMP"))
 	_ended = true
 
@@ -392,7 +379,7 @@ func _sample() -> void:
 			react(s, "NEARWIN")
 		elif ratio <= 0.4:
 			react(s, "NEARLOSS")
-	for i in range(2):                               # the baseline mood of the seat on screen (a live teammate replaces an out seat)
+	for i in range(2):                               # the baseline mood of the seat on screen
 		if cur[i] == "" and hud._seat_out(shown[i]):
 			for x in sides[i]:
 				if sim.factions.has(x) and not hud._seat_out(x):

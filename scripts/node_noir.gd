@@ -390,12 +390,3 @@ static func target_hex(ci: CanvasItem, c: Vector2, r: float, col: Color, s: floa
 			var p := c + Vector2(cos(a), sin(a)) * (rr + 8.0 * s)
 			var ta := Vector2(-sin(a), cos(a))
 			tube(ci, PackedVector2Array([p - ta * 6.0 * s, p, p + Vector2(cos(a), sin(a)) * 6.0 * s]), col, maxf(2.0 * s, 1.5), 0.7 * flick)
-
-
-static func burst(ci: CanvasItem, c: Vector2, r: float, col: Color, k: float, s: float) -> void:
-	## A capture: two hexagons blooming out of the node in the new owner's colour, k 0 -> 1, a flash of goo at the start.
-	if not sprite(ci, "node_capture_burst", c, Vector2.ONE * r * 2.0 * (0.8 + 0.7 * k), Color(col, 1.0 - k), 0.0, floor_k(ci)):
-		neon(ci, hexagon(c, r * (0.8 + 0.7 * k), PI / 6.0), col, (4.0 * (1.0 - k) + 1.0) * s, 1.0, 1.0 - k)
-		neon(ci, hexagon(c, r * (0.6 + 0.35 * k), PI / 6.0), Color.WHITE, 2.0 * s, 0.0, (1.0 - k) * 0.8)
-	if k < 0.35:
-		ci.draw_circle(c, r * 0.55, Color(col, 0.35 * (1.0 - k / 0.35)))

@@ -4,8 +4,7 @@ extends SceneTree
 ##   python server/relay.py --godot <Godot console exe> --project <this folder> --host-arg=--match-end=15
 ##   Godot --headless --path . --script res://tests/test_rematch.gd -- --relay=ws://127.0.0.1:8765
 ## Exit 0 = all passed, 2 = no match server / rounds don't end early (skipped). Covers: both votes count and the next round
-## starts; the ready list names who voted; a random-map rematch into a bigger mode fills the extra seat with the AI
-## instead of sending the room back to the lobby.
+## starts; the ready list names who voted. (The random-map rematch into a bigger mode went with FFA, 2026-11-27.)
 
 var failures := 0
 
@@ -40,13 +39,10 @@ func _wait(cond: Callable, seconds := 10.0) -> bool:
 func _build_sim(info: Dictionary) -> Sim:
 	var map := MapBuilder.load_map(info["map"])
 	var seats := {}
-	var teams := {}
 	for s in map["seats"][info["mode"]]:
 		seats[int(s["node"])] = s["seat"]
-		if info["mode"] == "2v2" and s.get("team") != null:
-			teams[s["seat"]] = int(s["team"])
 	var s := Sim.new()
-	s.setup(map, MapBuilder.layout(map), seats, info["players"], int(info["seed"]), teams, info.get("loadouts", {}))
+	s.setup(map, MapBuilder.layout(map), seats, info["players"], int(info["seed"]), info.get("loadouts", {}))
 	return s
 
 
@@ -98,21 +94,6 @@ func _run() -> void:
 	check(await _wait(func(): return int(a.match_round) == 2 and int(b.match_round) == 2 and a.active and not a.finished, 15.0),
 			"both votes count: round 2 starts for both")
 	check(await _play_round(a, b, 2), "round 2 ended")
-
-	var ffa := ""
-	var big := ""                                      # a mode with more seats than players that the pool still offers
-	for m in ["FFA3", "FFA4", "2v2"]:                  # (0.24.1's pool has no FFA3 map)
-		if not a.maps_for(m).is_empty():
-			big = m
-			ffa = a.maps_for(m)[0]
-			break
-	a.propose_rematch(ffa, big)                        # the owner's REMATCH ON A RANDOM MAP picked a bigger mode
-	b.request_rematch()
-	check(await _wait(func(): return int(a.match_round) == 3 and a.active, 15.0),
-			"a random map for more seats than players still starts (no fall back to the lobby)")
-	var ai_seats: Dictionary = a.match_info.get("ai", {})
-	check(big != "" and a.mode == big and ai_seats.size() == int(a.SLOTS[big]) - 2 and ai_seats.values().all(func(v): return v == "Standard"),
-			"the extra seats are AI (%s, ai %s)" % [a.mode, str(a.match_info.get("ai", {}))])
 
 	a.leave()
 	b.leave()

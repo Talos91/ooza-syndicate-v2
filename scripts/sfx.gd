@@ -257,7 +257,7 @@ func _process(_delta: float) -> void:
 			continue                                   # another seat's secret (Ghost Line): not ours to hear
 		match str(ev.get("type", "")):
 			"capture":
-				# by side (code audit A3): you / an ally took it = capture, you / an ally lost it = node lost, the
+				# by side (code audit A3): you took it = capture, you lost it = node lost, the
 				# rivals among themselves (or off a neutral) = a quiet generic cue, only when on screen
 				var id := int(ev["node"])
 				if taken.has(id):

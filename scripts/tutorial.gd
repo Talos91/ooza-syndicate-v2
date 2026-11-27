@@ -128,11 +128,11 @@ const LINES := {
 # strength (your total, RIVALS), notices (toasts), relay (the double-tap fire, SWITCH, the relay line and outcome
 # preview, the badge's relay state, ready glow and cue), relay_build (LASER / FORGE / MONSTER HUB), forge_readout,
 # monster, monster_icon, status_line, danger (the floating Last Stand symbols), dock, floaters (the rising
-# "+ CAPTURED" / "LOST" node text), and - never in a 1v1 tutorial - halos and eject (the team parts).
+# "+ CAPTURED" / "LOST" node text).
 const REVEAL_BASE := ["map", "badges", "drag", "clock", "topbar"]
 const REVEAL_RELAY := 3                           # the quick start's reveal stage for the relay (TUTORIALS[1]["reveal"])
 const ALL_KEYS := ["map", "badges", "drag", "clock", "upgrade_arrow", "send_panel", "upgrade", "machinegoon", "rival_counts", "strength",
-		"notices", "relay", "relay_build", "forge_readout", "monster", "monster_icon", "status_line", "danger", "dock", "halos", "eject",
+		"notices", "relay", "relay_build", "forge_readout", "monster", "monster_icon", "status_line", "danger", "dock",
 		"out_panel", "floaters"]
 
 # ---------------------------------------------------------------- the tutorials (data)

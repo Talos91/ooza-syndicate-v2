@@ -1939,13 +1939,12 @@ func step(dt: float, _draw := true) -> void:
 
 
 func vat_rate(n: Dictionary) -> float:
-	## L2 (read only, no rule): the node's production now in shown units / s - an owned vat under its cap (allied troops
-	## count, as Sim.step), a neutral vat regrowing to its garrison; 0 at the cap or with no vat
+	## L2 (read only, no rule): the node's production now in shown units / s - an owned vat under its cap (as Sim.step), a neutral vat regrowing to its garrison; 0 at the cap or with no vat
 	var sim := wl.sim
 	if not Sim.has_vat(n) or sim.collapsed.get(n["id"], false):
 		return 0.0
 	if n["owner"] != "":
-		if sim.garrison_total(n) >= float(Rules.CAPS[n["tier"]]) - 0.001:
+		if float(n["units"]) >= float(Rules.CAPS[n["tier"]]) - 0.001:
 			return 0.0
 		return Rules.shown_f(sim._base_production(n) * float(sim._prod_info(n)[0]))
 	if Rules.NEUTRAL_REGEN and float(n["units"]) < float(n.get("regen_cap", Rules.NEUTRAL_UNITS.get(n["tier"], 0))):

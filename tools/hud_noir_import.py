@@ -20,7 +20,7 @@ Layers are grouped into parts by name:
     anything else          a part of its own (status_pill, skill_vessel_liquid, alert_sign_red, build_bar_fill, ...)
 Writes
     assets/ui/hud_noir/<file>.png                  the layers (at 3x the phone shot)
-    scripts/hud_noir_data.gd                       PARTS: what HudNoir / SkinBox / HudLiquid / BadgeLayer read
+    scripts/hud_noir_data.gd                       PARTS: what HudNoir / SkinBox / HudLiquid read
 then run Godot `--import` once, then this script again (it turns mipmaps on in the new .import files), then `--import`.
 """
 import json
@@ -33,6 +33,9 @@ GAME = Path(__file__).resolve().parent.parent
 OUT = GAME / "assets/ui/hud_noir"
 DATA = "scripts/hud_noir_data.gd"
 LAYERS = ("_rim", "_ooze", "_shine")
+# WP6 (2026-11-27): layers of parts the game no longer draws (the HUD node badges, their build bar, the Last Stand alarm signs,
+# the upgrade chip, the capture burst - all moved to the vat screens) are not copied, so a re-run keeps them out of the pack.
+RETIRED = ("alert_sign_", "badge", "build_bar_", "upgrade_chip_", "node_capture_burst")
 NODE = False
 
 
@@ -58,7 +61,7 @@ def main(delivery: Path) -> int:
             continue
         for line in pl.read_text(encoding="utf-8").splitlines():
             cells = [c.strip() for c in line.split("|")]
-            if len(cells) < 5 or not cells[0].endswith(".png"):
+            if len(cells) < 5 or not cells[0].endswith(".png") or cells[0].startswith(RETIRED):
                 continue
             sl = nums(cells[2])
             rows[cells[0][:-4]] = {

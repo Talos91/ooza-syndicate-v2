@@ -41,13 +41,10 @@ func _build_sim(info: Dictionary) -> Sim:
 	## What main._start_online builds on a guest: the room's map, seats and seed, no AI.
 	var map := MapBuilder.load_map(info["map"])
 	var seats := {}
-	var teams := {}
 	for s in map["seats"][info["mode"]]:
 		seats[int(s["node"])] = s["seat"]
-		if info["mode"] == "2v2" and s.get("team") != null:
-			teams[s["seat"]] = int(s["team"])
 	var sim := Sim.new()
-	sim.setup(map, MapBuilder.layout(map), seats, info["players"], int(info["seed"]), teams, info.get("loadouts", {}))
+	sim.setup(map, MapBuilder.layout(map), seats, info["players"], int(info["seed"]), info.get("loadouts", {}))
 	return sim
 
 

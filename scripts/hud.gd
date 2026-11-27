@@ -2,17 +2,15 @@ class_name Hud
 extends CanvasLayer
 ## The match interface (2.0): Alpha 11's chrome and layout brought over in full - top bar (emblem,
 ## your total, timer, rivals, strength bar), pause menu, side send panel with the fractions and the
-## selected vat's count, node badges floating beside their nodes (count - the owner's emblem in the
-## owner's colour instead on enemy nodes when enemy counts are hidden -, emblem, tier,
-## relay state, build bar), the
+## selected vat's count (OOZE 3.0: each node's count and notices are on its vat screen, vat_count.gd), the
 ## ring inspector with costed actions, the skill dock (SkillDock: ACTIVE / MAP / ULTIMATE when ABILITIES
-## are on; its target highlights sit on a layer over the badges, under the panels),
+## are on; its target highlights sit on a layer over the map, under the panels),
 ## placed messages (HudCallouts: at the node / deck / chip / slot they are about - no notification box), the
 ## Last Stand status line and drop order, the results panel with match stats, and the debug panel. A human seat
 ## is named by the player's name wherever a seat shows (main.seat_who), an AI seat by faction and AI level.
 ## TUTORIAL (TUTORIAL-DESIGN.md §6, reveal as you go): reveal(keys) hides every part a lesson has not reached
 ## yet (TutorialDirector.ALL_KEYS) - by not showing it, never by disabling a control; outside the tutorial
-## nothing is gated. Rect getters for the coach's spotlight: action_rect, send_button_rect, badge_rect,
+## nothing is gated. Rect getters for the coach's spotlight: action_rect, send_button_rect,
 ## dock_slot_rect; extra_ui_rects (the coach card) count as UI for pointer_over_ui.
 
 const UI_FONT := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")
@@ -27,8 +25,8 @@ var human := "A"
 var root: Control
 var top_panel: PanelContainer
 var stats_label: Label                 # 0.19.2 spec H6: the clock, centred in the new top bar
-var top_left: HBoxContainer            # your side (you first, then teammates)
-var top_right: HBoxContainer           # every other team, grouped with a wider gap between groups
+var top_left: HBoxContainer            # your side (you)
+var top_right: HBoxContainer           # every rival, with a wider gap between them
 var top_chips := {}                    # seat -> {panel, emblem, label}
 var pause_button: Button
 var music_button: Button              # MUSIC (0.22.x): left of PAUSE, a drawn note glyph (Music.toggle_on())
@@ -37,10 +35,6 @@ var side_panel: PanelContainer
 var side_box: VBoxContainer
 var count_label: Label
 var send_tank: SendTank                 # ui-node: the SEND tank (one container, 4 levels)
-var badges := {}                     # node id -> {panel, label, sub, emblem, build, owner, count_w, sub_w, look}
-var _badge_px := Vector2.ZERO        # the one badge size on this screen (BADGE_SIZE x ui_scale)
-var badge_layer: BadgeLayer          # HUD pass: draws every badge, one pass per kind (see setup)
-var _badge_model: Control            # the badges' layout nodes: hidden, never drawn
 var inspector: Control
 var inspector_id := -1
 var inspector_label: Label
@@ -61,7 +55,7 @@ var status_label: Label                # Last Stand status under the top bar
 var catchup_tag: PanelContainer        # CATCH-UP (Rules.CATCHUP_*): "CATCH-UP +15 %" under your chips while your side trails
 var map_title: Label
 var dock: SkillDock
-var skill_targets: Control             # the dock's target highlights: over the badges, under the panels
+var skill_targets: Control             # the dock's target highlights: over the map, under the panels
 var overlay: HudOverlay                # 0.19.0: monster reach, halo rings, relay-outcome preview, danger symbols
 var action_buttons: Dictionary = {}    # stable action name -> the inspector's Button (tutorial spotlight, spec I)
 var switch_ring: Control                # 0.19.0: the SWITCH button's READY / cooldown ring (SwitchRing)
@@ -114,28 +108,7 @@ static func panel_style(color: Color = Color("276578")) -> StyleBoxFlat:
 	return s
 
 
-static func badge_style(color: Color) -> StyleBoxFlat:
-	## Alpha 19 (Daniele: "make them a bit transparent so they don't overpower the look of what's near
-	## them"): a see-through box and a softer rim; the text keeps its black outline, so it stays crisp.
-	var s := panel_style(Color(color, 0.8))
-	s.bg_color = Color(0.063, 0.078, 0.098, 0.42)
-	s.set_corner_radius_all(9)
-	s.set_content_margin_all(0)
-	s.set_border_width_all(1)
-	return s
-
-
 const EMBLEM_TINT := preload("res://shaders/emblem_tint.gdshader")
-const BADGE_EMBLEM := Vector2(12, 10)          # under a BRAWL count (Alpha 11)
-const BADGE_EMBLEM_OWNER := Vector2(24, 24)    # in place of a hidden count: about the count's own height
-# Alpha 19: every node badge is one fixed box (x ui_scale) sized for its largest normal content - a
-# 3-digit count over an emblem and a short sub line; longer text steps its font down, then clips.
-# 0.23.6 (Daniele: "make numbers of units in structure bigger"): count 16 -> 22 px, the box 44 x 33 -> 54 x 40;
-# 0.23.7 ("another 10 %"): count 24 px, the box 59 x 44.
-const BADGE_SIZE := Vector2(59, 44)
-const BADGE_COUNT_FONT := 24
-const BADGE_SUB_FONT := 9
-const BADGE_PAD := 3.0                         # side margin inside the box
 # 0.19.2 spec H6: the top bar's fixed sizes (fits 844 x 390 pt with up to 6 seats: 1 (you) + 5 rivals,
 # ~64 px a chip, well under half of 844 either side of the clock)
 const TOP_CHIP_W := 58.0
@@ -155,7 +128,7 @@ static func tint_emblem(rect: TextureRect, color: Color) -> void:
 
 
 static func emblem_texture(faction: String) -> Texture2D:
-	## A faction emblem for the HUD's small spots (badges, inspector, toasts): the race emblems v2, from their one
+	## A faction emblem for the HUD's small spots (inspector, toasts): the race emblems v2, from their one
 	## source (UiKit.emblem_mip - mipmapped, the small levels lifted), tinted in the seat colour by tint_emblem.
 	return UiKit.emblem_mip(faction)
 
@@ -214,27 +187,11 @@ func style_panel(p: Control, accent: Color = Color("276578")) -> void:
 
 
 func _seat_groups() -> Array:
-	## [[you, your teammates...], [a rival team/seat], ...] (0.19.2 spec H6: "team modes group chips by
-	## team"; FFA - no sim.teams entries - puts every rival in its own singleton group).
-	var has_teams: bool = sim.teams.has(human)
-	var mine: int = int(sim.teams.get(human, -999))
-	var my_group := [human]
-	var others := {}
-	var order := []
+	## [[you], [a rival], ...]: every rival in its own singleton group (no teams since 2026-11-27).
+	var groups := [[human]]
 	for seat in sim.factions.keys():
-		if seat == human:
-			continue
-		if has_teams and int(sim.teams.get(seat, -998)) == mine:
-			my_group.append(seat)
-		else:
-			var key = sim.teams[seat] if sim.teams.has(seat) else seat
-			if not others.has(key):
-				others[key] = []
-				order.append(key)
-			others[key].append(seat)
-	var groups := [my_group]
-	for k in order:
-		groups.append(others[k])
+		if seat != human:
+			groups.append([seat])
 	return groups
 
 
@@ -300,62 +257,6 @@ func setup(m: Node3D) -> void:
 	UiTheme.match_dark(true)
 	HudNoir.setup(str(sim.factions.get(human, "vex")), ui_scale)
 	var accent := HudNoir.accent
-	# badges first (under everything else). Alpha 19 (Daniele: "they all look different size - we should
-	# make them have fixed size and have their inside content never get out of the box boundaries"):
-	# one fixed box per ui_scale, its parts placed by hand (_place_badge) and clipped to it.
-	# HUD pass (the stretch, Alpha 21 OPT-RENDER: the badges were ~70 of the HUD's ~165 draw calls): these
-	# nodes are the layout only - under a hidden holder, never drawn; BadgeLayer draws every badge from them,
-	# one pass per kind (boxes, bars, emblems, words), so the 2D renderer batches each pass.
-	_badge_px = (BADGE_SIZE * ui_scale).round()
-	if HudLab.on():                                  # hud-lab: LOCKED 28 x 21 pt on every node (Daniele 2026-11-13)
-		_badge_px = (HudLab.BADGE_PT * HudLab.u_of(self)).round()
-	badge_layer = BadgeLayer.new()
-	root.add_child(badge_layer)                           # where the badges always drew: under everything else
-	_badge_model = Control.new()
-	_badge_model.visible = false
-	_badge_model.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(_badge_model)
-	var sb_bg := StyleBoxFlat.new()                         # shared by every build bar
-	sb_bg.bg_color = Color(0, 0, 0, 0.55)
-	var bb_fill := StyleBoxFlat.new()
-	bb_fill.bg_color = Rules.state_color("build")
-	for n in sim.nodes:
-		var badge := Panel.new()
-		badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		badge.clip_contents = true
-		badge.custom_minimum_size = _badge_px
-		badge.size = _badge_px
-		var l := text_label("", BADGE_COUNT_FONT)
-		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		l.clip_text = true
-		l.add_theme_constant_override("outline_size", 3)
-		l.add_theme_color_override("font_outline_color", HudSkin.outline())
-		badge.add_child(l)
-		var sub := text_label("", BADGE_SUB_FONT, HudSkin.sub_ink())
-		sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		sub.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		sub.clip_text = true
-		sub.add_theme_constant_override("outline_size", 2)  # crisp on the see-through box
-		sub.add_theme_color_override("font_outline_color", HudSkin.outline())
-		badge.add_child(sub)
-		var emblem := seat_emblem("", BADGE_EMBLEM)     # classic: Alpha 11's faction emblem under the count;
-		emblem.visible = false                          # the owner's emblem in the count's place where it is hidden
-		badge.add_child(emblem)
-		var build_bar := ProgressBar.new()
-		build_bar.show_percentage = false
-		build_bar.custom_minimum_size = Vector2.ZERO
-		build_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		build_bar.add_theme_stylebox_override("fill", bb_fill)
-		build_bar.add_theme_stylebox_override("background", sb_bg)
-		var inset := 7.0 * ui_scale                     # clear of the rounded corners
-		build_bar.position = Vector2(inset, _badge_px.y - 6.5 * ui_scale)   # Alpha 24: the pack's pill bar (BadgeLayer: B19 / B20)
-		build_bar.size = Vector2(_badge_px.x - 2.0 * inset, 4.0 * ui_scale)
-		badge.add_child(build_bar)
-		_badge_model.add_child(badge)
-		badges[n["id"]] = {"panel": badge, "label": l, "sub": sub, "emblem": emblem, "build": build_bar, "owner": "?",
-				"count_w": 0.0, "sub_w": 0.0, "sub_small": false, "wide": false, "shape": "", "look": -1}
-	badge_layer.setup(self)
 	skill_targets = SkillDock.new_layer()
 	root.add_child(skill_targets)
 	overlay = HudOverlay.new()
@@ -1026,7 +927,7 @@ func top_used() -> float:
 
 
 func bottom_used() -> float:
-	# the map title and hint line (badges are fitted by the camera); Alpha 24: the skill dock is a column on the right now
+	# the map title and hint line; Alpha 24: the skill dock is a column on the right now
 	# (right_used), no longer a bar across the bottom
 	return margins.w + 30.0 * ui_scale
 
@@ -1052,28 +953,6 @@ func pointer_over_ui(p: Vector2) -> bool:
 		if inspector.has_meta("close") and (inspector.get_meta("close") as Control).get_global_rect().has_point(p):
 			return true
 	return end_panel.visible or pause_panel.visible or out_panel.visible
-
-
-func badge_at(p: Vector2) -> int:
-	## Alpha 11: badges are explicit, unobstructed selection targets. A direct hit wins; otherwise the
-	## nearest badge whose grown (thumb-sized on mobile) rect holds the point, so overlapping grown
-	## rects of neighbouring badges never pick the wrong node.
-	var pad := 20.0 if mobile else 4.0
-	var best := -1
-	var best_d := INF
-	for id in badges:
-		var panel: Control = badges[id]["panel"]
-		if not panel.visible:
-			continue
-		var r := panel.get_global_rect()
-		if r.has_point(p):
-			return id
-		if r.grow(pad).has_point(p):
-			var d := Vector2(maxf(maxf(r.position.x - p.x, p.x - r.end.x), 0.0), maxf(maxf(r.position.y - p.y, p.y - r.end.y), 0.0)).length()
-			if d < best_d:
-				best_d = d
-				best = id
-	return best
 
 
 # ------------------------------------------------------------------ per frame
@@ -1211,8 +1090,6 @@ func sync(dt: float, cam: Camera3D) -> void:
 		count_label.text = "%d / %d" % [Rules.shown(floorf(sim.nodes[source]["units"] * main.fraction)), Rules.shown(sim.nodes[source]["units"])]
 	else:
 		count_label.text = "DRAG A VAT"
-	if _badges(cam):
-		badge_layer.refresh()                             # perf pass (audit B4): only when a badge changed
 	overlay.sync(dt)
 	_sync_monster_icon(cam, 0.0 if main.paused else dt)
 	_check_out()
@@ -1241,246 +1118,10 @@ func sync(dt: float, cam: Camera3D) -> void:
 
 func _font_color(l: Control, c: Color) -> void:
 	## add_theme_color_override("font_color", c) only when it changes (perf pass, audit B3: every override is a
-	## THEME_CHANGED - the label re-shaped - and these ran for every badge on every frame).
+	## THEME_CHANGED - the label re-shaped).
 	if (l.get_meta("font_color") if l.has_meta("font_color") else null) != c:   # (4.6: a null default still errors)
 		l.set_meta("font_color", c)
 		l.add_theme_color_override("font_color", c)
-
-
-func _badges(cam: Camera3D) -> bool:
-	## Lays out and places every node badge; true when anything BadgeLayer draws changed (it redraws only then).
-	var order_shown := sim.last_stand_active
-	for n in sim.nodes:
-		var b: Dictionary = badges[n["id"]]
-		var panel: Control = b["panel"]
-		if sim.collapsed.get(n["id"], false) or n.get("node_kind", "") == "junction":   # JUNCTION: no badge
-			panel.visible = false
-			continue
-		if main.get("vat_count") != null:                # OOZE 3.0 (WP4): the count is on the node's count screen (vat_count.gd), no badge
-			panel.visible = false
-			continue
-		# ui-neon (Daniele 2026-11-02, "unit count HUD disappearing"): a warned node keeps its badge - the count stays readable
-		# all through the Last Stand (3.0: no badge; the screen counts the launch down, vat_count.gd).
-		# (0.19.0 hid the badge here, when the sign replaced a round badge; with a whole ring warned at once that hid 6 counts.)
-		panel.visible = true
-		var owner: String = n["owner"]
-		if b["owner"] != owner:
-			b["owner"] = owner
-			var col := Rules.seat_color(owner) if owner != "" else Rules.NEUTRAL
-			panel.add_theme_stylebox_override("panel", badge_style(col))
-			_font_color(b["label"] as Label, HudSkin.ink(col) if owner != "" else HudSkin.neutral_ink())
-		var label: Label = b["label"]
-		var sub: Label = b["sub"]
-		var masked := not (owner == "" or sim.allied(owner, human) or (not Rules.hide_enemy_counts and shows("rival_counts")))   # Brawl = Alpha 11: every count, unless hidden (TUTORIAL: from L3)
-		# POWERS (0.22.2): a rival's Fog of War over this node - "?" for its count, no owner emblem, no tags or build bar
-		# (your own side's nodes stay readable to you; Sim.node_hidden is true only outside the caster's side)
-		var fogged: bool = sim.node_hidden(n["id"], human) and (owner == "" or not sim.allied(owner, human))
-		if fogged:
-			masked = false
-		label.visible = not masked
-		var inner := _badge_px.x - 2.0 * BADGE_PAD * ui_scale
-		var has_allies := sim.allied_units(n) > 0.0001   # GAME-RULES sec11: team members see total + own
-		if fogged:
-			b["count_w"] = _fit_text(label, "?", BADGE_COUNT_FONT, inner, b["count_w"])
-		elif not masked:
-			# POWERS: a rival's count as a rival should see it - a Ghost Line's source drops as a real send would
-			var shown_units: float = sim.garrison_total(n) if has_allies else sim.visible_units(n, human)
-			b["count_w"] = _fit_text(label, str(Rules.shown(shown_units)), BADGE_COUNT_FONT, inner, b["count_w"])
-		# no numbers on enemy nodes: the owner's emblem in the owner's colour stands in the count's place
-		# (Daniele: "don't use A B and C but use emblems in the color of the owner")
-		var emb: TextureRect = b["emblem"]
-		var show_emb := owner != "" and not fogged
-		if show_emb and emb.get_meta("f", "") != sim.factions.get(owner, ""):
-			emb.set_meta("f", sim.factions.get(owner, ""))
-			emb.texture = emblem_texture(str(sim.factions.get(owner, "null")))
-		if show_emb and emb.get_meta("seat", "") != owner:
-			emb.set_meta("seat", owner)
-			tint_emblem(emb, Rules.seat_color(owner))
-		sub.visible = (n["build_kind"] != "" or sim.last_stand_active) and not fogged   # (POWERS: fog)
-		if Calm.labels() and not fogged and owner != "" and n["relay"] == "" and str(n["structure"]) in ["vat", "machinegoon"]:
-			sub.visible = true                          # calm-pass B: the tier chip folded into the badge ("T3" / "GAT2")
-		# Alpha 19 (Daniele: "some text is too long, like the word FINAL isn't necessary"): two compact
-		# tags at most - what the node is (relay glyph + state, CN3 cannon, FRG forge, T2 tier) and the
-		# one clock that matters most: the falling countdown (a down triangle), the relay's !n switch
-		# warning, the build's seconds (over its bar), your relay's ns cooldown, else the Last Stand
-		# drop ring (R2 / #2). The node that never falls shows nothing extra: the banner says it.
-		var what := ""
-		if n["relay"] != "":
-			var st := sim.relay_state_key(n, n["relay_index"])
-			if Rules.is_proto(n["relay"]):                # RELAYS 3.0: OPEN 3 / A>B / UP / EXIT 2 / AIM 7 / ARMED 5
-				st = sim.proto_tag(n["id"])
-			what = Rules.RELAY_GLYPH[n["relay"]] + (("OUT" if st == "out" else "IN" if st == "retract" else st.to_upper()) if shows("relay") else "")
-			if n["relay"] == "laser_relay":                     # LASER RELAY: ⊛LASER / ⊛FORGE while one stands (0.25.3: a forge too)
-				what = Rules.RELAY_GLYPH["laser_relay"] + (str(STRUCT_LABEL[n["structure"]]).get_slice(" ", 0) if n["structure"] in ["laser", "forge"] and shows("relay") else "")
-			if n["relay"] == "launcher":                  # LAUNCHER TURRET: its tier first (➶T2 LOAD 40/100)
-				what = Rules.RELAY_GLYPH["launcher"] + "T%d " % int(n["tier"]) + (st.to_upper() if shows("relay") else "")
-		elif n["structure"] == "machinegoon":
-			what = "GAT%d" % n["tier"]                   # GOOGATLING (was MGN, the Machinegoon)
-		elif Sim.vat_paused(n):                             # VAT COLUMN: the blueprint fills, the vat makes nothing
-			what = "PAUSED"
-		else:
-			what = "T%d" % n["tier"]
-		# 0.20.13 (Daniele's 2v2 co-op playtest: "i sent troops to her node and except the count going up
-		# i couldn't see any other indicator"): your own share on an ally's node stands out in your own
-		# colour, not the sub-label's default light blue - reset every frame, or a stale override would
-		# bleed into a later node that has none.
-		var sub_col := HudSkin.sub_ink()
-		if has_allies and not masked:                       # GAME-RULES sec11: the total is shown above -
-			if owner == human:                               # this names the ally share / your own share of it
-				what += "+A%d" % Rules.shown(sim.allied_units(n))
-			else:
-				var mine := sim.allied_units(n, human)
-				if mine > 0.0001:
-					what += " +%d" % Rules.shown(mine)
-					sub_col = HudSkin.ink(Rules.seat_color(human))
-		_font_color(sub, sub_col)
-		var clock := ""
-		var worst := ""                                     # the clock's widest form (see below)
-		if sim.is_warned(n["id"]) and not shows("danger"):   # ui-neon: the alarm sign shows the seconds (no second copy here) -
-			clock = "▼%d" % int(ceil(sim.drop_in(n["id"]) if sim.v3 else sim.last_stand_warn_t))   # so a warned relay keeps its !n
-			worst = "▼88"
-		elif n["relay"] != "" and n["relay_phase"] == "warning":
-			clock = "!%d" % int(ceil(n["relay_t"]))
-			worst = "!8"
-		elif Sim.vat_paused(n) and not Calm.labels():       # VAT COLUMN: "PAUSED 62%" over the build bar (calm-pass B: the bar says the %)
-			clock = "%d%%" % int(floor(100.0 * Sim.build_progress(n)))
-			worst = "88%"
-		elif Sim.vat_paused(n):
-			pass
-		elif n["build_kind"] != "":
-			clock = "%ds" % int(ceil(n["build_timer"]))
-			worst = "88s"
-		elif n["relay"] != "" and n["relay_cd"] > 0.0 and owner == human:
-			clock = "%ds" % int(ceil(n["relay_cd"]))
-			worst = "88s"
-		elif order_shown:
-			var k := sim.drop_order_of(n["id"])
-			if k > 0:
-				clock = ("R%d" if sim.v3 else "#%d") % k
-				worst = clock
-		var small := show_emb and not masked               # Alpha 11's emblem shares the sub line
-		if sub.visible:
-			# a sub line that would drop under 8 pt beside the emblem takes the whole row instead (the
-			# owner still reads from the rim colour). Judged on the clock's widest form, so a countdown
-			# does not make the emblem come and go as its digits change.
-			var shape := what + (" " + worst if worst != "" else "")
-			if shape != b["shape"] or small != b["sub_small"]:
-				b["shape"] = shape
-				b["sub_small"] = small
-				b["wide"] = small and _fit_size(shape, BADGE_SUB_FONT, inner - (BADGE_EMBLEM.x + 2.0) * ui_scale - 2.0).x < int(8 * ui_scale)
-				sub.text = ""                                 # re-measure in the new room
-			if b["wide"]:
-				small = false
-			var room := inner - ((BADGE_EMBLEM.x + 2.0) * ui_scale if small else 0.0)
-			b["sub_w"] = _fit_text(sub, what + (" " + clock if clock != "" else ""), BADGE_SUB_FONT, room, b["sub_w"])
-		emb.visible = show_emb and (masked or small)
-		var build_bar: ProgressBar = b["build"]
-		build_bar.visible = n["build_kind"] != "" and not fogged
-		if build_bar.visible:
-			build_bar.value = 100.0 * Sim.build_progress(n)
-		# the box never changes size; its parts move only when what it shows changes
-		var look := (1 if masked else 0) | (2 if emb.visible else 0) | (4 if sub.visible else 0) | (int(b["sub_w"]) << 3)
-		if look != b["look"]:
-			b["look"] = look
-			_place_badge(b, masked, small)
-	var vp := get_viewport().get_visible_rect().size
-	var xf := cam.global_transform
-	# Match feel (the Last Stand zoom "still slows the game down"): the full layout is the HUD's heaviest step (~10 ms
-	# on M-39 on desktop, several times that on a phone) and it used to run on every frame the camera moved. While the
-	# camera moves the badges follow their platforms (_follow_badges); the layout runs once it has held still.
-	if vp != _layout_vp or _badge_screen.is_empty():
-		_layout_vp = vp
-		_layout_xf = xf
-		_layout_badges(cam)
-	elif xf != _layout_xf:
-		_still = _still + 1 if xf == _last_xf else 0
-		if _still >= Rules.BADGE_SETTLE_FRAMES:
-			_layout_xf = xf
-			_layout_badges(cam)
-		else:
-			_follow_badges(cam)
-	_last_xf = xf
-	var changed := false
-	for n in sim.nodes:
-		var b: Dictionary = badges[n["id"]]
-		var panel: Control = b["panel"]
-		if panel.visible and _badge_screen.has(n["id"]):
-			panel.position = ((_badge_screen[n["id"]] as Vector2) - _badge_px / 2.0).round()
-		# what BadgeLayer reads of this badge (its box, texts, colours, emblem, bar): redraw only if it changed
-		var sig := [panel.visible]
-		if panel.visible:
-			var bar: ProgressBar = b["build"]
-			var emb: TextureRect = b["emblem"]
-			var label: Label = b["label"]
-			var sub: Label = b["sub"]
-			sig.append_array([panel.position, panel.size, b["owner"], b["look"], label.visible, label.text, label.position,
-					label.size, label.get_theme_font_size("font_size"), label.get_meta("font_color") if label.has_meta("font_color") else null, sub.visible, sub.text,
-					sub.position, sub.size, sub.get_theme_font_size("font_size"), sub.get_meta("font_color") if sub.has_meta("font_color") else null, emb.visible,
-					emb.texture, emb.position, emb.size, emb.get_meta("seat", ""), bar.visible, bar.position, bar.size,
-					bar.value if bar.visible else 0.0,
-					# ui-node: the tier chip and the armour shields BadgeLayer draws round the badge (shields step 0.01 = 1 s)
-					n["tier"], n["structure"], n["relay"], int(round(float(n["armour"]) * 100.0)), float(n["armour_cap"])])
-		if sig != b.get("drawn", []):
-			b["drawn"] = sig
-			changed = true
-	return changed
-
-
-func _fit_text(l: Label, text: String, base: int, width: float, drawn: float) -> float:
-	## Daniele: "have their inside content never get out of the box boundaries": a text too wide for
-	## the badge steps its font down (to 60 % at most), and whatever is still wider is clipped by the
-	## label. Measured only when the text changes; returns the drawn width.
-	if l.text == text:
-		return drawn
-	l.text = text
-	var fit := _fit_size(text, base, width - float(l.get_theme_constant("outline_size")))
-	if l.get_theme_font_size("font_size") != int(fit.x):
-		l.add_theme_font_size_override("font_size", int(fit.x))
-	return minf(fit.y + float(l.get_theme_constant("outline_size")), width)
-
-
-func _fit_size(text: String, base: int, width: float) -> Vector2:
-	## The largest font size (base x ui_scale down to 60 % of it) whose text fits the width: (size, width).
-	var size := int(base * ui_scale)
-	var least := maxi(int(round(base * ui_scale * 0.6)), 6)
-	var w := UI_FONT.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
-	while w > width and size > least:
-		size -= 1
-		w = UI_FONT.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
-	return Vector2(size, w)
-
-
-func _place_badge(b: Dictionary, masked: bool, small: bool) -> void:
-	## The fixed badge's layout: the count (or, where it is hidden, the owner's emblem) on top, the
-	## sub line under it with Alpha 11's small emblem at its left in BRAWL, the build bar along the
-	## bottom edge. With no sub line the top row sits in the middle of the box.
-	var s := ui_scale
-	var box := _badge_px
-	var label: Label = b["label"]
-	var sub: Label = b["sub"]
-	var emb: TextureRect = b["emblem"]
-	var row2 := sub.visible or small
-	var top_y := (16.5 if row2 else 22.0) * s                # centre of the count row
-	var low_y := 33.0 * s                                    # centre of the sub line
-	var pad := BADGE_PAD * s
-	# each label is as tall as its full-size font line, so a stepped-down font stays centred in it
-	var lh := UI_FONT.get_height(int(BADGE_COUNT_FONT * s)) + 3.0
-	label.size = Vector2(box.x - 2.0 * pad, lh)
-	label.position = Vector2(pad, top_y - lh / 2.0)
-	var esz := (BADGE_EMBLEM_OWNER if masked else BADGE_EMBLEM) * s
-	emb.custom_minimum_size = esz
-	emb.size = esz
-	var sub_w: float = b["sub_w"] if sub.visible else 0.0
-	if masked:
-		emb.position = Vector2((box.x - esz.x) / 2.0, top_y - esz.y / 2.0).round()
-	var gap := 2.0 * s if sub_w > 0.0 else 0.0
-	var x0 := (box.x - sub_w - ((esz.x + gap) if small else 0.0)) / 2.0
-	if small:
-		emb.position = Vector2(x0, low_y - esz.y / 2.0).round()
-		x0 += esz.x + gap
-	var sh := UI_FONT.get_height(int(BADGE_SUB_FONT * s)) + 2.0
-	sub.size = Vector2(sub_w, sh)
-	sub.position = Vector2(x0, low_y - sh / 2.0)
 
 
 # ------------------------------------------------------------------ inspector (Alpha 11 ring)
@@ -2081,8 +1722,7 @@ class InspectorHub:
 
 func _inspector_actions(n: Dictionary) -> void:
 	## Structures 2.1 (spec B): common - UPGRADE / MACHINEGOON (or VAT to go back); relay - LASER / FORGE /
-	## MONSTER HUB (single tier) + SWITCH; special - T4 vat only, no swap; hub - LAUNCH; EJECT wherever
-	## allied troops are stored. Costs and disabled reasons come straight from the Sim (can_build /
+	## MONSTER HUB (single tier) + SWITCH; special - T4 vat only, no swap; hub - LAUNCH. Costs and disabled reasons come straight from the Sim (can_build /
 	## can_upgrade) in _refresh_inspector, so a greyed button always explains itself.
 	var id: int = n["id"]
 	# OOZE 3.0 NODE CATEGORIES (Daniele 2026-11-27, Sim.node_category): normal = vat or Googatling T1-T3 (UPGRADE to T3, swap);
@@ -2123,8 +1763,6 @@ func _inspector_actions(n: Dictionary) -> void:
 		_add_action("VAT", "VAT", sim.build_cost(n, "vat"), "build", id, {"kind": "vat"})
 		if "machinegoon" in n["buildable"] and shows("machinegoon"):
 			_add_action("MACHINEGOON", BUILD_LABEL["machinegoon"], sim.build_cost(n, "machinegoon"), "build", id, {"kind": "machinegoon"})
-	if sim.allied_units(n) > 0.0001 and shows("eject") and inspector_actions.size() < 3:   # max 3 slices (Daniele 2026-11-13)
-		_add_action("EJECT", "EJECT", 0, "eject", id)
 
 
 func _add_action(name: String, title: String, cost: int, method: String, id: int, args := {}) -> void:
@@ -2195,12 +1833,6 @@ func send_button_rect(fraction: float) -> Rect2:
 	return send_tank.level_rect(snappedf(fraction, 0.25))
 
 
-func badge_rect(id: int) -> Rect2:
-	if badges.has(id) and (badges[id]["panel"] as Control).visible:
-		return (badges[id]["panel"] as Control).get_global_rect()
-	return Rect2()
-
-
 func inspector_rect() -> Rect2:
 	## What the open inspector covers on screen (its ring, info panel and actions); empty when closed.
 	if not is_instance_valid(inspector):
@@ -2242,9 +1874,6 @@ func reveal(keys: Array, glow: Array = []) -> void:
 		if c and c.visible:
 			c.modulate = Color(2.2, 2.2, 2.2, 0.0)
 			create_tween().set_trans(Tween.TRANS_SINE).tween_property(c, "modulate", Color.WHITE, 0.6)
-	for id in badges:                                 # badges re-dress (counts, relay state)
-		badges[id]["owner"] = "?"
-		badges[id]["shape"] = ""
 
 
 func reveal_all() -> void:
@@ -2582,7 +2211,7 @@ func _refresh_inspector(cam: Camera3D) -> void:
 		tint_emblem(inspector_emblem, Rules.seat_color(owner))
 	inspector_who.text = "NEUTRAL" if owner == "" else str(sim.factions.get(owner, "")).to_upper()
 	_font_color(inspector_who, Color("c8e6ee") if owner == "" else inspector_col)
-	# ui-node compact card: STRUCTURE [tier chip] / units bar (yours, allies', neutral) / shields (vats) / ONE status line
+	# ui-node compact card: STRUCTURE [tier chip] / units bar (yours, neutral) / shields (vats) / ONE status line
 	inspector_first.text = "· " + _structure_word(n)
 	var hidden_pop := owner != "" and not sim.allied(owner, human)
 	inspector_tier.visible = (n["relay"] == "" and str(n["structure"]) in ["vat", "machinegoon", ""]) or n["relay"] == "launcher"   # the launcher has tiers (proto merge)
@@ -2612,8 +2241,6 @@ func _refresh_inspector(cam: Camera3D) -> void:
 					ring.queue_redraw()
 			"build":
 				why = sim.can_build(inspector_id, human, str((a["args"] as Dictionary).get("kind", "")))
-			"eject":
-				why = sim.can_build(inspector_id, human, "eject")
 			"launch_monster":
 				why = _monster_ready(n)
 		b.disabled = why != ""
@@ -2732,7 +2359,7 @@ func _draw_card_units() -> void:
 	var s := ui_scale
 	var r := Rect2(Vector2(0, 2.0 * s), Vector2(c.size.x, c.size.y - 4.0 * s))
 	var cap := maxf(float(sim.node_cap(n)), 1.0)
-	var units: float = sim.garrison_total(n) if sim.allied_units(n) > 0.0001 else float(n["units"])
+	var units: float = float(n["units"])
 	var f := clampf(units / cap, 0.0, 1.0)
 	var pts := NoirBox.rounded(r, r.size.y / 2.0)
 	NodeNoir.glass(c, pts, 0.9)
@@ -3088,11 +2715,6 @@ func callout_blocked() -> Array:
 	## The HUD parts a message never covers: the top bar (and the band it heads), PAUSE, the SEND panel, the dock
 	## and its hint, the inspector, the coach card, the corner buttons.
 	var out := []
-	if Hud43.on():                                    # hud-43 (Daniele 11-18): on-board messages never sit over a troop count
-		for id in badges:
-			var bp = badges[id].get("panel")
-			if bp is Control and (bp as Control).is_visible_in_tree():
-				out.append((bp as Control).get_global_rect().grow(2.0 * ui_scale))
 	var vp := root.get_viewport_rect().size
 	if top_panel.visible:
 		out.append(Rect2(0, 0, vp.x, top_panel.position.y + top_panel.size.y + 3.0 * ui_scale))
@@ -3273,12 +2895,10 @@ func _build_end() -> void:
 	## DEFEAT. / DRAW., the map, your faction's character, three real numbers - then PROGRESSION's strip exactly as it
 	## was (main.rewards, granted once at the match end: a rebuild only draws it again), then the ways on.
 	var winner := _end_winner
-	var won := sim.allied(winner, human)               # team modes: allies win together
+	var won := sim.allied(winner, human)
 	var draw := winner == ""
 	var s := MatchScreens.open(end_panel, mobile, _my_faction())
 	var seats: Array = sim.factions.keys()
-	var team := sim.teams.has(human)
-	var ffa := not team and seats.size() > 2
 	var outcome := "VICTORY" if won else ("DRAW" if draw else "DEFEAT")
 	var where := "%s · %s" % [main.mode, MatchScreens.clock(sim.time)]
 	if main.online:
@@ -3288,9 +2908,6 @@ func _build_end() -> void:
 	if not main.online:                                # UX pass (board 07): PLAY AGAIN = the same setup, one tap
 		primary = ["PLAY AGAIN  →", main.restart]
 		quiet = [["HOME", main.to_menu], ["RANDOM MAP", main.rematch_random], ["CHANGE SETUP", func(): main.to_menu("setup")]]
-		var lab_menu := preload("res://scripts/lab_menu.gd")
-		if lab_menu.wanted() and lab_menu.card_id != "":   # LAB BUILD: a test card's match - PLAY AGAIN or back to the cards
-			quiet = [["LAB CARDS", main.to_menu]]
 	if _end_page == "details":
 		s.details({"name": str(main.map.get("name", "")), "sub": where, "outcome": outcome, "primary": primary,
 				"back": func():
@@ -3298,14 +2915,9 @@ func _build_end() -> void:
 					_build_end()}, MatchScreens.seat_table(sim, human, _seat_heads()))
 		_show_screen(end_panel)
 		return
-	var placed := Progression.placements(sim)
 	var line := MatchScreens.verdict(won, draw, int(main.seed_value))   # the syndicate's joke for it (Daniele)
 	var kicker: String = line[0]
-	if ffa and not won and not draw:                   # an FFA loss says where you finished instead
-		kicker = "FINISHED %s OF %d" % [MatchScreens.ordinal(int(placed.get(human, seats.size()))).to_upper(), seats.size()]
 	var sub := where + "  ·  " + ("decided in the Last Stand" if sim.last_stand_active else "decided before the Last Stand")   # 0.25.3: no INWARD / OUTWARD
-	if not won and not draw and seats.size() > 2:     # who took it, when it wasn't a plain duel
-		sub = "Won by %s  ·  %s" % [_who_line(winner), sub]
 	sub = _versus_line(seats) + "\n" + sub           # HUD pass: who played - a human by name, an AI by faction and level
 	if draw and sim.draw_line != "":                   # 7:00, a neutral last platform: the funny call-out (0.19.0)
 		sub = str(sim.draw_line) + "\n" + sub
@@ -3314,8 +2926,6 @@ func _build_end() -> void:
 		sub = "QUOTA  A %d · B %d  ·  %s" % [sim.quota_of("A"), sim.quota_of("B"), why] + "\n" + sub
 	var st := Progression.seat_stats(sim, human)
 	var third := [str(st["captures"]), "Captures"]
-	if ffa:
-		third = ["%s / %d" % [MatchScreens.ordinal(int(placed.get(human, seats.size()))), seats.size()], "Placement"]
 	var extras := []
 	var strip := _reward_strip(s.reward_scale(ui_scale))   # PROGRESSION: kept whole
 	if strip != null:
@@ -3534,9 +3144,7 @@ func _build_debug() -> void:
 	hide_text.call()
 	hide.pressed.connect(func():
 		Rules.hide_enemy_counts = not Rules.hide_enemy_counts
-		hide_text.call()
-		for bid in badges:
-			badges[bid]["owner"] = "?")
+		hide_text.call())
 	hide.disabled = main.online                      # online: the host's room setting
 	box.add_child(hide)
 	var low := button("", Callable(), 0, 44, 18)
@@ -3723,128 +3331,13 @@ func _debug_slider(box: Control, text: String, lo: float, hi: float, step: float
 	return slider
 
 
-var _badge_dirs := {}
-var _badge_screen := {}                 # node id -> badge centre on screen (fixed camera: laid out once)
-var _layout_vp := Vector2(-1, -1)       # viewport size and camera of the last layout (-1: none yet)
-var _layout_xf := Transform3D()
-var _last_xf := Transform3D()           # the camera last frame (still or moving)
-var _still := 0                         # frames the camera has held still since it moved
-var _anchors := {}                      # node id -> [badge offset from the platform's screen centre, platform scale] at the last layout
-
-
-func _layout_badges(cam: Camera3D) -> void:
-	## Every badge floats in the void beside its own node (Daniele, Alpha 16: "UI should always float
-	## in the void next to a node"): candidate spots all round the platform's drawn rim are scored
-	## against every platform, every deck and the badges already placed, on screen, at the badge's
-	## real size; the one that covers nothing wins, the near side and the shortest reach break ties.
-	## Alpha 18 (Daniele: "make sure ... nothing overflows" on phones): the top and bottom bands, the
-	## send panel and the right-hand buttons count as off-screen, and a badge that still touches one is
-	## slid clear of it (_clear_of).
-	var vp := get_viewport().get_visible_rect().size
-	var plat := {}                                        # id -> [centre, radius] on screen
-	for n in sim.nodes:
-		var c := cam.unproject_position(n["pos"])
-		var r := 0.0
-		for k in range(8):
-			var a := TAU * k / 8.0
-			r = maxf(r, cam.unproject_position((n["pos"] as Vector3) + Vector3(cos(a), 0, sin(a)) * Rules.R).distance_to(c))
-		plat[n["id"]] = [c, r]
-	for n in sim.nodes:                                   # RELAY V2: a relay's button pad is covered like a platform
-		var bs := RelayView.button_screen(cam, main.vis, n["id"])
-		if not bs.is_empty():
-			plat[-1 - int(n["id"])] = bs
-	var decks := []                                       # [a, b, half width] on screen
-	for e in sim.edges:
-		var pa: Vector3 = sim.nodes[e["a"]]["pos"]
-		var pb: Vector3 = sim.nodes[e["b"]]["pos"]
-		var mid := (pa + pb) / 2.0
-		var side := ((pb - pa) as Vector3).cross(Vector3.UP).normalized()
-		var hw := cam.unproject_position(mid + side * Rules.W * 0.5).distance_to(cam.unproject_position(mid))
-		decks.append([cam.unproject_position(pa), cam.unproject_position(pb), hw])
-	_badge_screen = {}
-	var placed := []                                      # [centre, radius]
-	var down := Vector2(0, 1)
-	var blocked := [Rect2(0, 0, vp.x, top_used()), Rect2(0, vp.y - bottom_used(), vp.x, bottom_used())]
-	for c in [side_panel, pause_button, music_button, debug_button, chat_button, dock]:   # Alpha 18: never under the HUD
-		if c and c.visible:
-			blocked.append((c as Control).get_global_rect().grow(4.0))
-	for n in sim.nodes:
-		var id: int = n["id"]
-		var panel: Control = badges[id]["panel"]
-		var sz: Vector2 = panel.get_combined_minimum_size()
-		var rb: float = maxf(maxf(sz.x, sz.y) * 0.5, 15.0 * ui_scale) + 2.0
-		var c: Vector2 = plat[id][0]
-		var best: Vector2 = c + down * (float(plat[id][1]) + rb)
-		var best_score := INF
-		for k in range(24):
-			var a := TAU * k / 24.0
-			var rim: Vector2 = cam.unproject_position((n["pos"] as Vector3) + Vector3(cos(a), 0, sin(a)) * Rules.R)
-			var dir: Vector2 = (rim - c).normalized() if rim.distance_to(c) > 0.5 else down
-			for reach in [3.0, 10.0, 22.0]:
-				var p: Vector2 = rim + dir * (rb + reach)
-				var cover := 0.0
-				for pid in plat:
-					cover += maxf(0.0, rb + plat[pid][1] - p.distance_to(plat[pid][0]))
-				for d in decks:
-					var q: Vector2 = Geometry2D.get_closest_point_to_segment(p, d[0], d[1])
-					cover += maxf(0.0, rb + d[2] - p.distance_to(q))
-				for o in placed:
-					cover += 2.0 * maxf(0.0, rb + o[1] + 2.0 - p.distance_to(o[0]))
-				var off := maxf(0.0, rb - p.x) + maxf(0.0, p.x + rb - vp.x) + maxf(0.0, rb - p.y) + maxf(0.0, p.y + rb - vp.y)
-				var box := Rect2(p - sz * 0.5, sz)
-				for b in blocked:
-					if box.intersects(b):
-						var over := box.intersection(b)
-						off += minf(over.size.x, over.size.y) + 8.0
-				var score: float = cover * 10.0 + off * 20.0 + reach * 0.4 - dir.dot(down) * 3.0
-				if score < best_score:
-					best_score = score
-					best = p
-		if Rect2(Vector2.ZERO, vp).has_point(c):          # a node off screen (close-up) keeps its spot
-			best = _clear_of(best, sz, blocked, vp)
-		_badge_screen[id] = best
-		_anchors[id] = [best - c, _screen_scale(cam, n["pos"], c)]
-		placed.append([best, rb])
-
-
-func _screen_scale(cam: Camera3D, pos: Vector3, c: Vector2) -> float:
-	## A platform's radius on screen along the camera's right axis (the badge offset's scale while the camera moves).
-	return maxf(cam.unproject_position(pos + cam.global_transform.basis.x * Rules.R).distance_to(c), 0.5)
-
-
-func _follow_badges(cam: Camera3D) -> void:
-	## Camera in motion (the Last Stand zoom): each badge keeps its last layout's spot relative to its platform, scaled
-	## with the platform's size on screen - two projections per node instead of the full scoring.
-	var vp := get_viewport().get_visible_rect().size
-	for n in sim.nodes:
-		var a: Array = _anchors.get(n["id"], [])
-		if a.is_empty():
-			continue
-		var c := cam.unproject_position(n["pos"])
-		var p: Vector2 = c + (a[0] as Vector2) * (_screen_scale(cam, n["pos"], c) / float(a[1]))
-		_badge_screen[n["id"]] = Vector2(clampf(p.x, 2.0, vp.x - 2.0), clampf(p.y, 2.0, vp.y - 2.0))
-
-
-func _clear_of(p: Vector2, sz: Vector2, blocked: Array, vp: Vector2) -> Vector2:
-	## Last resort when every spot round the rim touches the HUD or the screen edge: slide the badge
-	## the shortest way out of each HUD panel it still overlaps, then back inside the screen.
-	for b in blocked:
-		var box := Rect2(p - sz * 0.5, sz)
-		if not box.intersects(b):
-			continue
-		var r: Rect2 = b
-		var dx := (r.end.x - box.position.x) if p.x > r.get_center().x else (r.position.x - box.end.x)
-		var dy := (r.end.y - box.position.y) if p.y > r.get_center().y else (r.position.y - box.end.y)
-		if absf(dx) < absf(dy):
-			p.x += dx
-		else:
-			p.y += dy
-	return Vector2(clampf(p.x, sz.x * 0.5 + 2.0, vp.x - sz.x * 0.5 - 2.0), clampf(p.y, sz.y * 0.5 + 2.0, vp.y - sz.y * 0.5 - 2.0))
+var _badge_dirs := {}                   # node id -> badge_anchor's direction (computed once)
 
 
 func badge_anchor(n: Dictionary) -> Vector3:
-	## A 3D estimate of the badge's spot, used only so main._fit_camera leaves room for it; the badge
-	## itself is placed on screen by _layout_badges. Just outside the platform, in the gap furthest
+	## A 3D spot beside the platform, used only so main._fit_camera leaves the room the old HUD node badge had
+	## (WP6: the badges are gone - the counts are on the vat screens - but the start framing is kept as it was;
+	## the camera's owner decides whether to drop it). Just outside the platform, in the gap furthest
 	## from any of its bridges, leaning toward the viewer (Daniele: "HUD should always be placed in
 	## areas beyond the platform, not overlapping a corridor or a platform"). Computed once per node.
 	var id: int = n["id"]

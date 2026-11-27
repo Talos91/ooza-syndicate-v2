@@ -55,7 +55,7 @@ func make(key: String, data := {}, seed_value := 7) -> Array:
 		seats[int(s["node"])] = s["seat"]
 	var f := str(m.get("faction", "vex"))
 	var sim := Sim.new()
-	sim.setup(map, MapBuilder.layout(map), seats, {"A": f, "B": str(Campaign.rival_of(m)["faction"])}, seed_value, {},
+	sim.setup(map, MapBuilder.layout(map), seats, {"A": f, "B": str(Campaign.rival_of(m)["faction"])}, seed_value,
 			{"A": ArmyPresets.loadout_for(f)})
 	sim.captured.connect(d.on_captured)            # main feeds captures the same way (_on_captured)
 	d.begin(sim, map, "A")
@@ -243,7 +243,7 @@ func test_s1_survive() -> void:
 	var seats := {}
 	for s in map["seats"]["1v1"]:
 		seats[int(s["node"])] = s["seat"]
-	plain.setup(map, MapBuilder.layout(map), seats, {"A": "vex", "B": "ember"}, 7, {}, {})
+	plain.setup(map, MapBuilder.layout(map), seats, {"A": "vex", "B": "ember"}, 7, {})
 	var before := float(plain.nodes[int(plain.homes["B"])]["units"])
 	check(is_equal_approx(float(bh["units"]), before + float(m["stage"]["rival_units"]) * Rules.SCALE),
 			"s1: +%d shown units on the rival's home (%d -> %d shown)" % [int(m["stage"]["rival_units"]),

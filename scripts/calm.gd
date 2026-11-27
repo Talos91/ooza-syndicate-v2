@@ -48,9 +48,6 @@ const TUBE_SAT := 0.35                        # how much colour the tube goo kee
 
 
 # --- B: labels ---
-const NEUTRAL_BADGE_K := 0.78                 # a neutral garrison's badge, x its size (box and words)
-const NEUTRAL_BADGE_MOD := Color(0.62, 0.64, 0.68, 0.85)   # its frame, greyed
-const NEUTRAL_INK := Color(0.72, 0.74, 0.78)  # its words
 const IN_TAG_S := 5.0                         # a ferry lane's "IN n" shows only in its last n seconds
 
 

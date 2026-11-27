@@ -1,6 +1,6 @@
 extends SceneTree
 ## AI REACTIONS (ai-reactions 2026-11-18): Godot --headless --path . --script res://tests/test_ai_reactions.gd [-- secs=300]
-## Plays real AI matches (1v1 G-05, 2v2 + FFA4 on A-01; Standard AIs with their builds, so skills are cast) for `secs` of match time
+## Plays real AI matches (1v1 G-05 / G-01; Standard AIs with their builds, so skills are cast) for `secs` of match time
 ## with the AI screens fed exactly as in play (sim.captured -> on_capture, sim.events, the share every 0.5 s), then checks:
 ## - THROTTLE: on every screen two reaction starts are >= AiScreens.GAP s apart (the end / an out excepted), no spam;
 ## - LIVE: the match triggers several different reactions on both screens (wired to real events, not only dev flags);
@@ -18,20 +18,9 @@ class StubHud:
 	var pause_panel = null
 
 	func _seat_groups() -> Array:
-		var mine: int = int(sim.teams.get(human, -999))
 		var g := [[human]]
-		var by := {}
 		for s in sim.factions.keys():
-			if s == human:
-				continue
-			if sim.teams.has(human) and int(sim.teams.get(s, -998)) == mine:
-				g[0].append(s)
-			elif sim.teams.has(s):
-				if not by.has(sim.teams[s]):
-					by[sim.teams[s]] = []
-					g.append(by[sim.teams[s]])
-				by[sim.teams[s]].append(s)
-			else:
+			if s != human:
 				g.append([s])
 		return g
 
@@ -59,14 +48,11 @@ func _arg(k: String, d: String) -> String:
 func _match(path: String, mode: String, factions: Dictionary, secs: float) -> Dictionary:
 	var m := MapBuilder.load_map(path)
 	var seats := {}
-	var teams := {}
 	for s in m["seats"][mode]:
 		seats[int(s["node"])] = s["seat"]
-		if typeof(s.get("team")) in [TYPE_INT, TYPE_FLOAT]:
-			teams[s["seat"]] = int(s["team"])
 	var sim := Sim.new()
 	sim.ai_builds = true
-	sim.setup(m, MapBuilder.layout(m), seats, factions, 11, teams)
+	sim.setup(m, MapBuilder.layout(m), seats, factions, 11)
 	var hud := StubHud.new()
 	hud.sim = sim
 	var scr := AiScreens.new()
@@ -140,7 +126,5 @@ func _run() -> void:
 	# LIVE matches
 	_check_log("1v1 G-05", _match("res://maps4/G-05-catapult-bay.json", "1v1", {"A": "vex", "B": "null"}, secs))
 	_check_log("1v1 G-01", _match("res://maps4/G-01-gate.json", "1v1", {"A": "bloom", "B": "solar"}, secs))
-	_check_log("2v2 A-01", _match("res://maps4/A-01-orbital-nexus.json", "2v2", {"A": "ember", "B": "vex", "C": "null", "D": "bloom"}, secs))
-	_check_log("FFA4 A-01", _match("res://maps4/A-01-orbital-nexus.json", "FFA4", {"A": "solar", "B": "ember", "C": "bloom", "D": "null"}, secs))
 	print("ALL PASSED (0 failed)" if failures == 0 else "%d FAILED" % failures)
 	quit(1 if failures > 0 else 0)

@@ -4,7 +4,6 @@ extends Control
 ## under the panels (added right after SkillDock's target layer in Hud.setup):
 ##  - the Monster hub's reach ring while LAUNCH is armed (main.monster_from) or being dragged to a
 ##    target (Daniele: "show the reach ring / highlight while dragging from a hub");
-##  - allied halo rings round any node holding allied troops (Sim.halo_tier, GAME-RULES sec11);
 ##  - the relay-outcome preview while SWITCH is focused / pressed-and-held, and for any relay in its
 ##    1 s warning (Bypass / Relay Hack targets included) - Daniele: "impossible right now to know in
 ##    advance what a lot of the buttons do (rotation/switch and even retraction isn't easy to see)";
@@ -28,13 +27,6 @@ var route := {}                        # Alpha 24: the drag being aimed (main._r
 var _drew := true                      # the last frame drew something (a frame that draws nothing clears it once)
 
 
-const HALO_RING_WIDTH := 3.0          # 0.22.4: one thin, clean ring width at every tier (no more "fatter = tier" blob)
-const HALO_BASE_PAD := 6.0            # ring radius past the node's rim
-const HALO_RING_GAP := 6.0            # radius step between stacked seats' rings on the same node
-const HALO_SEGMENT_GAP := 0.35        # rad, gap left between a ring's bright segments
-const HALO_SEGMENT_ALPHA := 0.95
-const HALO_BACKDROP_ALPHA := 0.22     # the faint full ring under the segments
-const HALO_SPIN := 0.5                # rad/s the segments slowly turn (reads as "alive", not static)
 
 
 func setup(m: Node3D, s: Sim, h: Hud, seat: String, scale_ui: float) -> void:
@@ -59,7 +51,7 @@ func sync(dt: float) -> void:
 
 
 func _draws_something() -> bool:
-	## Would _draw put anything on screen this frame (halos, the monster reach, a relay preview, the aimed route)? A cheap
+	## Would _draw put anything on screen this frame (the monster reach, a relay preview, the aimed route)? A cheap
 	## scan: false means the overlay can stay as it is.
 	if not route.is_empty():
 		return true
@@ -68,8 +60,6 @@ func _draws_something() -> bool:
 	for n in sim.nodes:
 		if sim.collapsed.get(n["id"], false):
 			continue
-		if not (n.get("allies", {}) as Dictionary).is_empty():
-			return true
 		if n["relay"] != "" and n["relay_phase"] == "warning":
 			return true
 	return false
@@ -96,8 +86,6 @@ func _draw() -> void:
 	# (TUTORIAL: each part draws once its lesson is reached - Hud.shows(); outside the tutorial, always)
 	# WP4b (Daniele 2026-11-27): the node notices - Last Stand alarm signs, upgrade / relay-ready chips, the relay's ready ring
 	# and its DOUBLE-TAP pill, capture bursts - are on each node's screen now (VatCount), not drawn here.
-	if hud.shows("halos"):
-		_draw_halos(cam)
 	if hud.shows("monster"):
 		var reach_hub: int = main.monster_from
 		if reach_hub < 0 and hud.inspector_id >= 0:            # 0.19.2 spec H1: also while the hub is selected
@@ -211,43 +199,6 @@ func _label(at: Vector2, txt: String, col: Color, size_px: int) -> void:
 	var f := int(size_px * ui_scale)
 	draw_string_outline(Hud.UI_FONT, at, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f, int(4 * ui_scale), Color(0, 0, 0, 0.9))
 	draw_string(Hud.UI_FONT, at, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f, col)
-
-
-# ------------------------------------------------------------------ halos (allied troops stored here)
-func _draw_halos(cam: Camera3D) -> void:
-	## 0.20.13 (Daniele's 2v2 co-op playtest: "i sent troops to her node and except the count going up i
-	## couldn't see any other indicator"): one ring per seat with troops stored here, each in THAT seat's
-	## own colour - stacked outward so more than one ally's rings don't merge into one blob.
-	## 0.22.4 playtest redesign (Daniele: "a nicer ally halo"): the old ring grew THICKER with tier, which
-	## at tier 3 read as a fat glowing blob rather than a ring. Now every tier draws the same thin, clean
-	## ring (HALO_RING_WIDTH) plus a faint full backdrop so it still reads at a glance; the tier shows as
-	## the number of bright segments round it (1 / 2 / 3), slowly turning - readable at phone size without
-	## the "more troops = bigger smear" look.
-	for n in sim.nodes:
-		var id: int = n["id"]
-		if sim.collapsed.get(id, false):
-			continue
-		var allies: Dictionary = n.get("allies", {})
-		if allies.is_empty():
-			continue
-		var ns := _node_screen(id, cam)
-		var ring := 0
-		for seat in allies:
-			var tier := sim.halo_tier(id, str(seat))
-			if tier <= 0:
-				continue
-			var r := float(ns[1]) + (HALO_BASE_PAD + ring * HALO_RING_GAP) * ui_scale
-			_draw_halo_ring(ns[0], r, Rules.seat_color(str(seat)), tier)
-			ring += 1
-
-
-func _draw_halo_ring(c: Vector2, r: float, col: Color, tier: int) -> void:
-	var w := HALO_RING_WIDTH * ui_scale
-	draw_arc(c, r, 0.0, TAU, 40, Color(col, HALO_BACKDROP_ALPHA), w, true)   # a faint full ring (always reads)
-	var seg_len := TAU / float(tier) - HALO_SEGMENT_GAP
-	for i in range(tier):                              # tier bright segments, slowly turning round the ring
-		var start := _t * HALO_SPIN + i * (TAU / float(tier))
-		draw_arc(c, r, start, start + seg_len, 20, Color(col, HALO_SEGMENT_ALPHA), w, true)
 
 
 # ------------------------------------------------------------------ monster launch reach / drag

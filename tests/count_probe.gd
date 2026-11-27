@@ -2,9 +2,9 @@ extends SceneTree
 ## COUNT PROBE (Ooze 3.0 WP4): the count screens' digit height on screen, in pt, at every OPTIONS count size, on every Z map, at
 ## the Board3 start camera. Headless, geometry only (render-free):
 ##   Godot --headless --path . --script res://tests/count_probe.gd -- --pt-height=375 pw=812 notch=44 [maps=Z-01,Z-05]
-## Prints one line per map and size: COUNT <map> x<k> min <pt> max <pt> (nodes <n>) badges_shown <n> cam <dist> pitch <deg>, then
-## COUNT_SUMMARY x<k> min <pt> over every map. Exit 1 when the default size (x1.0) has a digit under FLOOR_PT on any node, when
-## a badge still shows a count, or when a map is not at the Board3 camera.
+## Prints one line per map and size: COUNT <map> x<k> min <pt> max <pt> (nodes <n>) cam <dist> pitch <deg>, then
+## COUNT_SUMMARY x<k> min <pt> over every map. Exit 1 when the default size (x1.0) has a digit under FLOOR_PT on any node, or
+## when a map is not at the Board3 camera. (WP6: the HUD node badges are deleted, so no badge check any more.)
 const FLOOR_PT := 12.5
 
 
@@ -61,17 +61,13 @@ func _run() -> void:
 				var p: float = vc.digit_pt_at(id, m.cam)
 				lo = minf(lo, p)
 				hi = maxf(hi, p)
-			var shown := 0
-			for id in m.hud.badges:
-				if (m.hud.badges[id]["panel"] as Control).visible:
-					shown += 1
 			var at_board := bool(m.call("board3_cam")) and is_equal_approx(float(m.cam_pitch), Board3.CAM_PITCH) \
 					and absf(float(m.cam_dist) - Board3.CAM_DIST) < 0.01
-			print("COUNT %s x%s digit %.2f m  min %.1f pt  max %.1f pt  (nodes %d)  badges_shown %d  view %s pt  cam %.1f m pitch %.0f board3 %s" % [
-					code, str(Rules.COUNT_SIZES[k]), vc.digit_height_m(), lo, hi, vc.screens.size(), shown,
+			print("COUNT %s x%s digit %.2f m  min %.1f pt  max %.1f pt  (nodes %d)  view %s pt  cam %.1f m pitch %.0f board3 %s" % [
+					code, str(Rules.COUNT_SIZES[k]), vc.digit_height_m(), lo, hi, vc.screens.size(),
 					str(vp0 * UiKit.pt_per_px(vp0)), float(m.cam_dist), float(m.cam_pitch), at_board])
 			worst[k] = minf(float(worst.get(k, INF)), lo)
-			if shown > 0 or not at_board:
+			if not at_board:
 				fails += 1
 			if k == Rules.COUNT_SIZE_DEFAULT and lo < FLOOR_PT:
 				print("FAIL  %s: default count digits %.1f pt < %.1f pt" % [code, lo, FLOOR_PT])

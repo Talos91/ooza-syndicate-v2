@@ -112,7 +112,7 @@ func _start(extra: Dictionary) -> Node:
 
 func _lesson_shot(out_dir: String, tag: String, id: int, first: bool) -> void:
 	var inst := _start({"tutorial": id, "first": first, "faction": "null", "colour": "A"})
-	await _frames(70)                                 # camera fit, badges, the first card eases in
+	await _frames(70)                                 # camera fit, the first card eases in
 	var name := "first" if first else "L%d" % id
 	var img := await _shot(out_dir, "%s-%s" % [tag, name])
 	if id == 1 and not first and inst.coach:

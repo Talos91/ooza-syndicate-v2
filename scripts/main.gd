@@ -7,7 +7,7 @@ extends Node3D
 ## relay's button platform off the rim is a second tap target for its node (double-tap it, or the node, to fire).
 ## Command-line user args (after `--`):
 ##   --map=res://maps4/T-01-first-steps.json  map to load (skips the title screen)
-##   --mode=1v1|2v2|FFA3|FFA4  match mode (the map's first mode if it lacks this one; 5-6 seat modes deleted 2026-11-23)
+##   --mode=1v1  match mode (the map's first mode if it lacks this one; 5-6 seat modes deleted 2026-11-23, 2v2 / FFA 2026-11-27)
 ##   --demo                                 every seat played by the AI
 ##   --ai=Training|Casual|Standard|Veteran|Expert  AI level (Rules.AI_LEVELS; the menu picks it otherwise)
 ##   --brawl (alias --classic)              no-op: BRAWL is the only mode (SIEGE deleted 2026-11-23)
@@ -25,7 +25,7 @@ extends Node3D
 ##   --thumb=<png>                          render the map's menu thumbnail (no HUD), then quit
 ##   --menu-page=<page> --menu-shot=<png>   open a menu page / screenshot the menu, then quit
 ##   --menu-filter=brawl                     screenshot helper: pre-set the BATTLEFIELD TYPE filter chip
-##   --menu-mode=FFA4 --menu-colour=faction   screenshot helper: pre-set SETUP's PLAYERS mode / YOUR COLOUR
+##   --menu-mode=1v1 --menu-colour=faction   screenshot helper: pre-set SETUP's PLAYERS mode / YOUR COLOUR
 ##   --scenario=fight|rear|queue|build|inspect|switch|rotate --zoom=N  stage one situation up close
 ##   --goo                                  TERRITORY: GOO (Rules.goo_territory) instead of the neon
 ##   --faction=null --rival=null            your faction (seat A) and seat B's (a mirror match: the same one)
@@ -160,7 +160,7 @@ var perf_on := "--perf" in OS.get_cmdline_user_args()   # debug flag, read once
 var _pending_inspect := -1                    # single tap: inspector opens after the double-tap window
 var _pending_at := 0.0
 var _swallow_release := false
-var mode := "1v1"                             # 1v1 / 2v2 / FFA3-4 (the map's seats key; max 4 seats since 2026-11-18)
+var mode := "1v1"                             # 1v1 only (the map's seats key; 2v2 / FFA deleted 2026-11-27)
 var color_choice := "A"                       # your ownership colour: palette key or "faction"
 var menu_layer: CanvasLayer
 const VatCountScript := preload("res://scripts/vat_count.gd")   # OOZE 3.0: the counts on each node's count screen
@@ -413,11 +413,8 @@ func _start_map(path: String) -> void:
 	if not map["seats"].has(mode):                     # this map doesn't offer the mode: its first one
 		mode = "1v1" if map["seats"].has("1v1") else map["seats"].keys()[0]
 	var seats := {}
-	var teams := {}
 	for s in map["seats"][mode]:
 		seats[int(s["node"])] = s["seat"]
-		if mode == "2v2" and s.get("team") != null:
-			teams[s["seat"]] = int(s["team"])
 	if not HUMAN in seats.values() and not online:     # FFA maps may seat A elsewhere; A is always you
 		var first: int = seats.keys()[0]
 		seats[first] = HUMAN
@@ -431,11 +428,11 @@ func _start_map(path: String) -> void:
 	if online and Net.match_info.get("colours") is Dictionary:   # a room: the host's seat colours, the same on every screen
 		Rules.use_colours(Net.match_info["colours"])
 	else:
-		Rules.assign_colors(seats.values(), SEAT_FACTIONS, HUMAN, color_choice, teams)
-	Rules.apply_colour_blind(seats.values(), teams, HUMAN)   # UI: SETTINGS > COLOUR-BLIND (your screen only)
+		Rules.assign_colors(seats.values(), SEAT_FACTIONS, HUMAN, color_choice)
+	Rules.apply_colour_blind(seats.values(), HUMAN)   # UI: SETTINGS > COLOUR-BLIND (your screen only)
 	sim = Sim.new()
 	sim.ai_builds = true                               # POWERS: AI seats mix their builds (Rules.AI_LOADOUTS)
-	sim.setup(map, MapBuilder.layout(map), seats, SEAT_FACTIONS, seed_value, teams, LOADOUTS)
+	sim.setup(map, MapBuilder.layout(map), seats, SEAT_FACTIONS, seed_value, LOADOUTS)
 	Calm.factions = sim.factions
 	GooTone.factions = sim.factions                    # goo = body tone by faction (GooTone)
 	GooTone.human = HUMAN
@@ -655,7 +652,7 @@ func start_match(path: String, faction: String, seat_factions: Dictionary, level
 	## Entry from the front menu (Menu.deploy): your faction (seat A), every enemy seat's pick (0.19.2
 	## spec H3: Menu._seat_faction_picks - one rival-faction picker per seat, a faction id or "random";
 	## _start_map() resolves "random" through Sim.resolve_factions, the same way Sim.setup() would), the
-	## AI level, the map, the mode (1v1 / 2v2 / FFA3-5), your colour and your skill loadout ({"active":
+	## AI level, the map, the mode (1v1), your colour and your skill loadout ({"active":
 	## id, "map": id}; empty = the default).
 	mode = match_mode
 	LOADOUTS = {HUMAN: loadout}                        # (POWERS: always an entry - a seat with none is an AI seat)
@@ -1379,8 +1376,6 @@ func _stage_scenario() -> void:
 			sim.nodes[3]["units"] = 90.0
 			sim.nodes[3]["structure"] = "machinegoon"
 			sim.nodes[3]["tier"] = 2
-			sim.nodes[3]["allies"]["B"] = 40.0                # a staged ally share: halo ring + EJECT + "total + own"
-			sim.nodes[3]["arrivals"] = ["B"]
 			sim.nodes[2]["owner"] = HUMAN
 			sim.nodes[2]["units"] = 300.0
 			sim.nodes[2]["tier"] = 4                          # special: T4 vat only
@@ -1627,7 +1622,7 @@ func _run_scenario() -> void:
 				_fit_camera()
 		"notices":
 			# HUD pass (Daniele's "option A"): every placed message at once - phase 1 the map callouts (a monster
-			# launched at you, a deck's kicked units, forge online / lost, a handover, stored troops sent home),
+			# launched at you, a deck's kicked units, forge online / lost),
 			# a skill refusal above its slot and the Last Stand line's pulse; phase 2 (with --focus=N) a launch at a
 			# node off screen, which points there from the screen edge.
 			var phase: int = mini(int(sim.time), 2)
@@ -1800,7 +1795,7 @@ func perform(seat: String, method: String, id: int, args := {}) -> Array:
 			if sim.restore_vat(id):
 				return [true, "Restoring the vat - %d s" % int(Rules.BUILD_SECONDS)]
 			return [false, "Can't restore the vat now"]
-		"build", "launch_monster", "eject":
+		"build", "launch_monster":
 			# Structures 2.1 (0.19.0): offline runs the order straight through the Sim, checked and
 			# reported exactly like net.gd already does for guests (Net._execute -> sim.structure_order).
 			return sim.structure_order(seat, method, id, args)
@@ -1983,21 +1978,6 @@ func _process(delta: float) -> void:
 					var hpos: Vector3 = sim.nodes[hid]["pos"]
 					fx._pulse(hpos, Rules.state_color("warn"), Rules.R + 1.5, 0.9)
 					hud.callout_node(hid, "HUB DESTROYED · ONE PER PLAYER" if str(ev.get("seat", "")) == HUMAN else "HUB DESTROYED", "warn")   # (WP4b: on its screen)
-			"eject":                                   # your own eject is a routine order (nothing to say, see node_action);
-				if str(ev.get("seat", "")) != HUMAN and sim.allied(str(ev.get("seat", "")), HUMAN):
-					hud.callout_node(int(ev["node"]), "STORED TROOPS SENT HOME", "info", str(ev["seat"]))
-			"handover":                                 # a silent production-only takeover (no fight to see it by)
-				if str(ev.get("seat", "")) == HUMAN:
-					hud.callout_node(int(ev["node"]), "HANDED OVER TO YOU", "good")
-				elif str(ev.get("from", "")) == HUMAN:
-					hud.callout_node(int(ev["node"]), "HANDED OVER TO %s" % hud.seat_label(str(ev["seat"])), "warn", str(ev["seat"]))
-			"capture":                                  # (the Sim's fx event for a handover: "handover" is in sim.events)
-				if ev.get("handover", false):
-					var id := int(ev.get("node", -1))
-					if str(ev.get("seat", "")) == HUMAN:
-						hud.callout_node(id, "HANDED OVER TO YOU", "good")
-					elif str(_took_from.get(id, "")) == HUMAN:
-						hud.callout_node(id, "HANDED OVER TO %s" % hud.seat_label(str(ev["seat"])), "warn", str(ev["seat"]))
 	sim.fx_events.clear()
 	_collapse_zoom(dt)
 	fx.selected = selected if drag_from < 0 else drag_from
@@ -2030,7 +2010,7 @@ func _process(delta: float) -> void:
 
 
 func _zone_check() -> void:
-	## Dev (--zone-check, hud-43): every platform rim and troop badge vs the HUD zones; prints one ZONECHECK line.
+	## Dev (--zone-check, hud-43): every platform rim vs the HUD zones; prints one ZONECHECK line.
 	var vp := get_viewport().get_visible_rect().size
 	var z := Hud43.zones(vp)
 	var hits := []
@@ -2044,11 +2024,6 @@ func _zone_check() -> void:
 		for key in ["send", "skill", "score", "ai_l", "ai_r", "util"]:
 			if nr.intersects(z[key]):
 				hits.append("node%d:%s" % [n["id"], key])
-		var b = hud.badges.get(n["id"], {}).get("panel")
-		if b is Control and (b as Control).is_visible_in_tree():
-			for key in ["send", "skill", "score", "util"]:
-				if (b as Control).get_global_rect().intersects(z[key]):
-					hits.append("badge%d:%s" % [n["id"], key])
 	var pr := pit_rect()
 	print("ZONECHECK %s vp=%s pit=%s overlaps=%d %s" % [str(map.get("code", "")), vp, pr, hits.size(), " ".join(hits)])
 
@@ -2113,13 +2088,9 @@ func _end_shot(what: String) -> void:
 	get_tree().quit()
 
 
-var _took_from := {}                              # node id -> its owner before the last capture (a handover's callout)
-
-
 func _on_captured(node_id: int, new_owner: String, _old: String) -> void:
 	if mission:                                        # CAMPAIGN: a start node / vat / home lost
 		mission.on_captured(node_id, new_owner, _old)
-	_took_from[node_id] = _old
 	if hud and hud.has_method("ai_event"):
 		hud.ai_event(new_owner, _old, node_id)
 	MapBuilder.apply_owner(vis[node_id]["parts"], new_owner)
@@ -2127,9 +2098,6 @@ func _on_captured(node_id: int, new_owner: String, _old: String) -> void:
 	# it's on screen"): TAKEN / LOST on the node's own screen, no label rising over the map.
 	if not hud.shows("floaters"):                       # TUTORIAL: the reveal set names when this is taught
 		return
-	var last: Dictionary = sim.fx_events[-1] if not sim.fx_events.is_empty() else {}
-	if last.get("handover", false) and int(last.get("node", -1)) == node_id:
-		return                                          # a handover: its own callout says it (the fx loop, HUD pass)
 	if new_owner == HUMAN:
 		screen_notice(node_id, "TAKEN", Rules.seat_color(HUMAN))
 	elif _old == HUMAN:
@@ -2550,10 +2518,7 @@ func _node_at(p: Vector3, screen: Vector2 = Vector2(-1, -1)) -> int:
 		var rb := _relay_button_at(p, screen)          # RELAY V2: a relay's button disc selects its relay
 		if rb >= 0:
 			return rb
-		var b := hud.badge_at(screen)
-		if b >= 0:
-			return b
-		if vat_count:                                  # 3.0: a count screen is its node's explicit target, as the badge was
+		if vat_count:                                  # 3.0: a count screen is its node's explicit target (the old HUD badge's job)
 			var cs: int = vat_count.screen_at(screen, cam)
 			if cs >= 0:
 				return cs
@@ -2562,16 +2527,10 @@ func _node_at(p: Vector3, screen: Vector2 = Vector2(-1, -1)) -> int:
 
 func _relay_button_at(p: Vector3, screen: Vector2) -> int:
 	## RELAY V2: the relay whose button tap disc (RelayView.hit_disc: >= Rules.RELAY_HIT_PT on a phone) holds this
-	## screen point, or -1. A badge drawn right over the point keeps it (badges are the explicit node targets).
+	## screen point, or -1.
 	if screen.x < 0.0 or vis.is_empty() or cam == null:
 		return -1
-	var rb := RelayView.button_at(cam, sim, vis, screen, p, mobile)
-	if rb >= 0 and hud:
-		for id in hud.badges:
-			var panel: Control = hud.badges[id]["panel"]
-			if panel.visible and panel.get_global_rect().has_point(screen):
-				return -1
-	return rb
+	return RelayView.button_at(cam, sim, vis, screen, p, mobile)
 
 
 func _route_hud(r: Dictionary) -> void:
@@ -2926,15 +2885,12 @@ func _coach_sync() -> void:
 		light = []
 		rects = []
 	var platforms := []                               # the card rather sits over empty sky than over a platform
-	var busy := []                                    # ... and the strip over none, nor over a badge
+	var busy := []                                    # ... and the strip over none
 	for n in sim.nodes:
 		if not sim.collapsed.get(n["id"], false):
 			var sp := cam.unproject_position(n["pos"])
 			platforms.append(sp)
 			busy.append(Rect2(sp - Vector2(radius, radius) * 0.6, Vector2(radius, radius) * 1.2))
-			var br := hud.badge_rect(n["id"])
-			if br.size != Vector2.ZERO:
-				busy.append(br.grow(3.0))
 	if hud.inspector_id >= 0:                         # the open inspector's ring, info panel and buttons
 		var ir := _inspector_target()
 		if ir.size != Vector2.ZERO:
@@ -2964,12 +2920,10 @@ func _coach_sync() -> void:
 
 
 func _tutorial_rect(key: String) -> Rect2:
-	## A coach rect key on screen: "send:0.25", "action:<NAME>" (Hud.action_rect), "dock:<slot>", "badge:<id>",
+	## A coach rect key on screen: "send:0.25", "action:<NAME>" (Hud.action_rect), "dock:<slot>",
 	## "send_panel", "top_bar", "dock", "inspector", "handler" (the creature beside the card).
 	var parts := key.split(":", true, 1)
 	match parts[0]:
-		"badge":
-			return hud.badge_rect(int(parts[1]))
 		"monster_icon":                               # 0.19.2: the monster over your ready hub
 			return hud.monster_icon_rect(int(parts[1]))
 		"send_panel":

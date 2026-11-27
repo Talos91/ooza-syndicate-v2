@@ -39,7 +39,7 @@ func _run() -> void:
 		if a.begins_with("mode="): mode = a.substr(5)
 		if a.begins_with("colour="): seat = a.substr(7)
 		if a.begins_with("f="): only = a.substr(2)
-	Rules.assign_colors(["A", "B"], {"A": "vex", "B": "ember"}, "A", seat if seat.length() == 1 else "A", {})
+	Rules.assign_colors(["A", "B"], {"A": "vex", "B": "ember"}, "A", seat if seat.length() == 1 else "A")
 	var world := Node3D.new()
 	add_child(world)
 	var sun := DirectionalLight3D.new()

@@ -20,7 +20,7 @@ THEMES = {"corporate_campus": ("32-corporate-campus", "CORPORATE-CAMPUS"), "gold
 HUD = [("hud/round25/KEY-SHELL.png", "key-shell"), ("hud/round25/VAT-SHELL.png", "vat-shell"), ("hud/round25/BUTTON-SHELL.png", "button-shell"),
        ("hud/round30-pipes/TUBE-SHELL.png", "r30-tube-shell"), ("hud/round30-pipes/SKILL-FEED-SHELL.png", "r30-skill-feed-shell"),
        ("hud/round30-pipes/VAT-FEED-SHELL.png", "r30-vat-feed-shell")] + \
-      [("hud/PAINT-%s.png" % n, "paint-" + n) for n in ["badge", "banner", "card", "close", "slice-40", "slice-50", "tier-tag", "toast"]]
+      [("hud/PAINT-%s.png" % n, "paint-" + n) for n in ["banner", "card", "close", "slice-40", "slice-50", "toast"]]   # WP6: badge / tier-tag retired
 IMPORT = """[remap]
 
 importer="texture"

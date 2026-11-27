@@ -1,6 +1,6 @@
 extends SceneTree
 ## Headless map-pool check:  Godot --headless --path . --script res://tests/test_map_pool.gd
-## Every map in MapPool loads, has seats (1v1, or its first team/FFA mode), lays out every node, and an AI vs AI match on it
+## Every map in MapPool loads, has seats (1v1, or its first mode), lays out every node, and an AI vs AI match on it
 ## finishes with captures. Exit code 0 = all passed.
 ## The AI seats play what they get in a match (ai-retune-prep): Sim.ai_builds on, so each takes one of its faction's
 ## Rules.AI_LOADOUTS builds by the fixed seed. `-- guard=off` plays them without their home-defence reflex (SeatAI._guard).
@@ -75,19 +75,13 @@ func _init() -> void:
 	check(not MapPool.battlefield().any(func(p): return MapPool.archived(p)), "no archived map on the battlefield")
 	# POOL G (Daniele 2026-11-15): the pool is the 19 G maps; the 18 REWORK maps stay baked but are never offered
 	check(MapPool.PROTO.size() == 19 and MapPool.PROTO.all(func(c): return MapPool.all().any(func(p): return p.get_file().begins_with(c))), "POOL G: 19 G maps, all baked")
-	var lab_pool: bool = Rules.lab and not MapPool.LAB.is_empty()   # LAB BUILD: battlefield() is the lab maps only, so the G-pool shape checks below do not apply
-	if lab_pool:
-		print("SKIP  REWORK / MULTI_FILL pool-shape checks: lab build, battlefield() = MapPool.LAB %s" % [MapPool.LAB])
-	for code in ([] if lab_pool else MapPool.REWORK):
-		var fill: bool = code in MapPool.MULTI_FILL   # hotfix 0.24.5.1: M-15 / N-06 are offered as is for the modes no G map seats
+	for code in MapPool.REWORK:
 		check(MapPool.all().any(func(p): return p.get_file().begins_with(code)) and not MapPool.mode_offered(code, "1v1")
-				and (fill or (not MapPool.mode_offered(code, "2v2") and not MapPool.battlefield().any(func(p): return p.get_file().begins_with(code)))) and not code in MapPool.DEMO, "%s: REWORK (file kept, %s)" % [code, "offered only for modes the G pool lacks" if fill else "offered nowhere"])
-	for code in ([] if lab_pool else MapPool.MULTI_FILL):
-		check(MapPool.mode_offered(code, "2v2") and MapPool.battlefield().any(func(p): return p.get_file().begins_with(code)), "%s: MULTI_FILL offered for 2v2" % code)
+				and not MapPool.battlefield().any(func(p): return p.get_file().begins_with(code)) and not code in MapPool.DEMO, "%s: REWORK (file kept, offered nowhere)" % code)
 	for old in MapPool.RECODED:
 		check(not MapPool.all().any(func(p): return p.get_file().begins_with(old)), "%s: re-coded %s (no old-coded file left)" % [old, MapPool.RECODED[old]])
 	if not Rules.proto_debug:
-		check(MapPool.battlefield().all(func(p): return p.get_file().begins_with("G-") or p.get_file().substr(0, 4) in MapPool.MULTI_FILL), "POOL G: 02 BATTLEFIELD offers only G maps (+ MULTI_FILL for 2v2 / FFA)")
+		check(MapPool.battlefield().all(func(p): return p.get_file().begins_with("G-")), "POOL G: 02 BATTLEFIELD offers only G maps")
 	# SEAT BIAS: N-24 / N-04 were out of 1v1 from 0.23.15; back in since 0.23.18 (Daniele 2026-11-01, Desk vls-fair: the Very Last
 	# Stand tie-break fixed the bias) - offered in 1v1 and on 02 BATTLEFIELD again
 	for code in ([] if Rules.proto_debug else ["N-24", "N-04"]):   # (old maps: not checked on a proto/demo build, Daniele 2026-11-06)
@@ -104,19 +98,16 @@ func _init() -> void:
 		check(sm.has("seats") and not sm["seats"].is_empty(), "%s: has seats" % map_path)
 		if sm.get("seats", {}).is_empty():
 			continue
-		# 1v1 where the map has it, otherwise its first mode (2v2 / 3v3 / FFA) - Alpha 14 plays them all
+		# 1v1 where the map has it, otherwise its first mode (old data)
 		var md: String = "1v1" if sm["seats"].has("1v1") else sm["seats"].keys()[0]
 		var spos := MapBuilder.layout(sm)
 		check(spos.size() == sm["nodes"].size(), "%s: every node reachable from the centre (%d/%d)" %
 				[sm["code"], spos.size(), sm["nodes"].size()])
 		var s_seats := {}
-		var s_teams := {}
 		for s in sm["seats"][md]:
 			s_seats[int(s["node"])] = s["seat"]
-			if md == "2v2" and s.get("team") != null:
-				s_teams[s["seat"]] = int(s["team"])
 		# every map plays BRAWL (SIEGE deleted 2026-11-23 - a map's "combatMode" no longer picks the mode)
-		_play(sm, spos, s_seats, s_teams, md)
+		_play(sm, spos, s_seats, md)
 
 	_check_overpass()
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
@@ -125,24 +116,21 @@ func _init() -> void:
 
 func _pool3() -> void:
 	## OOZE 3.0 (plan 2.4, Daniele 2026-11-27: old pool-G maps are not in the 3.0 build): the pickers offer ONLY the Z maps
-	## (MapPool.POOL3) on every build line but a lab build; every older map stays baked (nothing deleted) and is offered nowhere;
+	## (MapPool.POOL3) on every build line; every older map stays baked (nothing deleted) and is offered nowhere;
 	## every Z map loads, seats 1v1, lays out every node and finishes a headless AI vs AI match.
-	var lab0 := Rules.lab
 	var demo0 := Rules.demo
 	var proto0 := Rules.proto_debug
 	for line in [[false, false, false, "release"], [false, false, true, "-dev / proto"], [false, true, true, "demo"]]:
-		Rules.lab = line[0]
 		Rules.demo = line[1]
 		Rules.proto_debug = line[2]
 		MapPool._battlefield_cache = []
 		var bf := MapPool.battlefield()
 		var codes := bf.map(func(p): return p.get_file().substr(0, 4))
 		check(codes == Array(MapPool.POOL3), "%s line: the picker offers exactly the Z maps %s (got %s)" % [line[3], str(MapPool.POOL3), str(codes)])
-		for code in ["G-01", "G-19", "L09C", "N-06", "M-15", "T-02"]:
-			check(not MapPool.mode_offered(code, "1v1") and not MapPool.mode_offered(code, "2v2"), "%s line: old map %s offered in no mode" % [line[3], code])
+		for code in ["G-01", "G-19", "N-06", "M-15", "T-02"]:
+			check(not MapPool.mode_offered(code, "1v1"), "%s line: old map %s offered in no mode" % [line[3], code])
 		for code in MapPool.POOL3:
 			check(MapPool.mode_offered(code, "1v1"), "%s line: %s offered in 1v1" % [line[3], code])
-	Rules.lab = lab0
 	Rules.demo = demo0
 	Rules.proto_debug = proto0
 	MapPool._battlefield_cache = []
@@ -161,17 +149,17 @@ func _pool3() -> void:
 		var s_seats := {}
 		for st in sm["seats"]["1v1"]:
 			s_seats[int(st["node"])] = st["seat"]
-		_play(sm, spos, s_seats, {}, "1v1")
+		_play(sm, spos, s_seats, "1v1")
 	_check_overpass()
 	print("
 %s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	quit(1 if failures else 0)
 
 
-func _play(sm: Dictionary, spos: Dictionary, s_seats: Dictionary, s_teams: Dictionary, md: String) -> void:
+func _play(sm: Dictionary, spos: Dictionary, s_seats: Dictionary, md: String) -> void:
 		var ssim := Sim.new()
 		ssim.ai_builds = true                              # the AI seats' rotating builds, as in play (seed 5)
-		ssim.setup(sm, spos, s_seats, {"A": "null", "B": "ember", "C": "vex", "D": "solar", "E": "bloom", "F": "null"}, 5, s_teams)
+		ssim.setup(sm, spos, s_seats, {"A": "null", "B": "ember", "C": "vex", "D": "solar", "E": "bloom", "F": "null"}, 5)
 		var s_ais := []
 		for seat in s_seats.values():
 			s_ais.append(SeatAI.new(seat, 2.0, "Standard" if seat == "A" else "Veteran"))

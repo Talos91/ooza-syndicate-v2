@@ -525,10 +525,6 @@ static func clock(t: float) -> String:
 	return "%02d:%02d" % [int(t) / 60, int(t) % 60]
 
 
-static func ordinal(n: int) -> String:
-	return "%d%s" % [n, {1: "st", 2: "nd", 3: "rd"}.get(n if n < 20 else n % 10, "th")]
-
-
 static func nodes_held(sim: Sim, seat: String) -> int:
 	var held := 0
 	for n in sim.nodes:
@@ -540,7 +536,7 @@ static func nodes_held(sim: Sim, seat: String) -> int:
 static func seat_table(sim: Sim, human: String, heads := {}) -> Dictionary:
 	## Every per-seat number this device can show (the Sim's events through Progression.seat_stats - the same counting
 	## as the rewards and the server's report - plus the board at the end). {cols: [{seat, head, faction}], rows:
-	## [[label, [value per column]]]}: you first, then your team-mates, then every rival. Rows a match can't have
+	## [[label, [value per column]]]}: you first, then every rival. Rows a match can't have
 	## (relays on a map without them, skills with ABILITIES off, monsters nobody launched) are left out. heads (HUD
 	## pass: seat -> [head, second line], Hud._seat_heads): a human column by the player's name over the faction, an AI
 	## column by faction over its level; without it, YOU / ALLY / RIVAL over the faction.
@@ -589,9 +585,6 @@ static func seat_table(sim: Sim, human: String, heads := {}) -> Dictionary:
 		rows.append(["Monsters launched", col.call(func(s): return st[s]["monster_launches"])])
 		rows.append(["Units kicked off by monsters", col.call(func(s): return st[s]["monster_kicked"])])
 	rows.append(["Final strength", col.call(func(s): return Rules.shown(sim.seat_strength(s)))])
-	if sim.teams.is_empty() and order.size() > 2:     # free-for-all: where everyone finished
-		var placed := Progression.placements(sim)
-		rows.append(["Placement", col.call(func(s): return ordinal(int(placed.get(s, order.size()))))])
 	if order.any(func(s): return float(st[s]["out_at_s"]) >= 0.0):
 		rows.append(["Out at", col.call(func(s): return clock(float(st[s]["out_at_s"])) if float(st[s]["out_at_s"]) >= 0.0 else "-")])
 	return {"cols": cols, "rows": rows}

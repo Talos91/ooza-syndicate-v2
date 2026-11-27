@@ -8,7 +8,7 @@ extends SceneTree
 ##      legacy ring collapse still runs with Rules.quota = false);
 ##   D  unit speed x0.75 (travel speed and door rate), Googatling reach / power / ammo (1 unit per 3 kills);
 ##   F  3.0 node categories (normal / SPECIAL T4 / relay laser-or-juicer / relay special), vats produce while upgrading, the
-##      sinkhole rebuild (player and AI), no INWARD / OUTWARD Last Stand state, edge_kind, lab off + the lab_opt shim;
+##      sinkhole rebuild (player and AI), no INWARD / OUTWARD Last Stand state, edge_kind, 3.0 rule values;
 ##   and determinism (L11P AI vs AI twice = the same events).
 ##   Godot --headless --path . --script res://tests/test_rules3.gd        Exit code 0 = all passed.
 
@@ -56,7 +56,7 @@ func _sim_m(m: Dictionary, seed_value := 5, loadouts := {}) -> Sim:
 	for s in m["seats"]["1v1"]:
 		seats[int(s["node"])] = s["seat"]
 	var sim := Sim.new()
-	sim.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "ember"}, seed_value, {}, loadouts)
+	sim.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "ember"}, seed_value, loadouts)
 	return sim
 
 
@@ -192,14 +192,14 @@ func _part_c() -> void:
 	# no archived relay kind on any lab map; the guard turns one into a plain node
 	var bad := []
 	for p in MapPool.all():
-		if not p.get_file().substr(0, 4) in MapPool.LAB:
+		if not p.get_file().substr(0, 4) in ["L09P", "L11P", "L13P", "L09C", "L11C", "L13C", "L09R"]:   # the old lab maps (MapPool.LAB went in WP6)
 			continue
 		var m := MapBuilder.load_map(p)
 		for n in m["nodes"]:
-			if str(n.get("relay")) in Rules.LAB_RELAY_ARCHIVED:
+			if str(n.get("relay")) in Rules.RELAY_ARCHIVED:
 				bad.append("%s node %d %s" % [p.get_file(), n["id"], n["relay"]])
 		for e in m["edges"]:
-			if str(e.get("proto")) in Rules.LAB_RELAY_ARCHIVED:
+			if str(e.get("proto")) in Rules.RELAY_ARCHIVED:
 				bad.append("%s deck %d-%d %s" % [p.get_file(), e["from"], e["to"], e["proto"]])
 	check(bad.is_empty(), "no lab map uses lift / tilt / remote / laser_relay %s" % str(bad))
 	var m2 := MapBuilder.load_map(path)
@@ -484,13 +484,10 @@ func _special_map() -> Dictionary:
 func _part_f() -> void:
 	# ------------------------------------------------------------ F: 3.0 node categories, upgrades, sinkhole rebuild, Last Stand
 	_rules3()
-	# lab off + the shim
-	check(not Rules.lab, "3.0: Rules.lab is false (VERSION %s)" % Rules.VERSION)
-	check(Rules.lab_opt("quota_tier") == true and Rules.lab_opt("joints") == true and Rules.lab_opt("relay_set") == true
-			and is_equal_approx(float(Rules.lab_opt("gat_ammo")), 1.0 / 3.0) and is_equal_approx(float(Rules.lab_opt("unit_speed")), 0.75)
-			and is_equal_approx(float(Rules.lab_opt("gat_range")), Rules.R) and Rules.lab_opt("count_on_screen") == true
-			and Rules.lab_opt("hud_badge") == false and Rules.lab_opt("cam_lock") == true and Rules.lab_opt("gat_start") == false,
-			"lab_opt shim answers the 3.0 values")
+	# the 3.0 rule values (the lab option shim went in WP6)
+	check(Rules.quota and Rules.JOINTS and Rules.RELAY_SET and is_equal_approx(Rules.GAT_AMMO, 1.0 / 3.0)
+			and is_equal_approx(Rules.UNIT_SPEED, 0.75) and is_equal_approx(Rules.GAT_REACH, Rules.R),
+			"3.0 rules: quota, joints, relay set, Googatling ammo 1/3, unit speed x0.75, reach = own platform")
 	# SPECIAL: always a T4 vat, indestructible, irreplaceable
 	var sl := {"A": {"active": "sinkhole"}, "B": {"active": "sinkhole"}}
 	var sim := _sim_m(_special_map(), 5, sl)

@@ -1,8 +1,8 @@
 class_name VersusScreen
 extends CanvasLayer
 ## VERSUS (Alpha 21 UI pass, screen system 15): the card between DEPLOY (or a campaign mission's START) and the
-## battle - your side left (YOU / SEAT A, with any AI allies; you by your name), the rivals right (RIVAL / SEAT B; free-for-alls and
-## teams: every rival's faction, compact), VS between them, the map / mode / difficulty line, ENTER BATTLE. A tap
+## battle - your side left (YOU / SEAT A; you by your name), the rivals right (RIVAL / SEAT B; free-for-alls:
+## every rival's faction, compact), VS between them, the map / mode / difficulty line, ENTER BATTLE. A tap
 ## anywhere, a key, or AUTO_SECONDS goes on. It sits over the freshly built match, which is held paused until then
 ## (hold_match / hold_mission), so the match's own set-up and clock are untouched - it only starts a moment later.
 ## Never shown for lessons, the dedicated host, headless runs or command-line match / screenshot runs (wanted());
@@ -50,11 +50,10 @@ static var _lobby_card: VersusScreen = null        # the lobby card raised (hold
 
 
 class LobbySim extends RefCounted:
-	## What the card asks a Sim, answered from the lobby: the seats' factions and who stands with whom.
+	## What the card asks a Sim, answered from the lobby: the seats' factions and who stands with whom (only yourself).
 	var factions := {}
-	var teams := {}
 	func allied(a: String, b: String) -> bool:
-		return a == b or (teams.has(a) and teams.has(b) and teams[a] == teams[b])
+		return a != "" and a == b
 
 
 class LobbyView extends Node:
@@ -178,8 +177,6 @@ static func hold_lobby(root: Node, info := {}) -> void:
 	lv.SEAT_FACTIONS = players.duplicate()
 	lv.sim.factions = players.duplicate()
 	lv.ai = (info.get("ai", {}) as Dictionary).duplicate()
-	for s in (nt.map_data(path).get("seats", {}) as Dictionary).get(lv.mode, []):
-		lv.sim.teams[str(s["seat"])] = int(s.get("team", -1))
 	var v := VersusScreen.new()
 	v.name = LaunchCard.NAME                           # (LaunchCard.drop removes it, whichever card is up)
 	v.main = lv
@@ -278,7 +275,7 @@ func _pt_factor() -> float:
 
 
 func _sides() -> Array:
-	## [your side, the rivals]: seat letters, yours first. Allies (team modes) stand with you.
+	## [your side, the rivals]: seat letters, yours first.
 	var you := str(main.HUMAN)
 	var mine := [you]
 	var them := []
@@ -431,8 +428,6 @@ func _side(seats: Array, pos: Vector2, dims: Vector2, mine: bool) -> float:
 		return 0.0
 	var f0 := str(main.SEAT_FACTIONS[seats[0]])
 	var kick := ("YOU / SEAT %s" % seats[0]) if mine else ("RIVAL / SEAT %s" % seats[0] if seats.size() == 1 else "RIVALS")
-	if mine and seats.size() > 1:
-		kick = "YOUR TEAM"
 	var k := UiKit.label(self, kick, 13, UiKit.accent(f0) if (mine or seats.size() == 1) else UiKit.INK, true, 3)
 	k.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	k.size = Vector2(dims.x, UiKit.line_h(self, 13, true))
@@ -444,7 +439,7 @@ func _side(seats: Array, pos: Vector2, dims: Vector2, mine: bool) -> float:
 	var n := seats.size()
 	var name_h := UiKit.line_h(self, 34 if n == 1 else 18, true) + UiKit.line_h(self, 12) + 8.0
 	var gap := 12.0
-	# one row, or two (3+ seats: FFA 3 / 4, 2v2) when that makes the characters bigger - the side's height is there
+	# one row, or two (3+ seats; 1v1 only since 2026-11-27) when that makes the characters bigger - the side's height is there
 	var room := dims.y - k.size.y - 12.0
 	var cols := n
 	var hs := minf(room - name_h, (dims.x - gap * (n - 1)) / float(n))

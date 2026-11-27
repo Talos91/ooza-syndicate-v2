@@ -18,7 +18,7 @@ func _run() -> void:
 	for s in m["seats"]["1v1"]:
 		seats[int(s["node"])] = s["seat"]
 	var sim := Sim.new()
-	sim.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "ember"}, 300, {}, {"A": {"map": "portal"}, "B": {"map": "portal"}})
+	sim.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "ember"}, 300, {"A": {"map": "portal"}, "B": {"map": "portal"}})
 	var ais := []
 	for seat in seats.values():
 		ais.append(SeatAI.new(seat, 2.5, "Standard"))

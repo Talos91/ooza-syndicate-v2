@@ -34,7 +34,7 @@ const PHONE_UNFIT: Array[String] = []
 # tutorial): never on 02 BATTLEFIELD, never a REMATCH ON A RANDOM MAP pick, never in test_map_pool /
 # test_ai_curve's pools. T-01 / T-02 (the older tutorial pair in the main maps 4.2 pack) joined them in 0.20.4
 # (Daniele: "Hide T-01 / T-02 too" - a server room had defaulted to T-01); the tutorial's first match still
-# loads T-02 by path. T-11 (quick start) / T-12 (team play 2v2) are the rewritten tutorial's maps (2026-09-30); the prefix
+# loads T-02 by path. T-11 (quick start) / T-12 (team play, 2v2 deleted 2026-11-27) are the rewritten tutorial's maps (2026-09-30); the prefix
 # match below is the first four characters of the file name, so two-digit codes work the same.
 const TUTORIAL_ONLY: Array[String] = ["T-01", "T-02", "T-03", "T-04", "T-05", "T-06", "T-07", "T-08", "T-09", "T-10", "T-11", "T-12"]
 static var phone := false                               # set by main at startup: a phone-sized screen
@@ -66,18 +66,14 @@ const POOL_GROUPS: Array[String] = ["G"]
 static func battlefield() -> Array:
 	## all() minus TUTORIAL_ONLY, limited to POOL_GROUPS: what the player actually gets offered (02 BATTLEFIELD,
 	## REMATCH ON A RANDOM MAP) and what test_map_pool / test_ai_curve run their coverage over.
-	## 0.23.0: the new maps (POOL_GROUPS) are the pool for every mode they offer; a mode NO pooled map offers yet (the N maps are
-	## 1v1 / 2v2 only - FFA 3/4) keeps the older maps that offer it, so no mode disappears (conservative reading of
-	## Daniele's "replace current pool with the new ones"; OPEN-QUESTIONS). Cached: the map files don't change at run time.
+	## The new maps (POOL_GROUPS) only (the old gap-filling for modes the pool lacked went with 2v2 / FFA, 2026-11-27: BRAWL is
+	## 1v1 only). Cached: the map files don't change at run time.
 	if not _battlefield_cache.is_empty():
 		return _battlefield_cache
-	var offered := all().filter(func(p): return not p.get_file().substr(0, 4) in TUTORIAL_ONLY and not archived(p) and (not rework(p) or p.get_file().substr(0, 4) in MULTI_FILL))
-	if not POOL3.is_empty() and not Rules.lab:        # OOZE 3.0: the Z maps only, on every build line (release, -dev, demo, proto)
+	var offered := all().filter(func(p): return not p.get_file().substr(0, 4) in TUTORIAL_ONLY and not archived(p) and not rework(p))
+	if not POOL3.is_empty():                          # OOZE 3.0: the POOL3 maps only, on every build line (release, -dev, demo, proto)
 		_battlefield_cache = offered.filter(func(p): return p.get_file().substr(0, 4) in POOL3)
 		return _battlefield_cache
-	if Rules.lab and not LAB.is_empty():              # LAB BUILD: the lab maps only (empty LAB = the G pool below, via proto_debug)
-		var joints: bool = Rules.lab_opt("joints") == true
-		return offered.filter(func(p): return p.get_file().substr(0, 4) in LAB and (joints or not p.get_file().substr(0, 4) in LAB_JOINT))   # (not cached: a card may switch joints)
 	if Rules.demo:                                    # DEMO BUILD: R-01 STRAIT only
 		_battlefield_cache = offered.filter(func(p): return p.get_file().substr(0, 4) in DEMO)
 		return _battlefield_cache
@@ -88,20 +84,7 @@ static func battlefield() -> Array:
 		_battlefield_cache = offered
 		return offered
 	offered = offered.filter(func(p): return not _offered_modes(p).is_empty())   # WITHHELD_MODES took every mode it seats
-	var pooled := offered.filter(func(p): return p.get_file().substr(0, 1) in POOL_GROUPS or p.get_file().substr(0, 4) in MULTI_KEEP)
-	var modes := {}
-	for p in pooled:
-		for m in _offered_modes(p):
-			modes[m] = true
-	_pooled_modes = modes
-	var fill := offered.filter(func(p):
-		if p.get_file().substr(0, 1) in POOL_GROUPS or p.get_file().substr(0, 4) in MULTI_KEEP:
-			return false
-		for m in _offered_modes(p):
-			if not modes.has(m):
-				return true
-		return false)
-	_battlefield_cache = pooled + fill
+	_battlefield_cache = offered.filter(func(p): return p.get_file().substr(0, 1) in POOL_GROUPS)
 	return _battlefield_cache
 
 
@@ -109,9 +92,6 @@ static func battlefield() -> Array:
 # battlefield() / mode_offered), its file stays baked in maps4/ and in all() - nothing is deleted; campaign placeholders and the
 # tutorial still load theirs by path. Per-map suites (test_maps4, test_map_pool, phone_fit) check TEST_SCOPE = PROTO + KEEP_OLD.
 const KEEP_OLD: Array[String] = []   # 2026-11-15 (POOL G): every kept old map is now a G map or on REWORK
-# MULTI-PLAYER KEEP (Daniele 2026-11-10: "M15 N-05 and N-06 for now keep these has 2v2 and FFA but they all need major rework to be at the level of what we have now"):
-# playable for the modes they seat (M-15 2v2 + FFA4, N-06 2v2; N-05 seats 1v1 only, already in KEEP_OLD). REWORK NEEDED: not a baseline of quality.
-const MULTI_KEEP: Array[String] = []   # 2026-11-15 (POOL G): N-05 is G-19; M-15 / N-06 are on REWORK
 const ARCHIVED: Array[String] = [
 	"A-01", "A-02", "A-03", "A-04", "B-01", "B-02", "B-03", "B-04", "B-05", "C-01", "C-02", "C-03", "C-04",
 	"C-05", "M-01", "M-02", "M-03", "M-04", "M-05", "M-06", "M-07", "M-08", "M-09", "M-10", "M-11", "M-12",
@@ -131,10 +111,7 @@ static func test_scope() -> Array[String]:
 	if not POOL3.is_empty():                          # OOZE 3.0 (plan 2.4): the per-map suites check the Z pool only
 		out.append_array(POOL3)
 		return out
-	if Rules.lab and not LAB.is_empty():              # a lab build checks what its picker offers
-		out.append_array(LAB.filter(func(c): return Rules.lab_opt("joints") == true or not c in LAB_JOINT))
-	else:
-		out.append_array(PROTO)
+	out.append_array(PROTO)
 	return out
 
 
@@ -142,11 +119,6 @@ static func test_scope() -> Array[String]:
 # SHRINK-36.md). Out of battlefield(), out of every pool and every mode, NOT archived: their files stay baked in maps4/ (2 / 4 / 6 m)
 # and in all(), to be reworked (fewer platforms / rows) and then re-coded into G.
 const REWORK: Array[String] = ["R-01", "R-05", "R-09", "R-11", "R-13", "R-15", "R-16", "P-02", "P-04", "E-03", "E-05", "E-09", "N-06", "N-16", "N-17", "N-20", "N-22", "M-15"]
-
-
-# MULTI_FILL (hotfix 0.24.5.1, Daniele 2026-11-15: "Use M-15 / N-06 as is"): the G pool is all 1v1, so these two REWORK maps are offered as is for the modes
-# no G map offers (2v2, FFA ...) and never for 1v1 (battlefield() fill + mode_offered() already skip a mode the pool covers). They stay on REWORK.
-const MULTI_FILL: Array[String] = ["M-15", "N-06"]
 
 
 static func rework(code_or_path: String) -> bool:
@@ -175,22 +147,15 @@ const PROTO: Array[String] = ["G-01", "G-02", "G-03", "G-04", "G-05", "G-06", "G
 # json says `was`) by References/Ooze Syndicate maps 3.0/generator/gmaps3.py, next to the Z maps (Daniele decides later whether Z stays).
 const POOL3: Array[String] = ["Z-01", "Z-02", "Z-03", "Z-04", "Z-05", "Z-06", "Z-07", "Z-08",
 	"Y-01", "Y-02", "Y-03", "Y-04", "Y-05", "Y-06", "Y-07", "Y-08", "Y-09", "Y-10", "Y-11", "Y-12", "Y-13", "Y-14", "Y-15", "Y-16", "Y-17", "Y-18", "Y-19"]
-# THEMES (2026-11-13): map code -> LookTheme id (corporate_campus / golden_hour / quota_parade / wellness_retreat). Empty = the LAB
+# THEMES (2026-11-13): map code -> LookTheme id (corporate_campus / golden_hour / quota_parade / wellness_retreat). Empty = the slate look
 # on every map until Daniele assigns the round-32 settings; dev --theme=<id> forces one for shots.
 const THEMES := {}
 const DEMO: Array[String] = ["G-01", "G-02", "G-03", "G-04", "G-05", "G-06", "G-07", "G-08", "G-09", "G-10", "G-11", "G-12", "G-13", "G-14", "G-15", "G-16", "G-17", "G-18", "G-19",
 		"HX-1", "HX-2", "HX-3", "HX-4", "HX-5", "HX-6", "HX-7", "HX-8"]   # DEMO BUILD (Rules.demo): the G pool (2026-11-15; the REWORK maps left it) + the HX size ladder
-# LAB BUILD (Rules.lab, 05 Handoff/handoffs/LAB-BUILD-PLAN 2026-11-23.md): the lab test-card maps, group "L", codes of exactly 4
-# characters (all() / every filter here match on the first four characters of the file name). While the list is
-# empty a lab build offers the G pool (proto_debug) so it stays playable.
-const LAB: Array[String] = ["L09P", "L11P", "L13P", "L09C", "L11C", "L13C", "L09R"]   # WP 1: the plain reading ladder (generator References/Ooze Syndicate maps - lab 2026-11/generator/labmaps.py); WP 3: the cluster variants; WP 4: L09R (relay kill: retract + switch, neutral Googatling T3 centre)
-# LAB JOINT maps (WP3: clusters of touching platforms joined by joint edges): offered only while Rules.lab_opt("joints") is on.
-const LAB_JOINT: Array[String] = ["L09C", "L11C", "L13C"]
 # HX SIZE LADDER (map-size study 2026-11-15; Daniele: "lets do it in the demo staging, simply make lets say 4/8 maps with just a
 # honeycomb of nodes so we get the general idea of max limits"): HX-1..HX-8, generator References/Ooze Syndicate maps - size ladder
 # HX 2026-11/generator/honeycomb.py. DEMO ONLY: group "H" is not in POOL_GROUPS and the codes are not in PROTO.
 static var _battlefield_cache: Array = []
-static var _pooled_modes: Dictionary = {}              # the modes the new pool (POOL_GROUPS) offers
 
 
 static func _offered_modes(path: String) -> Array:
@@ -200,20 +165,16 @@ static func _offered_modes(path: String) -> Array:
 
 
 static func mode_offered(code_or_path: String, mode: String) -> bool:
-	## 0.23.0: may this map be played in `mode`? A pooled (new) map: every mode it seats. A kept older map: only the modes the
-	## new pool doesn't offer (it fills a gap, it doesn't compete with the new maps). Never a WITHHELD_MODES mode.
-	if mode in WITHHELD_MODES.get(code_or_path.get_file().substr(0, 4), []) or archived(code_or_path) or (rework(code_or_path) and not code_or_path.get_file().substr(0, 4) in MULTI_FILL):
+	## May this map be played in `mode`? A pooled (new) map: every mode it seats; an older map: never (the gap-filling for the
+	## modes the pool lacked went with 2v2 / FFA, 2026-11-27). Never a WITHHELD_MODES mode.
+	if mode in WITHHELD_MODES.get(code_or_path.get_file().substr(0, 4), []) or archived(code_or_path) or rework(code_or_path):
 		return false
-	if not POOL3.is_empty() and not Rules.lab:        # OOZE 3.0: only the Z maps are offered, in every mode they seat
+	if not POOL3.is_empty():                          # OOZE 3.0: only the POOL3 maps are offered
 		return code_or_path.get_file().substr(0, 4) in POOL3
-	if POOL_GROUPS.is_empty() or (Rules.lab and code_or_path.get_file().substr(0, 4) in LAB):
+	if POOL_GROUPS.is_empty():
 		return true
 	var c := code_or_path.get_file().substr(0, 1)
-	if c in POOL_GROUPS or code_or_path.get_file().substr(0, 4) in MULTI_KEEP:
-		return true
-	if _pooled_modes.is_empty():
-		battlefield()
-	return not _pooled_modes.has(mode)
+	return c in POOL_GROUPS
 
 static func phone_screen(mobile: bool) -> bool:
 	## A phone rather than a tablet: the phone profile on a screen whose short side is under 600 CSS px

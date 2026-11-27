@@ -3,7 +3,7 @@ extends RefCounted
 ## hud-lab (2026-11-13): the round-29 / round-30 lab HUD pack (UI designer 4, DIRECTOR-PACKAGE/deliveries/29-hud-pieces-FINAL) as the
 ## default in-match HUD. Every piece is the pack's 3x PNG (derivatives in assets/ui/lab29, originals untouched) drawn evenly scaled at
 ## the README's LOCKED phone sizes (Daniele 2026-11-13): skill keys x1.2 (~76 x 68 pt), sending vat x1.2 (~88 x 253 pt with its feed),
-## node badges 28 x 21 pt, the score tube with the timer only. Goo = shaders/hud_goo.gdshader (tint per player, level from the match,
+## the score tube with the timer only. Goo = shaders/hud_goo.gdshader (tint per player, level from the match,
 ## slosh, bubbles, glass highlight; clipped by the goo master's alpha). Key and slice states are built at run time from the masks;
 ## numbers, names and timers are drawn live. Placement: 25-hud-pieces-B/PIECES.json and round30-pipes/GEO.json (812 x 375 pt frame).
 ## Off: Rules.HUD_LAB = false or no lab29 art (then the pre-lab HUD). Dev --hud-old deleted 2026-11-23, back from tag archive-2026-11-23.
@@ -13,7 +13,7 @@ const GOO := preload("res://shaders/hud_goo.gdshader")
 const UI_FONT := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")
 const SYMBOL_FONT := preload("res://assets/fonts/DejaVuSansMono.woff2")
 const INK := Color("1e3a3f")                    # the pack's label ink (A3 / A4 / A5)
-const LIGHT := Color("eef7f4")                  # light digits on dark windows (badge count, timer, key seconds)
+const LIGHT := Color("eef7f4")                  # light digits on dark windows (timer, key seconds)
 const WARN_INK := Color("a3242f")               # a slice's price you cannot pay yet
 const SWITCH_AMBER := Color("ffb238")
 const PX := 3.0                                 # art px per pt (the 3x exports)
@@ -25,8 +25,6 @@ const KEY_WINDOW_C := Vector2(31.5, 20.5)       # the icon window's centre (GEO-
 const KEY_NAME_C := Vector2(31.5, 46.5)         # the name strip's centre (GEO-A key name anchor)
 const SKILL_FEED_OFF := Vector2(-16, -21)       # round-30 skill feed canvas (719, 67) from key 0 (735, 88), pt at 1x
 const SKILL_FEED_PT := Vector2(93, 192)
-const BADGE_PT := Vector2(28, 21)               # LOCKED (revised 2026-11-13 from 34 x 25)
-const BADGE_ART := Vector2(59, 44)
 const VAT_CANVAS := Vector2(87, 211)            # every VAT-* layer's canvas (pt at 1x), at (0, 74) in the frame
 const VAT_BODY_X := 16.0                        # the vat body's left in that canvas (left of it: the feed stub to the screen edge)
 const VAT_GOO_PX := Rect2(78, 96, 141, 410)     # VAT-GOO-WHITE's box (3x px): 0 % at its bottom, 100 % at its top (README)
@@ -572,72 +570,6 @@ static func _padlock(ci: CanvasItem, c: Vector2, r: float) -> void:
 	ci.draw_circle(body.get_center(), maxf(1.0, r * 0.14), INK)
 
 
-# ------------------------------------------------------------------------------------------------ node badges (BadgeLayer)
-
-static func draw_badges(layer, hud) -> void:
-	## Every node's badge: PAINT-badge scaled to 28 x 21 pt, the owner's colour on its outline (MASK OWNER-EDGE), no emblem, the
-	## count 13 pt bold centred in the dark window (29.5 / 59, 22 / 44), the build timer on the TIMER-STRIP, a tier tag on owned
-	## vats / Googatlings. A rival's hidden count (emblem only before) would be an empty box: hidden (README item 4, conservative).
-	var paint := tex("paint-badge")
-	if paint == null:
-		return
-	var edge := tex("mask-badge-owner-edge")
-	var strip := tex("mask-badge-timer-strip")
-	var fnt := bold()
-	for id in hud.badges:
-		var b: Dictionary = hud.badges[id]
-		var p: Control = b["panel"]
-		if not p.visible:
-			continue
-		var lbl: Label = b["label"]
-		if not lbl.visible:
-			continue
-		var r := Rect2(p.position, p.size)
-		var owner := str(b["owner"])
-		var oc := Rules.seat_color(owner) if owner != "" and owner != "?" else Rules.NEUTRAL
-		layer.draw_texture_rect(paint, r, false)
-		if owner != "" and owner != "?":                  # vat-neon hotfix 0.24.4: the owner reads at a glance - a soft glow + a bolder outline
-			var gl := StyleBoxFlat.new()
-			gl.bg_color = Color(oc.r, oc.g, oc.b, 0.0)
-			gl.set_corner_radius_all(int(r.size.y * 0.22))
-			gl.shadow_color = Color(oc.r, oc.g, oc.b, 0.75)
-			gl.shadow_size = maxi(int(r.size.y * 0.30), 3)
-			layer.draw_style_box(gl, r)
-			var ol := StyleBoxFlat.new()
-			ol.bg_color = Color(0, 0, 0, 0)
-			ol.border_color = oc
-			ol.set_border_width_all(maxi(int(r.size.y * 0.11), 2))
-			ol.set_corner_radius_all(int(r.size.y * 0.22))
-			layer.draw_style_box(ol, r)
-		layer.draw_texture_rect(edge, r, false, oc)
-		var bar: ProgressBar = b["build"]
-		if bar.visible and strip != null:
-			var f := clampf(bar.value / 100.0, 0.0, 1.0)
-			var src := Rect2(24, 121, 129 * f, 7)        # TIMER-STRIP box (3x px), filled left to right
-			if src.size.x >= 1.0:
-				var kk := r.size.x / paint.get_size().x
-				layer.draw_texture_rect_region(strip, Rect2(r.position + src.position * kk, src.size * kk), src, Rules.state_color("build"))
-		var wc := r.position + Vector2(r.size.x * 29.5 / 59.0, r.size.y * 22.0 / 44.0)
-		var fs := fit_px(lbl.text, r.size.y * 13.0 / 21.0, r.size.x * 46.0 / 59.0, fnt)
-		text_c(layer, lbl.text, wc, fs, LIGHT, fnt)
-	var tag := tex("paint-tier-tag")
-	if tag == null:
-		return
-	for id in hud.badges:                                # tier tags over the top-right corner of owned vats / Googatlings
-		var b: Dictionary = hud.badges[id]
-		var p: Control = b["panel"]
-		if not p.visible or not (b["label"] as Label).visible:
-			continue
-		var n: Dictionary = hud.sim.nodes[id]
-		if str(n["owner"]) == "" or n["relay"] != "" or not (str(n["structure"]) in ["vat", "machinegoon"]):
-			continue
-		var side := p.size.y * 16.0 / 21.0
-		var c := Vector2(p.position.x + p.size.x - side * 0.15, p.position.y - side * 0.2)
-		var rr := Rect2(c - Vector2(side, side) / 2.0, Vector2(side, side))
-		layer.draw_texture_rect(tag, rr, false)
-		text_c(layer, str(int(n["tier"])), c, fit_px("4", side * 0.78, side * 0.7, fnt), LIGHT, fnt)
-
-
 # ------------------------------------------------------------------------------------------------ the radial (Hud.ActionWedge)
 
 static func draw_slice(w, lit: bool) -> void:
@@ -718,7 +650,7 @@ static func draw_card(hud, ci: Control) -> void:
 	ci.draw_texture_rect(tex("paint-card"), r, false)
 	ci.draw_texture_rect(tex("mask-card-owner-edge"), r, false, hud.inspector_col)
 	var cap := maxf(float(hud.sim.node_cap(n)), 1.0)
-	var units: float = hud.sim.garrison_total(n) if hud.sim.allied_units(n) > 0.0001 else float(n["units"])
+	var units: float = float(n["units"])
 	var f := clampf(units / cap, 0.0, 1.0)
 	var k := u
 	art(ci, "mask-card-bar-track", Vector2.ZERO, k)
@@ -790,7 +722,6 @@ static func button_face(b: Button, glyph: String, u: float, off := false) -> voi
 # Neon masks take the SEAT colour, goo the faction colour (Daniele's colour rule, 2026-11-15).
 const DIR37 := "res://assets/ui/lab37/"
 const PX37 := 4.0                               # art px per pt in that pack
-const CUE_PT := Vector2(26, 22)                 # P1 / P1R canvas (pt)
 static var _tex37 := {}
 
 
@@ -799,24 +730,3 @@ static func tex37(n: String) -> Texture2D:
 		var p := DIR37 + n + ".png"
 		_tex37[n] = load(p) if ResourceLoader.exists(p) else null
 	return _tex37[n]
-
-
-static func cue_ready() -> bool:
-	return tex37("PAINT-P1") != null and tex37("PAINT-P1R") != null
-
-
-static func draw_cue(ci: CanvasItem, relay: bool, centre: Vector2, pt: float, seat: Color, glow: float, alpha := 1.0) -> void:
-	## P1 (upgrade ready: chevron tag) / P1R (relay ready to fire: lozenge): an indicator, never a touch target.
-	## Paint, the owner edge in the seat colour, the READY layer pulsing with `glow` 0..1.
-	var id := "P1R" if relay else "P1"
-	var r := Rect2(centre - CUE_PT * pt * 0.5, CUE_PT * pt)
-	var base := tex37("PAINT-" + id)
-	if base == null:
-		return
-	ci.draw_texture_rect(base, r, false, Color(1, 1, 1, alpha))
-	var edge := tex37("MASK-%s-OWNER-EDGE" % id)
-	if edge != null:
-		ci.draw_texture_rect(edge, r, false, Color(seat.r, seat.g, seat.b, alpha))
-	var rd := tex37("MASK-%s-READY" % id)
-	if rd != null and glow > 0.0:
-		ci.draw_texture_rect(rd, r, false, Color(seat.r, seat.g, seat.b, glow * alpha))

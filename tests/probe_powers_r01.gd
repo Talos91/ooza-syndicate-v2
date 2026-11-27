@@ -36,7 +36,7 @@ func _run() -> void:
 				seats[int(s["node"])] = s["seat"]
 			var slot: String = Rules.SKILLS[id]["slot"]
 			var sim := Sim.new()
-			sim.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "ember"}, 300 + k, {}, {"A": {slot: id}, "B": {slot: id}})
+			sim.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "ember"}, 300 + k, {"A": {slot: id}, "B": {slot: id}})
 			var ais := []
 			for seat in seats.values():
 				ais.append(SeatAI.new(seat, 2.5, "Standard"))

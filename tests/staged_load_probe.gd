@@ -6,7 +6,7 @@ extends Node
 ## with no reload shortcut. It records every frame's wall-clock gap from DEPLOY until the match's VERSUS card has gone and
 ## prints the load steps (Net.load_marks, ms after DEPLOY), the longest frame gaps (with the steps that fell inside them)
 ## and a verdict against TARGET_MS (250 ms, the desktop goal).
-##   Godot --path . res://tests/staged_load_probe.tscn -- [--probe-map=res://maps4/A-01-orbital-nexus.json] [--probe-mode=2v2]
+##   Godot --path . res://tests/staged_load_probe.tscn -- [--probe-map=res://maps4/A-01-orbital-nexus.json] [--probe-mode=1v1]
 ##       [--window=1280x720] [--runs=2] [--shot=<png>: the card mid-load, its bar part-filled (skews that run's frame times)]
 ## (--runs: DEPLOY again after LEAVE-and-rehost, so the second run shows a warm cache; the first run is the cold one.)
 ## Windowed only: headless has no VERSUS card and no drawing to measure.
@@ -82,7 +82,7 @@ func _run(n: int) -> int:
 	h.hosting = true
 	h.connected = true
 	h.room_code = "PRB%d" % n
-	h.mode = str(args.get("probe-mode", "2v2"))
+	h.mode = str(args.get("probe-mode", "1v1"))
 	h.map_path = str(args.get("probe-map", "res://maps4/A-01-orbital-nexus.json"))
 	h.preferred_faction = "null"
 	h.loadout = {"active": "ghost_line", "map": "relay_hack"}

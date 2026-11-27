@@ -47,7 +47,7 @@ func _joint(sim: Sim, a: int, b: int) -> int:
 
 
 func _init() -> void:
-	check(not Rules.lab and Rules.JOINTS, "3.0: joints are a rule (Rules.JOINTS), not a lab option")
+	check(Rules.JOINTS, "3.0: joints are a rule (Rules.JOINTS), not a lab option")
 
 	# ------------------------------------------------------------ the maps
 	var m9 := MapBuilder.load_map(CLUSTER_MAPS[0])

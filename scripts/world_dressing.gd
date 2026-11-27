@@ -122,7 +122,7 @@ func _floor() -> void:
 	mat.set_shader_parameter("fade", FADE)
 	mat.set_shader_parameter("edge_noise", EDGE_NOISE)
 	mat.set_shader_parameter("corner", CORNER)
-	mat.set_shader_parameter("lip_col", WorldLayer.LAB_FAR)
+	mat.set_shader_parameter("lip_col", WorldLayer.SLATE_FAR)
 	mat.render_priority = old.render_priority
 	wl._floor.material_override = mat
 
@@ -144,7 +144,7 @@ func _backdrop() -> void:
 	var sky := layer.get_child(0) as TextureRect
 	var mat := ShaderMaterial.new()
 	mat.shader = SHADER_SKY
-	mat.set_shader_parameter("abyss", WorldLayer.LAB_FAR)
+	mat.set_shader_parameter("abyss", WorldLayer.SLATE_FAR)
 	var lv := WorldLayer.BACKDROP_FOG
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--backdrop-fog="):
@@ -171,8 +171,8 @@ func _backdrop() -> void:
 	mat.set_shader_parameter("fog_density", float(dens[1]))
 	mat.set_shader_parameter("cloud_amt", float(amt[0]))
 	mat.set_shader_parameter("fog_amt", float(amt[1]))
-	mat.set_shader_parameter("cloud_col", WorldLayer.LAB_FAR.lightened(WorldLayer.CLOUD_TONE))
-	mat.set_shader_parameter("fog_col", WorldLayer.LAB_FAR)
+	mat.set_shader_parameter("cloud_col", WorldLayer.SLATE_FAR.lightened(WorldLayer.CLOUD_TONE))
+	mat.set_shader_parameter("fog_col", WorldLayer.SLATE_FAR)
 	sky.material = mat
 	_centre_fog(tex, amt, lv, dens)
 
@@ -882,8 +882,8 @@ func _centre_fog(tex: Texture2D, amt: Array, _lv: String, dens: Array) -> void:
 	m.set_shader_parameter("fog_density", float(dens[1]))
 	m.set_shader_parameter("cloud_amt", float(WorldLayer.CENTRE_LEVELS[0]) * k)
 	m.set_shader_parameter("fog_amt", float(WorldLayer.CENTRE_LEVELS[1]) * k)
-	m.set_shader_parameter("cloud_col", WorldLayer.LAB_FAR.lightened(WorldLayer.CLOUD_TONE))
-	m.set_shader_parameter("fog_col", WorldLayer.LAB_FAR)
+	m.set_shader_parameter("cloud_col", WorldLayer.SLATE_FAR.lightened(WorldLayer.CLOUD_TONE))
+	m.set_shader_parameter("fog_col", WorldLayer.SLATE_FAR)
 	m.render_priority = -4
 	var quad := PlaneMesh.new()
 	quad.size = Vector2.ONE * 600.0

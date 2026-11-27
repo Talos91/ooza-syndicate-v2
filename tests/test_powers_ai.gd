@@ -32,7 +32,7 @@ func _match(path: String, loadout: Dictionary, factions: Dictionary, seed_value:
 	for s in m["seats"]["1v1"]:
 		seats[int(s["node"])] = s["seat"]
 	var sim := Sim.new()
-	sim.setup(m, MapBuilder.layout(m), seats, factions, seed_value, {}, {"A": loadout, "B": loadout})
+	sim.setup(m, MapBuilder.layout(m), seats, factions, seed_value, {"A": loadout, "B": loadout})
 	var ais := []
 	for seat in seats.values():
 		ais.append(SeatAI.new(seat, 2.5, "Standard"))

@@ -8,7 +8,7 @@ extends SceneTree
 ##   (maps 4.0) straight on the socket -> node line with no piers, the builder's own verification is
 ##   clean, the plaza GLB has every plate and every plaza pier (docks have none);
 ## - invariants Sim relies on: node ids are 0..N-1 in array order, one edge per node pair;
-## - seats: every mode the map lists has its seats, the right count and (team modes) the right teams;
+## - seats: the 1v1 seats (the only mode since 2026-11-27) exist and count 2;
 ## - Last Stand (Daniele, Alpha 17): waves drop whole rings in the method's order, the order's last
 ##   ring never falls, a relay falls only once every ring it links to has fallen, and after every
 ##   wave the surviving map is one connected piece over fixed decks and plaza links; 0.18.7: the drops
@@ -19,8 +19,7 @@ const DECK_HW := Rules.DECK_W * 0.5     # real deck half-width (builder D_PHYS; 
 const GAP := 0.3
 const CLEAR_H := 3.5
 const STEP := 0.75
-const PLAYERS := {"1v1": 2, "2v2": 4, "3v3": 6, "2v2v2": 6, "FFA3": 3, "FFA4": 4, "FFA5": 5}
-const TEAMS := {"2v2": [2, 2], "3v3": [3, 3], "2v2v2": [2, 2, 2]}
+const PLAYERS := {"1v1": 2}   # BRAWL 1v1 only (2026-11-27): other seat keys stay in the map data, unread
 
 var failures := 0
 var checks := 0
@@ -34,8 +33,6 @@ func check(cond: bool, what: String) -> void:
 
 
 func _initialize() -> void:
-	for k in ["gat_own_platform", "gat_start", "quota_tier", "relay_set"]:   # LAB WP4 rule options: the map checks run on the
-		Rules.lab_opts[k] = false                     # real game's rules (tests/test_lab_rules.gd tests the options)
 	_run.call_deferred()
 
 
@@ -192,6 +189,8 @@ func _layout(m: Dictionary, path: String) -> void:
 func _seats(m: Dictionary) -> void:
 	var code: String = m["code"]
 	for md in m["modes"]:
+		if md != "1v1":
+			continue                                   # 2v2 / FFA deleted 2026-11-27: the game never reads those seats
 		var list: Array = m["seats"].get(md, [])
 		check(not list.is_empty(), "%s: seats for %s" % [code, md])
 		check(list.size() == PLAYERS.get(md, -1), "%s: %s has %d seats (want %d)" % [code, md, list.size(), PLAYERS.get(md, -1)])
@@ -199,14 +198,6 @@ func _seats(m: Dictionary) -> void:
 		for s in list:
 			ids[int(s["node"])] = true
 		check(ids.size() == list.size(), "%s: %s seats on distinct nodes" % [code, md])
-		if TEAMS.has(md):
-			var per := {}
-			for s in list:
-				if s.get("team") != null:
-					per[int(s["team"])] = per.get(int(s["team"]), 0) + 1
-			var sizes := per.values()
-			sizes.sort()
-			check(sizes == TEAMS[md], "%s: %s teams %s" % [code, md, str(sizes)])
 
 
 const EDGE_KINDS := ["deck", "joint"]          # OOZE 3.0 (plan 2.2): Sim.edge_kind's kinds; a map may never ship one the sim does not know
@@ -266,7 +257,7 @@ func _ooze3(m: Dictionary, path: String) -> void:
 	for n in m["nodes"]:
 		if n.get("relay") != null and str(n.get("relay")) != "":
 			relay_ids[int(n["id"])] = true
-			check(not (str(n["relay"]) in Rules.LAB_RELAY_ARCHIVED), "%s: relay %d (%s) is a kind the 3.0 relay set plays" % [code, int(n["id"]), str(n["relay"])])
+			check(not (str(n["relay"]) in Rules.RELAY_ARCHIVED), "%s: relay %d (%s) is a kind the 3.0 relay set plays" % [code, int(n["id"]), str(n["relay"])])
 			check(str(n["relay"]) == "launcher" or not (Rules.NODE_BUILDS["relay"] as Array).is_empty(), "%s: relay %d offers its build option (%s)" % [code, int(n["id"]), str(Rules.NODE_BUILDS["relay"])])
 	for e in m["edges"]:
 		if bool(e.get("joint", false)):

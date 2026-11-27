@@ -8,7 +8,7 @@ extends Node
 ## 2. The menu: this node stands in for main (started = false) - the MENU track loads from res:// (native: no
 ##    music.pck) and plays; MUSIC ON / OFF and MUSIC VOLUME move the Music bus at once (saved to a test cfg, never the
 ##    player's), apart from the Sfx bus.
-## 3. A match: spectates an AI-vs-AI BRAWL match (M-30 Sporefall Plain, FFA4, Veteran - the sound demo's board),
+## 3. A match: spectates an AI-vs-AI BRAWL match (M-30 Sporefall Plain, its first mode, Veteran - the sound demo's board),
 ##    (off-screen and silent is fine:  Godot --audio-driver Dummy --position -6000,-6000 --path . tests/sound_check.tscn)
 ##    fast-forwarded silently to FF s of match time: the music crossfades MENU -> BATTLE, a forced fight (Music.test_heat)
 ##    switches to FIGHT mid-tune and back to BATTLE when it is over, the music moves on at a
@@ -67,7 +67,7 @@ func _start_match() -> void:
 	Rules.abilities_on = true
 	main = (load("res://main.tscn") as PackedScene).instantiate()
 	main.set("map_path", MAP)
-	main.set("mode", "FFA4")
+	main.set("mode", "1v1")
 	main.set("demo", true)
 	main.set("ai_level", "Veteran")
 	main.set("seed_value", 11)
@@ -183,9 +183,6 @@ func _check_slots() -> void:
 	check(Music.slot_for(true, s, "A", false) == "DEFEAT", "slot: lost = DEFEAT")
 	s.winner = ""
 	check(Music.slot_for(true, s, "A", false) == "DEFEAT", "slot: a draw = DEFEAT")
-	s.teams = {"A": 0, "C": 0, "B": 1, "D": 1}
-	s.winner = "C"
-	check(Music.slot_for(true, s, "A", false) == "VICTORY", "slot: your team-mate won (2v2) = VICTORY")
 
 
 func _check_menu() -> void:

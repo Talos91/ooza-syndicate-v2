@@ -84,7 +84,7 @@ func _board(mp: String, mode: String, fires: int, out_dir: String) -> void:
 		for n in view.nodes:
 			if n["owner"] != "":
 				seats[n["id"]] = n["owner"]
-		host.setup(inst.map, MapBuilder.layout(inst.map), seats, inst.SEAT_FACTIONS, inst.seed_value, {}, inst.LOADOUTS)
+		host.setup(inst.map, MapBuilder.layout(inst.map), seats, inst.SEAT_FACTIONS, inst.seed_value, inst.LOADOUTS)
 	var rots := []
 	for n in host.nodes:
 		if n["relay"] == "rotation" and not host.relay_states(n).is_empty():

@@ -17,7 +17,7 @@ const SHORT := {"corporate": "corporate_campus", "campus": "corporate_campus", "
 const WORLD := "res://assets/world/themes/%s/%s.png"
 const UI := "res://assets/ui/themes/%s/%s.png"
 const HUD_SHELLS := ["key-shell", "vat-shell", "button-shell", "r30-tube-shell", "r30-skill-feed-shell", "r30-vat-feed-shell",
-		"paint-badge", "paint-banner", "paint-card", "paint-close", "paint-slice-40", "paint-slice-50", "paint-tier-tag", "paint-toast"]
+		"paint-banner", "paint-card", "paint-close", "paint-slice-40", "paint-slice-50", "paint-toast"]
 
 # zone: [base, trim, roughness, base metalness, trim metalness] (sRGB hex from MATERIALS-<S>.md; corporate / wellness give
 # metalness in prose: corporate rims + sleeves 0.65, smaller hardware 0.45, stone / porcelain / liner 0; wellness 0.55 on the
@@ -68,7 +68,7 @@ const DARK := ["OS_Dark", "OS_Recess"]
 # deck / rim / pillar zones below; walkway, vats, relays, tubes, pits, glass, goo stay the lab's. Pits: never darkened
 # (ground level, Daniele: "you have pit shadows even if pit are actually at ground level").
 const D_MIX := [0.25, 0.35]
-const LAB_D := {
+const SLATE_D := {
 	"deck": ["#4B535B", "#454D55", 0.62, 0.0, 0.0], "rim": ["#30363C", "#5E6A72", 0.45, 0.4, 0.4],
 	"pillar": ["#3A4148", "#56606A", 0.55, 0.3, 0.3]}
 
@@ -212,7 +212,7 @@ static func role(kind: String, mat_name: String) -> Array:
 		if not kind in ["deck", "pillar"] or not (ROLES[kind] as Dictionary).has(nm):
 			return []
 		var r0: Array = ROLES[kind][nm]
-		var lz: Array = LAB_D[r0[0]]
+		var lz: Array = SLATE_D[r0[0]]
 		return [Color(lz[r0[1]]), float(lz[2]), float(lz[3 + int(r0[1])])]
 	var r: Array = []
 	if nm in DARK:
