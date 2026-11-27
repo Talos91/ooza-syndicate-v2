@@ -31,8 +31,9 @@
    "note": "7 SCRIPT ERRORs under -s (no Net autoload, PROJECT.md autoload rule); the same 7 on lab 61c2eb6e; the suite prints its PASS lines"
   },
   "test_net": {
+   "fails": ["FAIL  every skill cast for the view check ([\"overdrive\"])", "re:^1 FAILED$"],
    "errors": ["re:Compile Error: Identifier not found: Net$", "re:Compile Error: Failed to compile depended scripts\\.$"],
-   "note": "Net autoload missing under -s; main 1a716645..f1b184cc"
+   "note": "Net autoload missing under -s; main 1a716645..f1b184cc. The overdrive view-check FAIL is pre-existing on ooze3 e4d5fc47 (WP6 baseline run, with 4 2v2 / FFA / 3v3 room FAILs whose checks WP6 deleted)"
   },
   "test_match_report": {
    "errors": ["re:Compile Error: Identifier not found: Net$", "re:Compile Error: Failed to compile depended scripts\\.$"],
