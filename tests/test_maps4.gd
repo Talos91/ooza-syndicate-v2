@@ -823,6 +823,11 @@ func _run() -> void:
 	## on a proto build (Rules.proto_debug) only the proto picker's maps are checked; `-- scope=all` checks every baked map;
 	## `-- scope=pool` checks MapPool.test_scope() (the G pool, 2026-11-15) on any build.
 	## OOZE 3.0 (plan 2.4): while MapPool.POOL3 is set the default scope is the Z pool on every build line (old maps: `-- scope=all`).
+	# OOZE 3.0 (WP1 a934f51f): the Last Stand is the quota by default (Rules.quota) and archived relay kinds play as plain nodes
+	# (Rules.RELAY_SET). This suite checks map geometry and the legacy collapse (ring Last Stand / Very Last Stand) the maps must
+	# still survive, so it runs with quota off, as before WP1; the quota end is test_rules3's. RELAY_SET is off only for _relay_multi.
+	var quota0 := Rules.quota
+	Rules.quota = false
 	var full := (MapPool.POOL3.is_empty() and not Rules.proto_debug and not "scope=pool" in OS.get_cmdline_user_args()) or "scope=all" in OS.get_cmdline_user_args()
 	var pool := MapPool.all()
 	if not full:
@@ -852,10 +857,14 @@ func _run() -> void:
 	print("Last Stand corner cycle: the latest collapse ends at %d:%02d; %d of %d multi-corner rings open on two sides (the rest: only one side could fall safely)" % [
 			int(_latest_end) / 60, int(_latest_end) % 60, _pairs_alt, _pairs])
 	print("RELAY V2 button gaps: the narrowest widest-gap is %.1f deg (rule >= %.1f); tight nodes: %s" % [_relay_min_gap, 2.0 * Rules.RELAY_MIN_SEP, str(_relay_tight)])
+	var relay_set0 := Rules.RELAY_SET
+	Rules.RELAY_SET = false                           # tests/relay_multi.json composes every relay kind, the archived remote included
 	_relay_multi()
+	Rules.RELAY_SET = relay_set0
 	_heights()
 	_drop_timing()
 	_very_last_stand()
 	_hubs(pool)
+	Rules.quota = quota0
 	print("\n%d checks - %s" % [checks, "ALL PASSED (0 failed)" if failures == 0 else "%d FAILED" % failures])
 	quit(1 if failures > 0 else 0)
