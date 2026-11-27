@@ -7,7 +7,7 @@ extends Node3D
 ## relay's button platform off the rim is a second tap target for its node (double-tap it, or the node, to fire).
 ## Command-line user args (after `--`):
 ##   --map=res://maps4/T-01-first-steps.json  map to load (skips the title screen)
-##   --mode=1v1|FFA3|FFA4  match mode (the map's first mode if it lacks this one; 5-6 seat modes deleted 2026-11-23, 2v2 2026-11-27)
+##   --mode=1v1  match mode (the map's first mode if it lacks this one; 5-6 seat modes deleted 2026-11-23, 2v2 / FFA 2026-11-27)
 ##   --demo                                 every seat played by the AI
 ##   --ai=Training|Casual|Standard|Veteran|Expert  AI level (Rules.AI_LEVELS; the menu picks it otherwise)
 ##   --brawl (alias --classic)              no-op: BRAWL is the only mode (SIEGE deleted 2026-11-23)
@@ -25,7 +25,7 @@ extends Node3D
 ##   --thumb=<png>                          render the map's menu thumbnail (no HUD), then quit
 ##   --menu-page=<page> --menu-shot=<png>   open a menu page / screenshot the menu, then quit
 ##   --menu-filter=brawl                     screenshot helper: pre-set the BATTLEFIELD TYPE filter chip
-##   --menu-mode=FFA4 --menu-colour=faction   screenshot helper: pre-set SETUP's PLAYERS mode / YOUR COLOUR
+##   --menu-mode=1v1 --menu-colour=faction   screenshot helper: pre-set SETUP's PLAYERS mode / YOUR COLOUR
 ##   --scenario=fight|rear|queue|build|inspect|switch|rotate --zoom=N  stage one situation up close
 ##   --goo                                  TERRITORY: GOO (Rules.goo_territory) instead of the neon
 ##   --faction=null --rival=null            your faction (seat A) and seat B's (a mirror match: the same one)
@@ -160,7 +160,7 @@ var perf_on := "--perf" in OS.get_cmdline_user_args()   # debug flag, read once
 var _pending_inspect := -1                    # single tap: inspector opens after the double-tap window
 var _pending_at := 0.0
 var _swallow_release := false
-var mode := "1v1"                             # 1v1 / FFA3-4 (the map's seats key; max 4 seats since 2026-11-18)
+var mode := "1v1"                             # 1v1 only (the map's seats key; 2v2 / FFA deleted 2026-11-27)
 var color_choice := "A"                       # your ownership colour: palette key or "faction"
 var menu_layer: CanvasLayer
 const VatCountScript := preload("res://scripts/vat_count.gd")   # OOZE 3.0: the counts on each node's count screen
@@ -652,7 +652,7 @@ func start_match(path: String, faction: String, seat_factions: Dictionary, level
 	## Entry from the front menu (Menu.deploy): your faction (seat A), every enemy seat's pick (0.19.2
 	## spec H3: Menu._seat_faction_picks - one rival-faction picker per seat, a faction id or "random";
 	## _start_map() resolves "random" through Sim.resolve_factions, the same way Sim.setup() would), the
-	## AI level, the map, the mode (1v1 / FFA3-4), your colour and your skill loadout ({"active":
+	## AI level, the map, the mode (1v1), your colour and your skill loadout ({"active":
 	## id, "map": id}; empty = the default).
 	mode = match_mode
 	LOADOUTS = {HUMAN: loadout}                        # (POWERS: always an entry - a seat with none is an AI seat)

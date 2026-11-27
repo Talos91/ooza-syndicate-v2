@@ -8,7 +8,7 @@ extends SceneTree
 ##   (maps 4.0) straight on the socket -> node line with no piers, the builder's own verification is
 ##   clean, the plaza GLB has every plate and every plaza pier (docks have none);
 ## - invariants Sim relies on: node ids are 0..N-1 in array order, one edge per node pair;
-## - seats: every mode the map lists has its seats and the right count;
+## - seats: the 1v1 seats (the only mode since 2026-11-27) exist and count 2;
 ## - Last Stand (Daniele, Alpha 17): waves drop whole rings in the method's order, the order's last
 ##   ring never falls, a relay falls only once every ring it links to has fallen, and after every
 ##   wave the surviving map is one connected piece over fixed decks and plaza links; 0.18.7: the drops
@@ -19,7 +19,7 @@ const DECK_HW := Rules.DECK_W * 0.5     # real deck half-width (builder D_PHYS; 
 const GAP := 0.3
 const CLEAR_H := 3.5
 const STEP := 0.75
-const PLAYERS := {"1v1": 2, "2v2": 4, "3v3": 6, "2v2v2": 6, "FFA3": 3, "FFA4": 4, "FFA5": 5}
+const PLAYERS := {"1v1": 2}   # BRAWL 1v1 only (2026-11-27): other seat keys stay in the map data, unread
 
 var failures := 0
 var checks := 0
@@ -189,6 +189,8 @@ func _layout(m: Dictionary, path: String) -> void:
 func _seats(m: Dictionary) -> void:
 	var code: String = m["code"]
 	for md in m["modes"]:
+		if md != "1v1":
+			continue                                   # 2v2 / FFA deleted 2026-11-27: the game never reads those seats
 		var list: Array = m["seats"].get(md, [])
 		check(not list.is_empty(), "%s: seats for %s" % [code, md])
 		check(list.size() == PLAYERS.get(md, -1), "%s: %s has %d seats (want %d)" % [code, md, list.size(), PLAYERS.get(md, -1)])

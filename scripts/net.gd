@@ -2,8 +2,8 @@ extends Node
 ## Ooze Syndicate 2.0 - online rooms (autoload "Net"). Began as Alpha 11's PeerJS approach, ported from
 ## Game/Alpha 11/scripts/network.gd (the P2P half) to 2.0's seats, maps and Sim:
 ## - the transport is RelayBridge (the room server, see ROOM SERVER below; the PeerJS rooms were removed in Alpha 21);
-## - four-character room codes, 2-4 players: free-for-all (1v1, FFA 3-4) (5-6 seat modes deleted 2026-11-23; 2v2 and the
-##   lobby's team switch deleted 2026-11-27, Daniele: "Modes: BRAWL 1v1 only"), host-assigned seats (join order);
+## - four-character room codes, 2 players: 1v1 only (5-6 seat modes deleted 2026-11-23; 2v2, the lobby's team switch and
+##   FFA 3 / 4 deleted 2026-11-27, Daniele: "Modes: BRAWL 1v1 only"), host-assigned seats (join order);
 ## - room colours (Daniele, 0.18.7: the same colours on every screen): every player picks a hue in the
 ##   lobby, unique in the room; the host validates,
 ##   and the launch carries the seat -> hue map (room_colours) that every browser renders;
@@ -76,9 +76,9 @@ signal seats_changed                               # host: which seats the AI pl
 const VERSION_TAG := "ooze20-net-9"               # plus Rules.VERSION: guests must match the host exactly (2: team switch, room colours; 3: structures 2.1, teams; 4: server-hosted rooms, room owner; 5: delta snapshots, binary frames; 6: READY; 7: player names; 8: POWERS - new horde keys, Portal [entrance, exit]; 9: OOZE 3.0 - 3.0 rules (joints, Last Stand = quota, unit speed, Googatling reach), snapshot "quota" always read; the count size is a local view option, never on the wire)
 # MAX 4 SEATS (Daniele 2026-11-18, screen layout; deleted from the code 2026-11-23): FFA5, 3v3 and 2v2v2 are gone - a request for
 # one is refused (set_mode). Tag archive-2026-11-23 keeps them (MODES 1v1 FFA3 FFA4 FFA5 2v2 3v3 2v2v2, SLOTS up to 6).
-const MODES := ["1v1", "FFA3", "FFA4"]             # 2v2 deleted 2026-11-27 (Daniele: "Modes: BRAWL 1v1 only")
-const MODE_LABELS := {"1v1": "1 V 1", "FFA3": "FFA 3", "FFA4": "FFA 4"}
-const SLOTS := {"1v1": 2, "FFA3": 3, "FFA4": 4}
+const MODES := ["1v1"]                             # 2v2 / FFA3 / FFA4 deleted 2026-11-27 (Daniele: "Modes: BRAWL 1v1 only")
+const MODE_LABELS := {"1v1": "1 V 1"}
+const SLOTS := {"1v1": 2}
 const SEATS := ["A", "B", "C", "D", "E", "F"]     # rooms seat A-D only (SLOTS); E / F stay so an out-of-range slot never indexes past the end
 const FACTIONS := ["vex", "null", "bloom", "ember", "solar"]
 const ACTIONS := ["send", "upgrade", "build_cannon", "build_forge", "restore", "switch", "cast",

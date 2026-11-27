@@ -91,7 +91,6 @@ func _run() -> void:
 	m._pick(m.show_factions)
 	await shot("07-faction-picker")
 	m._cancel_pick()
-	m.mode = "FFA4" if "FFA4" in m._modes_of(m._selected_map()) else m.mode
 	m._pick(m.show_seats)
 	await shot("08-rivals-sheet")
 	m._cancel_pick()

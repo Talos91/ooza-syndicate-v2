@@ -165,7 +165,7 @@ func _versus_card(m: Node3D, n: Node) -> Node:
 func _run() -> void:
 	MapPool.dir = "res://maps"                     # the legacy roster offers every mode, whatever pack ships
 	# ---------------------------------------------------------------- lobby, every mode
-	for mode in ["1v1", "FFA3", "FFA4"]:   # map-pass 11-18: FFA5 / 3v3 / 2v2v2 archived (max 4 seats); 2v2 deleted 2026-11-27
+	for mode in ["1v1"]:   # 2v2 / FFA3 / FFA4 deleted 2026-11-27 (BRAWL 1v1 only)
 		_open_room(mode)
 		for i in range(1, host.slots()):
 			_join("g%d" % i, ["null", "ember", "bloom", "solar"][i - 1])
@@ -183,7 +183,7 @@ func _run() -> void:
 		check(g1.connected and g1.roster.size() == host.slots() and g1.mode == mode and g1.map_path == host.map_path, mode + ": guest sees the lobby")
 		var extra := _join("late")
 		_deliver()
-		check(extra.bridge == null and not host.roster.has(host.links["late"]), mode + ": a full room rejects a sixth player")
+		check(extra.bridge == null and not host.roster.has(host.links["late"]), mode + ": a full room rejects a third player")
 		guests.erase("late")
 		extra.queue_free()
 
@@ -200,8 +200,7 @@ func _run() -> void:
 	_to_host("g1", {"op": "faction", "faction": "pirates"})
 	check(host.roster[g.assigned_id]["faction"] == "solar", "unknown factions are ignored")
 	host.set_mode("FFA3")
-	check(host.mode == "FFA3" and not host.can_start(), "host widens the room; deploy waits for the new seat")
-	host.set_mode("1v1")
+	check(host.mode == "1v1", "FFA is gone: the room refuses it and stays 1v1")
 	_ready_all()
 	check(host.can_start(), "back to 1v1")
 
@@ -334,10 +333,10 @@ func _run() -> void:
 	# 0.18.7: the corner-cycle drop order is the host's; a guest (whatever its own seed) reads it from ls[12]
 	var lsm := MapBuilder.load_map("res://maps4/A-01-orbital-nexus.json")
 	var ls_seats := {}
-	for st in lsm["seats"]["FFA4"]:
+	for st in lsm["seats"]["1v1"]:
 		ls_seats[int(st["node"])] = st["seat"]
 	var ls_host := Sim.new()
-	ls_host.setup(lsm, MapBuilder.layout(lsm), ls_seats, {"A": "null", "B": "ember", "C": "vex", "D": "solar"}, 2)
+	ls_host.setup(lsm, MapBuilder.layout(lsm), ls_seats, {"A": "null", "B": "ember"}, 2)
 	ls_host._map_last_stand = {"methods": ["inward"], "orders": {"inward": lsm["lastStand"]["orders"]["inward"]}}
 	ls_host._ring_orders = ls_host._map_last_stand["orders"]
 	ls_host.time = Rules.LAST_STAND_TIME
@@ -654,32 +653,39 @@ func _run() -> void:
 	bg1.leave()
 
 	# ---------------------------------------------------------------- EMPTY SEATS: AI
-	_open_room("FFA3")
+	_open_room("1v1")
+	check(not host.can_start(), "1v1 alone: no deploy while EMPTY SEATS is off")
+	host.set_ai_fill("Casual")
+	_ready_all()
+	check(host.can_start(), "EMPTY SEATS: AI - deploy opens")
+	host.start_match()
+	_deliver()
+	check(host.match_info["players"].size() == 2 and host.match_info["ai"] == {"B": "Casual"}, "the AI takes seat B")
+	check(host.ai_seats() == {"B": "Casual"}, "host runs an AI for seat B")
+	var hs4 := _build_sim(host.match_info)
+	check(hs4.factions.size() == 2, "the round has two seats")
+	host.world_ready(hs4, _fake_main(hs4))
+	hs4.over = true
+	hs4.winner = "A"
+	host._process(0.2)
+	host.request_rematch()
+	check(host.match_round == 2 and host.roster.size() == 1 and host.match_info["ai"].size() == 1, "rematch: the AI keeps its seat")
+	_open_room("1v1")
 	var a1 := _join("g1")
 	_deliver()
-	check(not host.can_start(), "FFA3 with two players: no deploy while EMPTY SEATS is off")
 	host.set_ai_fill("Casual")
 	_deliver()
-	_ready_all()
-	check(host.can_start() and a1.ai_fill == "Casual", "EMPTY SEATS: AI - deploy opens; guests see the setting")
+	check(a1.ai_fill == "Casual", "guests see the EMPTY SEATS setting")
 	_ready_all()
 	host.start_match()
 	_deliver()
-	check(host.match_info["players"].size() == 3 and host.match_info["ai"] == {"C": "Casual"}, "the AI takes seat C")
-	check(host.ai_seats() == {"C": "Casual"}, "host runs an AI for seat C")
-	var hs4 := _build_sim(host.match_info)
-	check(hs4.factions.size() == 3, "the round has three seats")
-	host.world_ready(hs4, _fake_main(hs4))
+	var hs4b := _build_sim(host.match_info)
+	host.world_ready(hs4b, _fake_main(hs4b))
 	a1.world_ready(_build_sim(a1.match_info), null)
 	_deliver()
 	host.links.erase("g1")
 	host.peer_left(2)
 	check(host.ai_seats().has("B") and host.ai_seats()["B"] == "Casual", "with EMPTY SEATS on, the AI covers a dropped player")
-	hs4.over = true
-	hs4.winner = "A"
-	host._process(0.2)
-	host.request_rematch()
-	check(host.match_round == 2 and host.roster.size() == 1 and host.match_info["ai"].size() == 2, "rematch: the dropped player's seat goes to the AI")
 
 	# ---------------------------------------------------------------- without AI: rematch returns to the lobby
 	_open_room("1v1")
@@ -702,14 +708,13 @@ func _run() -> void:
 	check(not host.active and host.roster.size() == 1 and host.in_room(), "rematch with a missing player and no AI: back to the lobby")
 
 	# ---------------------------------------------------------------- lobby departures, host departure
-	_open_room("FFA3")
+	_open_room("1v1")
 	_join("g1")
-	_join("g2")
 	_deliver()
 	host.peer_left(2)
 	_deliver()
-	check(host.roster.size() == 2 and host.seat_of(3) == "B", "seats repack after a lobby departure")
-	var gg: Node = guests["g2"]
+	check(host.roster.size() == 1 and host.seat_of(1) == "A", "a lobby departure frees the seat")
+	var gg: Node = guests["g1"]
 	gg.fail("The host left or the connection was lost. The room is closed.")
 	check(not gg.in_room() and gg.status.begins_with("The host left"), "host departure closes the room for a guest")
 	gg.leave()
@@ -887,15 +892,14 @@ func _colours_of(n: Node) -> Dictionary:
 func _test_colours() -> void:
 	## 0.18.7 (Daniele: the same colours on every screen): lobby picks, unique, the map
 	## in the launch, identical on host and guest.
-	# ---------------------------------------------------------------- FFA: unique picks
-	_open_room("FFA4")
+	# ---------------------------------------------------------------- unique picks
+	_open_room("1v1")
 	host._fix_colours()
 	var c1 := _join("g1", "null")
-	var c2 := _join("g2", "ember")
-	_deliver()                                         # map-pass: three in FFA4 so the newcomer below still has a seat (FFA5 archived)
+	_deliver()
 	var cols := _colours_of(host).values()
-	check(cols.size() == 3 and cols.all(func(c): return Rules.HUES.has(c)) and _uniq(cols).size() == 3, "FFA: every player gets a distinct colour")
-	check(_colours_of(c1) == _colours_of(host) and _colours_of(c2) == _colours_of(host), "FFA: every guest sees the same colour list")
+	check(cols.size() == 2 and cols.all(func(c): return Rules.HUES.has(c)) and _uniq(cols).size() == 2, "every player gets a distinct colour")
+	check(_colours_of(c1) == _colours_of(host), "the guest sees the same colour list")
 	var taken: String = host.roster[1]["colour"]
 	_to_host("g1", {"op": "colour", "colour": taken})
 	_deliver()
@@ -906,32 +910,21 @@ func _test_colours() -> void:
 	var free: String = Rules.FFA_ORDER.filter(func(k): return not k in _colours_of(host).values())[0]
 	_to_host("g1", {"op": "colour", "colour": free})
 	_deliver()
-	check(host.roster[c1.assigned_id]["colour"] == free and c2.roster[c1.assigned_id]["colour"] == free, "a free colour is taken and every guest sees it")
-	var late := _new_net()                              # a newcomer asking for a taken colour gets another
-	late.remote_host = "host"
-	late.room_code = "AB7K"
-	guests["late"] = late
-	host.links["late"] = host.next_peer
-	host.next_peer += 1
-	_to_host("late", {"op": "register", "version": host.version(), "faction": "solar", "colour": free})
-	_deliver()
-	check(late.assigned_id > 0 and host.roster[late.assigned_id]["colour"] != free and _uniq(_colours_of(host).values()).size() == 4, "a newcomer's taken colour gives way (still unique)")
+	check(host.roster[c1.assigned_id]["colour"] == free and c1.roster[c1.assigned_id]["colour"] == free, "a free colour is taken and the guest sees it")
 	host.set_colour("orange" if not "orange" in _colours_of(host).values() else "cyan")
 	check(host.roster[1]["colour"] in ["orange", "cyan"], "the host picks its own colour")
 	# ---------------------------------------------------------------- the launch carries the map, same on both
-	host.set_ai_fill("Casual")
-	host.set_mode("FFA4")
 	_ready_all()
 	host.start_match()
 	_deliver()
 	var hc: Dictionary = host.match_info.get("colours", {})
-	check(hc.size() == 4 and _uniq(hc.values()).size() == 4, "launch: a colour for every seat, all different")
+	check(hc.size() == 2 and _uniq(hc.values()).size() == 2, "launch: a colour for every seat, all different")
 	for id in host.roster:
 		check(hc[host.seat_of(id)] == host.roster[id]["colour"], "launch: seat %s keeps its player's pick" % host.seat_of(id))
-	check(c1.match_info["colours"] == hc and late.match_info["colours"] == hc, "every guest receives the same seat -> colour map")
+	check(c1.match_info["colours"] == hc, "the guest receives the same seat -> colour map")
 	Rules.use_colours(host.match_info["colours"])
 	var on_host := Rules.seat_colors.duplicate()
-	Rules.use_colours(c2.match_info["colours"])
+	Rules.use_colours(c1.match_info["colours"])
 	check(Rules.seat_colors == on_host and Rules.seat_colors["A"] == Rules.HUES[hc["A"]], "host and guest render identical seat colours (no per-screen recolouring)")
 
 
@@ -952,15 +945,13 @@ func _test_rooms_more() -> void:
 	guests.erase("old")
 
 	# ---------------------------------------------------------------- NAMES (ooze20-net-7, Daniele 2026-09-28)
-	_open_room("FFA4")
+	_open_room("1v1")
 	host.roster[1]["name"] = "Daniele"
-	var n1 := _new_net()
-	n1.remote_host = "host"
-	guests["n1"] = n1
-	host.links["n1"] = host.next_peer
-	host.next_peer += 1
-	_to_host("n1", {"op": "register", "version": host.version(), "faction": "ember", "name": "  Gf\u0007  the   Great\u200b  "})
 	_join("n2", "bloom")
+	_deliver()
+	check(host.name_of(guests["n2"].assigned_id) == "PLAYER B", "no name: PLAYER + the seat")
+	_open_room("1v1")
+	host.roster[1]["name"] = "Daniele"
 	var n3 := _new_net()
 	n3.remote_host = "host"
 	guests["n3"] = n3
@@ -968,23 +959,30 @@ func _test_rooms_more() -> void:
 	host.next_peer += 1
 	_to_host("n3", {"op": "register", "version": host.version(), "faction": "solar", "name": "daniele"})
 	_deliver()
-	check(host.name_of(n1.assigned_id) == "Gf the Great" and n1.name_of(1) == "Daniele", "a name travels, cleaned (controls, zero-width, extra spaces): \"%s\"" % host.name_of(n1.assigned_id))
-	check(host.name_of(guests["n2"].assigned_id) == "PLAYER C", "no name: PLAYER + the seat")
 	check(host.name_of(n3.assigned_id) == "daniele (2)" and n3.name_of(n3.assigned_id) == "daniele (2)", "names are unique in the room: \"%s\"" % host.name_of(n3.assigned_id))
+	_open_room("1v1")
+	host.roster[1]["name"] = "Daniele"
+	var n1 := _new_net()
+	n1.remote_host = "host"
+	guests["n1"] = n1
+	host.links["n1"] = host.next_peer
+	host.next_peer += 1
+	_to_host("n1", {"op": "register", "version": host.version(), "faction": "ember", "name": "  Gf\u0007  the   Great\u200b  "})
+	_deliver()
+	check(host.name_of(n1.assigned_id) == "Gf the Great" and n1.name_of(1) == "Daniele", "a name travels, cleaned (controls, zero-width, extra spaces): \"%s\"" % host.name_of(n1.assigned_id))
 	check(host.clean_name("x".repeat(40)).length() == host.NAME_MAX, "a name is at most %d characters" % host.NAME_MAX)
 	check(host.accept_chat(n1.assigned_id, "hi") and host.chat_history[-1]["who"] == "GF THE GREAT · EMBER", "the chat stamp carries the sender's name")
 	_to_host("n1", {"op": "register", "version": host.version(), "faction": "ember", "name": "Impostor"})
 	check(host.name_of(n1.assigned_id) == "Gf the Great", "a second register can't rename a seated player")
 
 	# ---------------------------------------------------------------- READY (ooze20-net-6, Daniele 2026-09-28)
-	_open_room("FFA3")
+	_open_room("1v1")
 	var r1 := _join("r1", "ember")
-	var r2 := _join("r2", "bloom")
 	_deliver()
 	check(host.all_ready() == false and host.is_ready(1) and not host.can_start(), "READY: the owner counts as ready, the guests don't yet")
 	r1.set_ready(true)
 	_deliver()
-	check(host.is_ready(r1.assigned_id) and r2.is_ready(r1.assigned_id) and not host.can_start(), "a guest's READY reaches the room; DEPLOY waits for the last one")
+	check(host.is_ready(r1.assigned_id) and r1.is_ready(r1.assigned_id) and host.can_start(), "a guest's READY reaches the room; DEPLOY opens")
 	var pf: String = r1.preferred_faction
 	r1.set_faction("solar")
 	_to_host("r1", {"op": "faction", "faction": "solar"})
@@ -999,19 +997,18 @@ func _test_rooms_more() -> void:
 	_deliver()
 	check(not host.is_ready(r1.assigned_id) and host.roster[r1.assigned_id]["faction"] == "solar", "UN-READY unlocks the picks")
 	r1.set_ready(true)
-	r2.set_ready(true)
 	_deliver()
 	check(host.all_ready() and host.can_start(), "everyone READY: DEPLOY opens")
 	var before: int = host.bridge.sent.size()
 	host.toggle_last_stand()
 	var toasts: Array = []
 	for q in host.bridge.sent.slice(before):
-		if q[0] in ["r1", "r2"] and str(q[1]).contains("notice"):
+		if q[0] in ["r1"] and str(q[1]).contains("notice"):
 			toasts.append(q[0])
 	_deliver()
-	check(not host.is_ready(r1.assigned_id) and not host.is_ready(r2.assigned_id) and not host.can_start(),
+	check(not host.is_ready(r1.assigned_id) and not host.can_start(),
 			"an owner's settings change un-readies everyone")
-	check(toasts.size() == 2, "...and each of them hears why (%s)" % str(toasts))
+	check(toasts.size() == 1, "...and the guest hears why (%s)" % str(toasts))
 	r1.set_ready(true)
 	_deliver()
 	before = host.bridge.sent.size()
@@ -1026,7 +1023,7 @@ func _test_rooms_more() -> void:
 	check(host.active, "DEPLOY with everyone READY launches")
 	host.return_to_room("back")
 	_deliver()
-	check(not host.is_ready(r1.assigned_id) and not host.is_ready(r2.assigned_id), "back in the lobby: everyone presses READY again")
+	check(not host.is_ready(r1.assigned_id), "back in the lobby: everyone presses READY again")
 
 	quit(1 if failures > 0 else 0)
 

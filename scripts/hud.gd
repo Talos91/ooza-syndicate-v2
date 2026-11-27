@@ -2899,7 +2899,6 @@ func _build_end() -> void:
 	var draw := winner == ""
 	var s := MatchScreens.open(end_panel, mobile, _my_faction())
 	var seats: Array = sim.factions.keys()
-	var ffa := seats.size() > 2
 	var outcome := "VICTORY" if won else ("DRAW" if draw else "DEFEAT")
 	var where := "%s · %s" % [main.mode, MatchScreens.clock(sim.time)]
 	if main.online:
@@ -2916,14 +2915,9 @@ func _build_end() -> void:
 					_build_end()}, MatchScreens.seat_table(sim, human, _seat_heads()))
 		_show_screen(end_panel)
 		return
-	var placed := Progression.placements(sim)
 	var line := MatchScreens.verdict(won, draw, int(main.seed_value))   # the syndicate's joke for it (Daniele)
 	var kicker: String = line[0]
-	if ffa and not won and not draw:                   # an FFA loss says where you finished instead
-		kicker = "FINISHED %s OF %d" % [MatchScreens.ordinal(int(placed.get(human, seats.size()))).to_upper(), seats.size()]
 	var sub := where + "  ·  " + ("decided in the Last Stand" if sim.last_stand_active else "decided before the Last Stand")   # 0.25.3: no INWARD / OUTWARD
-	if not won and not draw and seats.size() > 2:     # who took it, when it wasn't a plain duel
-		sub = "Won by %s  ·  %s" % [_who_line(winner), sub]
 	sub = _versus_line(seats) + "\n" + sub           # HUD pass: who played - a human by name, an AI by faction and level
 	if draw and sim.draw_line != "":                   # 7:00, a neutral last platform: the funny call-out (0.19.0)
 		sub = str(sim.draw_line) + "\n" + sub
@@ -2932,8 +2926,6 @@ func _build_end() -> void:
 		sub = "QUOTA  A %d · B %d  ·  %s" % [sim.quota_of("A"), sim.quota_of("B"), why] + "\n" + sub
 	var st := Progression.seat_stats(sim, human)
 	var third := [str(st["captures"]), "Captures"]
-	if ffa:
-		third = ["%s / %d" % [MatchScreens.ordinal(int(placed.get(human, seats.size()))), seats.size()], "Placement"]
 	var extras := []
 	var strip := _reward_strip(s.reward_scale(ui_scale))   # PROGRESSION: kept whole
 	if strip != null:

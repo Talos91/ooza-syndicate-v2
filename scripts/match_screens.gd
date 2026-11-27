@@ -525,10 +525,6 @@ static func clock(t: float) -> String:
 	return "%02d:%02d" % [int(t) / 60, int(t) % 60]
 
 
-static func ordinal(n: int) -> String:
-	return "%d%s" % [n, {1: "st", 2: "nd", 3: "rd"}.get(n if n < 20 else n % 10, "th")]
-
-
 static func nodes_held(sim: Sim, seat: String) -> int:
 	var held := 0
 	for n in sim.nodes:
@@ -589,9 +585,6 @@ static func seat_table(sim: Sim, human: String, heads := {}) -> Dictionary:
 		rows.append(["Monsters launched", col.call(func(s): return st[s]["monster_launches"])])
 		rows.append(["Units kicked off by monsters", col.call(func(s): return st[s]["monster_kicked"])])
 	rows.append(["Final strength", col.call(func(s): return Rules.shown(sim.seat_strength(s)))])
-	if order.size() > 2:                               # free-for-all: where everyone finished
-		var placed := Progression.placements(sim)
-		rows.append(["Placement", col.call(func(s): return ordinal(int(placed.get(s, order.size()))))])
 	if order.any(func(s): return float(st[s]["out_at_s"]) >= 0.0):
 		rows.append(["Out at", col.call(func(s): return clock(float(st[s]["out_at_s"])) if float(st[s]["out_at_s"]) >= 0.0 else "-")])
 	return {"cols": cols, "rows": rows}

@@ -1,6 +1,6 @@
 extends SceneTree
 ## AI REACTIONS (ai-reactions 2026-11-18): Godot --headless --path . --script res://tests/test_ai_reactions.gd [-- secs=300]
-## Plays real AI matches (1v1 G-05 / G-01, FFA4 on A-01; Standard AIs with their builds, so skills are cast) for `secs` of match time
+## Plays real AI matches (1v1 G-05 / G-01; Standard AIs with their builds, so skills are cast) for `secs` of match time
 ## with the AI screens fed exactly as in play (sim.captured -> on_capture, sim.events, the share every 0.5 s), then checks:
 ## - THROTTLE: on every screen two reaction starts are >= AiScreens.GAP s apart (the end / an out excepted), no spam;
 ## - LIVE: the match triggers several different reactions on both screens (wired to real events, not only dev flags);
@@ -126,6 +126,5 @@ func _run() -> void:
 	# LIVE matches
 	_check_log("1v1 G-05", _match("res://maps4/G-05-catapult-bay.json", "1v1", {"A": "vex", "B": "null"}, secs))
 	_check_log("1v1 G-01", _match("res://maps4/G-01-gate.json", "1v1", {"A": "bloom", "B": "solar"}, secs))
-	_check_log("FFA4 A-01", _match("res://maps4/A-01-orbital-nexus.json", "FFA4", {"A": "solar", "B": "ember", "C": "bloom", "D": "null"}, secs))
 	print("ALL PASSED (0 failed)" if failures == 0 else "%d FAILED" % failures)
 	quit(1 if failures > 0 else 0)

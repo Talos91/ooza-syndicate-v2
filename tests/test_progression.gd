@@ -314,7 +314,7 @@ func _history() -> void:
 	check(Progression.history.size() == Progression.HISTORY_KEEP, "the log survives a reload")
 	var local := [{"t": 2000, "map": "M-07", "room_key": "AB12-3", "online": true}, {"t": 1500, "map": "A-01", "room_key": ""}]
 	var online := [{"match_id": "AB12-3-1790000000", "started_at": "2026-09-27T12:00:00+00:00", "map": "M-07", "seats": [], "outcome": {}},
-			{"match_id": "ZZ99-1-1790000001", "started_at": "2026-09-27T12:05:00+00:00", "map": "C-05", "mode": "2v2",
+			{"match_id": "ZZ99-1-1790000001", "started_at": "2026-09-27T12:05:00+00:00", "map": "C-05", "mode": "1v1",
 			"seats": [{"seat": "A", "faction": "bloom", "is_me": true, "won": true, "name": "ME"}, {"seat": "B", "faction": "vex", "ai_level": "Expert"}]}]
 	var merged := Progression.merge_history(local, online)
 	check(merged.size() == 3, "a round played here shows once (%d lines)" % merged.size())

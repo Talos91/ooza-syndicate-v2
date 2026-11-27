@@ -731,13 +731,13 @@ func _init() -> void:
 	check(absf(enter_rate - Rules.exit_rate()) / Rules.exit_rate() < 0.1, "BRAWL: units enter at the rate they left (Alpha 11 spacing)")
 
 	# ---------------------------------------------------------------- Alpha 16: colours read per player
-	Rules.assign_colors(["A", "B", "C", "D"], {"A": "null", "B": "null", "C": "null", "D": "null"}, "A", "A")
-	var cols := ["A", "B", "C", "D"].map(func(s): return Rules.seat_color(s))
+	Rules.assign_colors(["A", "B"], {"A": "null", "B": "null"}, "A", "A")
+	var cols := ["A", "B"].map(func(s): return Rules.seat_color(s))
 	var min_gap := 1.0
 	for i in range(cols.size()):
 		for j in range(i + 1, cols.size()):
 			min_gap = minf(min_gap, Rules._hue_gap(cols[i], cols[j]))
-	check(min_gap > 0.12, "FFA4: every player a clearly different hue (closest %.2f)" % min_gap)
+	check(min_gap > 0.12, "1v1: the rival a clearly different hue (%.2f)" % min_gap)
 
 	# ---------------------------------------------------------------- 0.18.6: a one-deck remote toggles
 	var mr := MapBuilder.load_map("res://maps4/M-08-neon-delta.json")

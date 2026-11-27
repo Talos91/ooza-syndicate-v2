@@ -32,8 +32,8 @@ var map_path := ""                                # setup() takes main's, or the
 var ai_level := "Standard"
 var mode := "1v1"
 var colour := "A"
-const MODES_OFFERED := ["1v1"]   # OOZE 3.0 (Daniele 2026-11-27): BRAWL 1v1 only; 2v2 deleted in WP6, FFA code stays, never offered
-const MODE_NAMES := {"1v1": "1 V 1", "FFA3": "FFA 3", "FFA4": "FFA 4"}   # max 4 seats: FFA5 / 3v3 / 2v2v2 deleted 2026-11-23 (Daniele 2026-11-18)
+const MODES_OFFERED := ["1v1"]   # OOZE 3.0 (Daniele 2026-11-27): BRAWL 1v1 only; 2v2 / FFA deleted in WP6
+const MODE_NAMES := {"1v1": "1 V 1"}   # max 4 seats: FFA5 / 3v3 / 2v2v2 deleted 2026-11-23 (Daniele 2026-11-18)
 const COLOUR_NAMES := {"A": "CYAN", "B": "GREEN", "C": "PURPLE", "D": "RED", "E": "GOLD", "F": "ROSE", "faction": "FACTION"}
 var maps: Array = []
 var _is_main := false
@@ -4193,7 +4193,7 @@ func show_setup() -> void:
 	var rw := 357.0 - 40.0 * maxi(0, enemies.size() - 1)
 	var rf := str(rival_picks.get(first, "random"))
 	_sel45(st, 426, ys[3], rw, 35, "RIVAL " + first, str(UiKit.NAMES.get(rf, "RANDOM")), func(): _open_lobby_sheet("seat:" + first))
-	for k in range(1, enemies.size()):                 # FFA: a key per further AI seat (its sheet: army + level)
+	for k in range(1, enemies.size()):                 # (more seats: a key per further AI seat (its sheet: army + level)
 		var s: String = enemies[k]
 		var kb := st.key("KEY-SMALL", 426 + rw + 4.0 + 40.0 * (k - 1), ys[3] + 1.0, 36, 33, s, func(): _open_lobby_sheet("seat:" + s))
 		kb.size_pt = 14.0
@@ -4596,7 +4596,7 @@ func _toggle(text: String, on: bool, pos: Vector2, dims: Vector2, call: Callable
 func show_seats() -> void:
 	## RIVALS (a MATCH SETUP sheet; round 2, Daniele 2026-11-04: one screen, no scroll, no pager): compact cells two per
 	## row - YOU (your faction, CHANGE -> FACTION), AI LEVEL, then every AI seat (a rival)
-	## with its pick (ANY or one of the five). FFA 5 = 6 cells = 3 rows. SAVE returns to MATCH SETUP.
+	## with its pick (ANY or one of the five). SAVE returns to MATCH SETUP.
 	_last_show = show_seats                  # a resize that changes the phone sizing rebuilds it (_fit)
 	var sel := _selected_map()
 	var modes := _modes_of(sel)
@@ -5405,17 +5405,14 @@ func _room_chat45(st: Kit45.Stage) -> void:
 
 
 func show_room_demo() -> void:
-	## SCREENSHOT HELPER only (--menu-page=room_demo [--room-mode=FFA3]): a made-up four-seat room (host YOU, a ready player,
+	## SCREENSHOT HELPER only (--menu-page=room_demo): a made-up 1v1 room (host YOU, a ready player,
 	## an open seat, an away player) and two chat lines, so the ONLINE ROOM can be shot offline. Never reached in play.
 	Net.bridge = RefCounted.new()
 	Net.hosting = true
 	Net.connected = true
 	Net.room_owner = 1
 	Net.room_code = "TSBP"
-	Net.mode = "FFA4"
-	for arg in OS.get_cmdline_user_args():
-		if arg.begins_with("--room-mode="):
-			Net.mode = arg.substr(12)
+	Net.mode = "1v1"
 	var fs := [faction, "null", "", "bloom"]
 	Net.roster = {}
 	for k in range(Net.slots()):

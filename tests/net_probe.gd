@@ -1,7 +1,7 @@
 extends SceneTree
-## Online smoothness probe (0.20.2): two players in a server room, a busy match (FFA 4 with two AI), and the numbers
+## Online smoothness probe (0.20.2): two players in a server room, a busy 1v1 match, and the numbers
 ## that decide how smooth guests look. Not a pass/fail test.
-##   Godot --headless --path . --script res://tests/net_probe.gd [-- --relay=<url> --seconds=60 --mode=FFA4
+##   Godot --headless --path . --script res://tests/net_probe.gd [-- --relay=<url> --seconds=60 --mode=1v1
 ##       --netsim=<latency ms>,<jitter ms>,<stall every s>,<stall length s>]   (netsim: a bad mobile link, RelayBridge)
 ## Prints: snapshot inter-arrival (mean, p50, p95, max, rate), snapshot size (delta / keyframe, bytes on the wire),
 ## order round trip (send -> feedback), and what the guest shows at 60 fps: FREEZE (frames where its match clock
@@ -76,7 +76,7 @@ func _horde_pos(s: Sim) -> Dictionary:
 func _run() -> void:
 	Engine.max_fps = 60                                # a phone's frame pacing, not a headless spin
 	var seconds := 60.0
-	var want_mode := "FFA4"
+	var want_mode := "1v1"
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--seconds="):
 			seconds = float(arg.substr(10))

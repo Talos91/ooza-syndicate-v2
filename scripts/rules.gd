@@ -5,7 +5,7 @@ extends RefCounted
 ## SCALE (PARAMETERS.md: army scale ~5x; vat caps are still an open question) - change here only.
 ##
 ## SIEGE was deactivated in 0.18.7 (Daniele: "brawl is our game") and DELETED from the code 2026-11-23 (owner
-## decision), with the 5-6 seat modes (FFA5, 3v3, 2v2v2); 2v2 (teams, allies, EJECT) was deleted 2026-11-27 (Daniele, 3.0 plan:
+## decision), with the 5-6 seat modes (FFA5, 3v3, 2v2v2); 2v2 (teams, allies, EJECT) and FFA 3 / 4 were deleted 2026-11-27 (Daniele, 3.0 plan:
 ## "Modes: BRAWL 1v1 only").
 ## Both come back from git tag archive-2026-11-23 (SIEGE_ON, bridge_combat, the deck / platform / door /
 ## platform-fight tunables, recall, tug-of-war, sieges, goo-patch lines).
@@ -194,7 +194,7 @@ const RELAY_ARCHIVED := ["lift", "tilt", "remote", "laser_relay"]
 # they do)"). A platform's Last Stand drop is a LAUNCH: it pays its NODE TIER (T1 1 ... T4 4; a tower / forge node its node tier)
 # to its owner's side at liftoff (neutral: nobody). Relay nodes never launch (nor fall) and junctions never score. The Very
 # Last Stand runs down to the last platform. The match ends on elimination, on a lead nobody can catch (lead > the points still
-# on the board; FFA: against the leader) or after the last launch: most quota wins, a tie goes to the side that held the last
+# on the board) or after the last launch: most quota wins, a tie goes to the side that held the last
 # platform (neutral: DRAW). A map's lastStand.quota block (rings + orders) is its launch order.
 # OOZE 3.0: the quota IS the Last Stand (Daniele 11-27 "Last Stand = the quota"); false = the 0.25 ring collapse (old tests).
 static var quota: bool = true

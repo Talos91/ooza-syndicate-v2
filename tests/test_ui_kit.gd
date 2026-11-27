@@ -81,16 +81,15 @@ func _init() -> void:
 	Rules.settings_path = CFG
 	Rules._colour_blind = -1
 	check(not Rules.colour_blind(), "COLOUR-BLIND is off by default")
-	Rules.assign_colors(["A", "B", "C", "D", "E"], {}, "A", "A")
+	Rules.assign_colors(["A", "B"], {}, "A", "A")
 	var before: Dictionary = Rules.seat_colors.duplicate()
-	Rules.apply_colour_blind(["A", "B", "C", "D", "E"], "A")
+	Rules.apply_colour_blind(["A", "B"], "A")
 	check(Rules.seat_colors == before, "COLOUR-BLIND off: the match keeps its colours")
 	check(Rules.set_colour_blind(true), "COLOUR-BLIND is saved")
 	Rules._colour_blind = -1
 	check(Rules.colour_blind(), "... and read back")
-	Rules.apply_colour_blind(["A", "B", "C", "D", "E"], "C")
-	check(Rules.seat_colors["C"] == Rules.CB_FFA[0] and Rules.seat_colors["A"] == Rules.CB_FFA[1]
-			and Rules.seat_colors["E"] == Rules.CB_FFA[4], "FFA 5: you first, then the seats in order, on CB_FFA")
+	Rules.apply_colour_blind(["A", "B"], "B")
+	check(Rules.seat_colors["B"] == Rules.CB_FFA[0] and Rules.seat_colors["A"] == Rules.CB_FFA[1], "1v1: you first, then the rival, on CB_FFA")
 	Rules.set_colour_blind(false)
 	Rules.settings_path = "user://settings.cfg"
 	Rules._colour_blind = -1

@@ -439,7 +439,7 @@ func _side(seats: Array, pos: Vector2, dims: Vector2, mine: bool) -> float:
 	var n := seats.size()
 	var name_h := UiKit.line_h(self, 34 if n == 1 else 18, true) + UiKit.line_h(self, 12) + 8.0
 	var gap := 12.0
-	# one row, or two (3+ seats: FFA 3 / 4) when that makes the characters bigger - the side's height is there
+	# one row, or two (3+ seats; 1v1 only since 2026-11-27) when that makes the characters bigger - the side's height is there
 	var room := dims.y - k.size.y - 12.0
 	var cols := n
 	var hs := minf(room - name_h, (dims.x - gap * (n - 1)) / float(n))
