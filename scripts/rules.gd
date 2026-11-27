@@ -37,7 +37,15 @@ const R := 7.6                       # platform radius
 const PIER := 0.0                    # connector length beyond the rim (none in 3.0)
 const R_SCALE := R / 6.0             # platform radius against the 2.0 platform (6.0 m): scales the platform-bound radii below
 const S := 4.0                       # one deck module (short bridge)
-const W := 2.8                       # deck width
+# OOZE 3.0 WP2c (Daniele 2026-11-27: "they should be larger but here it seems you're still using the bridges in old width"):
+# DECK_W = the 3.0 bridge deck's full width across, from bridge kit r1 (Models/2.0/bridge-kit-r1/bridgekit.py HALF_W 2.244 =
+# 4.488 m; README "a deck 4.488 m wide"; relay bridges v3 use the same HW). THE one deck-width number: the map tools read it
+# from here (Tools/MapBuilder/mb/kit.py DECK_W -> planner HW / D_PHYS, rulebook G11 / G13, gmaps3 CLEAR), the game widens the
+# kit deck pieces by DECK_SCALE (MapBuilder.build3) and test_maps4 checks clashes at DECK_W / 2. Was the kit Deck_S's 3.48 m.
+const DECK_W := 4.488               # m: deck width across the bridge (3.0 bridge kit r1)
+const KIT_DECK_W := 3.48            # m: the kit Deck_S / relay v2 deck pieces as modelled (the 2.0 width)
+const DECK_SCALE := DECK_W / KIT_DECK_W   # 1.29: the kit deck pieces' scale across the bridge
+const W := 2.8 * DECK_SCALE         # walkable deck width (2.8 of the 3.48 m kit deck; 3.61 of 4.488)
 # OVERPASS (GAME-RULES sec 7: "overpasses cross at different heights without joining"): an L deck
 # built as ramp up + raised span on pylons + ramp down (kit Deck_Overpass_*, OVER_H in
 # build_kit_2_0.py). Hordes follow the rise; a line on an overpass never touches another deck's line.
@@ -453,7 +461,7 @@ const DECK_HIT_PT := 44.0            # a deck's tap band for the deck skills on 
 # DEMOLISH-TAP (Daniele 2026-11-15: "if lets say bridge X is destructable and has at its edge connectors A and B the area
 # that is marked for destruction is the whole AXB and when clicked it destroys all 3 starting from X and then AB (in 1
 # second)"). The bridge-dropping skills (Demolish, Sever) aim at the whole span rim to rim: deck X plus its connectors A, B.
-const DROP_SPAN_W := 2.8 + 1.2       # m across: the AXB span's tap / highlight band on the ground (deck width W + a margin)
+const DROP_SPAN_W := W + 1.2         # m across: the AXB span's tap / highlight band on the ground (deck width W + a margin)
 const DROP_CONN_LAG := 0.4           # s after X goes: A and B go (X -> A, B well inside Daniele's 1 s)
 const DROP_SPAN_SKILLS := ["demolish", "sever"]   # the skills aimed at a deck that bring it down
 const RELAY_GHOST := Color(0.85, 0.78, 1.0, 0.28)       # OS_Ghost: the neutral violet floor (the Pier_Ghost_v2 fallback)

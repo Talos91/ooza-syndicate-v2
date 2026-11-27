@@ -34,7 +34,7 @@ static func deck_width() -> float:
 	## The kit bridge deck's width (across the bridge), measured once from the piece.
 	if _deck_w > 0.0:
 		return _deck_w
-	_deck_w = 3.4
+	_deck_w = 3.4 * Rules.DECK_SCALE
 	var path := Cosmetics.kit_path(DECK_PIECE)
 	if ResourceLoader.exists(path):
 		var root := (load(path) as PackedScene).instantiate() as Node3D
@@ -54,7 +54,7 @@ static func deck_width() -> float:
 			first = false
 		root.free()
 		if not first and box.size.z > 0.5:
-			_deck_w = box.size.z                       # pieces lie along +X (Rules.heading), width across = Z
+			_deck_w = box.size.z * Rules.DECK_SCALE   # pieces lie along +X (Rules.heading), width across = Z; 3.0 WP2c: widened in build3
 	return _deck_w
 
 

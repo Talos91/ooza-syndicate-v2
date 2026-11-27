@@ -76,7 +76,7 @@ const M_GLITCH := 5
 const M_CLAMP := 6
 const M_ARC := 7
 
-const DECK_W := 3.4                 # m: the strip over a deck (the kit's deck is ~3 m wide)
+const DECK_W := Rules.DECK_W * 3.4 / 3.48   # m: the strip over a deck (3.4 on the 2.0 3.48 m deck; 3.0 WP2c: scales with Rules.DECK_W)
 const STRIP_Y := 0.16               # m above the deck line
 const WALL_H := 3.6                 # m: Fortify's wall
 const FADE_IN := 0.3                # s: a lasting effect comes in

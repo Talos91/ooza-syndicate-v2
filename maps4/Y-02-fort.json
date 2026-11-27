@@ -23,7 +23,7 @@
   "tolerance": 1,
   "minNodeGap": 15,
   "jointDistance": 15.5,
-  "version": "3.0 WP2b 2026-11-27",
+  "version": "3.0 WP2c 2026-11-27 (wide decks 4.488 m)",
   "box": "b3-r76-p45-d745-2"
  },
  "minEnemyHomeHops": 2,

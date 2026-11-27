@@ -15,7 +15,7 @@ extends SceneTree
 ##   cycle the starting corners from a seeded random one (opposite next), in every mode and method;
 ## - heights: a path over a raised deck climbs to it, and lines only meet on the same height.
 
-const DECK_HW := 1.74                   # real deck half-width (builder D_PHYS)
+const DECK_HW := Rules.DECK_W * 0.5     # real deck half-width (builder D_PHYS; 3.0 WP2c: 2.244 of the 4.488 m bridge kit r1 deck, was 1.74)
 const GAP := 0.3
 const CLEAR_H := 3.5
 const STEP := 0.75

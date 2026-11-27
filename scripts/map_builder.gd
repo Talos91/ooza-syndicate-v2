@@ -161,6 +161,13 @@ static func put(parent: Node3D, name: String, pos: Vector3, heading := 0.0, stre
 	return n
 
 
+static func widen(n: Node3D) -> Node3D:
+	## OOZE 3.0 WP2c: a kit deck piece (modelled 3.48 m across, Rules.KIT_DECK_W) widened to the 3.0 deck, Rules.DECK_W (4.488 m,
+	## bridge kit r1). Pieces lie along +X, so the width is local Z. Ghosts copy the deck's transform (RelayView.add_ghosts).
+	n.scale.z = Rules.DECK_SCALE
+	return n
+
+
 # LEGACY (before RELAY V2): the relay towers and their ledge - only campaign_page.gd's diorama and tests/kit_sheet.gd
 const RELAY_HOUSING := {"rotation": "Relay_Rotation_Tower", "retract": "Relay_Retract",
 		"switch": "Relay_Switch_Hub", "remote": "Relay_Remote"}
@@ -824,7 +831,7 @@ static func build3_paced(parent: Node3D, sim: Sim, map: Dictionary, pace: Callab
 				if kind != "":                           # RELAY V2: the kind's marked relay deck (same size)
 					piece_name = RelayView.DECK[kind]
 				for k in range(nmod):
-					decks.append(put(parent, piece_name, s0 + d * (k * Rules.S * f), Rules.heading(d), f))
+					decks.append(widen(put(parent, piece_name, s0 + d * (k * Rules.S * f), Rules.heading(d), f)))
 			else:
 				var r0: float = g["r0"]
 				var r1: float = g["r1"]
@@ -832,16 +839,16 @@ static func build3_paced(parent: Node3D, sim: Sim, map: Dictionary, pace: Callab
 				var span := "Deck_Overpass_High_Span" if h > 0.0 else "Deck_Underpass_Span"
 				var base := OVER_H if h > 0.0 else UNDER_BASE
 				var zs := absf(h) / base
-				var up := put(parent, ramp, s0, Rules.heading(d), r0 / Rules.S)
+				var up := widen(put(parent, ramp, s0, Rules.heading(d), r0 / Rules.S))
 				up.scale.y = zs
-				var down := put(parent, ramp, s1, Rules.heading(-d), r1 / Rules.S)
+				var down := widen(put(parent, ramp, s1, Rules.heading(-d), r1 / Rules.S))
 				down.scale.y = zs
 				decks.append(up)
 				var flat := gap - r0 - r1
 				if flat > 0.05:
 					var nmod := maxi(1, roundi(flat / Rules.S))
 					for k in range(nmod):
-						var sp := put(parent, span, s0 + d * (r0 + k * flat / nmod), Rules.heading(d), flat / (nmod * Rules.S))
+						var sp := widen(put(parent, span, s0 + d * (r0 + k * flat / nmod), Rules.heading(d), flat / (nmod * Rules.S)))
 						sp.position.y = h - base if h > 0.0 else h + base
 						decks.append(sp)
 				decks.append(down)
