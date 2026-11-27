@@ -10,6 +10,8 @@ extends Node
 ##   Godot --path . --audio-driver Dummy --position -6000,-6000 res://tests/hud_marks_check.tscn -- --mobile --scale3d=0.75
 ##       [maps=N-08,N-28,M-39] [window=1688x780] [out=<file>] [faction=vex] [active=<skill id>] [shots=<dir>]
 ## Prints one line per map and HUD MARKS: PASS / FAIL (exit 1).
+## OBSOLETE in Ooze 3.0: the count badges (WP4), the alarm signs and the upgrade chip (WP4b) are on each node's screen now
+## (vat_count.gd) - tests/count_probe.gd and test_hotfix_0253 (a) check the screens; this probe reports "no api" for them.
 
 const MAIN := "res://main.tscn"
 const SIGN_MIN_PT := 20.0              # the grey sign's plate + beacon, tall (the red one is ~38 pt)

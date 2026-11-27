@@ -401,11 +401,6 @@ func setup(m: Node3D) -> void:
 			top_right.add_child(spacer)
 		for seat in g:
 			_build_top_chip(seat, into, seat == human)
-	status_glow = Panel.new()                         # HUD pass: the Last Stand announcement pulses its own line
-	status_glow.add_theme_stylebox_override("panel", HudNoir.box("status_pill", Color(0, 0, 0, 0), Vector4.ZERO))
-	status_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	status_glow.visible = false
-	root.add_child(status_glow)
 	status_label = text_label("", 18, Color("ffb0b0"))
 	ui_scale = keep_s
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1094,7 +1089,7 @@ func _quota_sync() -> void:
 	## launches / points still on the board under it, in the top band beside the score capsule (left of it, else right of it,
 	## else under the status line), never over another HUD piece. Only in a quota match. (lab4 job 6: was a 13 pt bare line
 	## under the clock, over the status line.)
-	if not Rules.quota:
+	if not Rules.quota or (ai_screens != null and ai_screens.visible):   # 3.0: the score is on the AI screens' plates (AiScreens._draw_quota)
 		if _quota_box:
 			_quota_box.visible = false
 		return
@@ -1165,11 +1160,6 @@ func _quota_place(vp: Vector2, u: float, sz: Vector2) -> Vector2:
 	return spots[spots.size() - 1]
 
 
-func _ls_word() -> String:
-	## LAST STAND = QUOTA: platforms launch instead of dropping.
-	return "NEXT LAUNCH" if Rules.quota else "NEXT DROP"
-
-
 func sync(dt: float, cam: Camera3D) -> void:
 	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
 	if main.online:
@@ -1205,26 +1195,13 @@ func sync(dt: float, cam: Camera3D) -> void:
 				(c["panel"] as Control).add_theme_stylebox_override("panel", _score_box(seat, "score_pill_out"))
 	if not shows("status_line"):
 		status_label.text = ""
-	elif sim.very_last_stand_active:
-		# 0.23.23 (Daniele: "last stand message is too long"): the line says what drops when, nothing more
-		status_label.text = ((("VERY LAST STAND · LAUNCH EVERY %d s" if Rules.quota else "VERY LAST STAND · DROP EVERY %d s") % int(round(sim.very_last_stand_gap)))
-				if sim.very_last_stand_gap > 0.0 else "VERY LAST STAND · CONQUEST DECIDES")
-	elif sim.last_stand_active:
-		var next := ""
-		var pending: int = sim.last_stand_waves.size() if sim.v3 else sim.last_stand_order.size()
-		if sim.v3 and not sim.last_stand_warn.is_empty():
-			next = _ls_word() + " %d s · %d LEFT" % [int(ceil(sim.last_stand_warn_t)), sim.last_stand_queue.size()]
-		elif sim.last_stand_warn_node >= 0:
-			next = _ls_word() + " %d s" % int(ceil(sim.last_stand_warn_t))
-		elif sim.last_stand_next < pending:
-			next = _ls_word() + " %d s" % int(ceil(maxf(sim._next_wave_at - sim.time, 0.0)))
-		else:
-			next = "QUOTA DECIDES" if Rules.quota else "CONQUEST DECIDES"
-		# the method and how it falls only while the announcement pulses (HUD_LS_PULSE s); then just the next drop
-		status_label.text = ("LAST STAND · %s · %s" % [sim.last_stand_method.to_upper(), _ls_how]) if _ls_pulse > 0.0 and _ls_how != "" 				else "LAST STAND · %s" % next
+	elif sim.very_last_stand_active or sim.last_stand_active:
+		# WP4b (Daniele 2026-11-27: "no more last stand alert message as it's on screen"): no line while it runs - each warned
+		# node's screen counts its launch down (VatCount), the quota is on the AI screens' plates.
+		status_label.text = ""
 	elif Rules.last_stand and not sim.over and sim.time > Rules.LAST_STAND_TIME - 15.0 and sim.time < Rules.LAST_STAND_TIME and not (sim.v3 and (sim._map_last_stand.get("methods", []) as Array).is_empty()):
 		# mirrors sim._step_last_stand: no countdown when the Last Stand is off, over, or the map has none
-		status_label.text = "LAST STAND in %d s" % int(ceil(Rules.LAST_STAND_TIME - sim.time))
+		status_label.text = ("QUOTA LAST STAND in %d s" if Rules.quota else "LAST STAND in %d s") % int(ceil(Rules.LAST_STAND_TIME - sim.time))
 	else:
 		status_label.text = ""
 	_fit_status()
@@ -1242,7 +1219,6 @@ func sync(dt: float, cam: Camera3D) -> void:
 	if dock.visible:
 		dock.sync(dt)
 	_refresh_inspector(cam)
-	_sync_status_pulse(dt)
 	if not callouts.items.is_empty():
 		callouts.sync(dt, cam, callout_area(root.get_viewport_rect().size), callout_blocked())
 	if _band_keeper == null:                          # calm-pass: no in-world text under the score bar / status line - run
@@ -1280,11 +1256,11 @@ func _badges(cam: Camera3D) -> bool:
 		if sim.collapsed.get(n["id"], false) or n.get("node_kind", "") == "junction":   # JUNCTION: no badge
 			panel.visible = false
 			continue
-		if not bool(Rules.lab_opt("hud_badge")):         # LAB card COUNT SIZE: the count is on the vat screen (vat_count.gd)
+		if main.get("vat_count") != null:                # OOZE 3.0 (WP4): the count is on the node's count screen (vat_count.gd), no badge
 			panel.visible = false
 			continue
 		# ui-neon (Daniele 2026-11-02, "unit count HUD disappearing"): a warned node keeps its badge - the count stays readable
-		# all through the Last Stand; the neon alarm sign (HudOverlay._draw_danger_symbols) sits beside it, clear of it.
+		# all through the Last Stand (3.0: no badge; the screen counts the launch down, vat_count.gd).
 		# (0.19.0 hid the badge here, when the sign replaced a round badge; with a whole ring warned at once that hid 6 counts.)
 		panel.visible = true
 		var owner: String = n["owner"]
@@ -1335,7 +1311,7 @@ func _badges(cam: Camera3D) -> bool:
 				st = sim.proto_tag(n["id"])
 			what = Rules.RELAY_GLYPH[n["relay"]] + (("OUT" if st == "out" else "IN" if st == "retract" else st.to_upper()) if shows("relay") else "")
 			if n["relay"] == "laser_relay":                     # LASER RELAY: ⊛LASER / ⊛FORGE while one stands (0.25.3: a forge too)
-				what = Rules.RELAY_GLYPH["laser_relay"] + (str(n["structure"]).to_upper() if n["structure"] in ["laser", "forge"] and shows("relay") else "")
+				what = Rules.RELAY_GLYPH["laser_relay"] + (str(STRUCT_LABEL[n["structure"]]).get_slice(" ", 0) if n["structure"] in ["laser", "forge"] and shows("relay") else "")
 			if n["relay"] == "launcher":                  # LAUNCHER TURRET: its tier first (➶T2 LOAD 40/100)
 				what = Rules.RELAY_GLYPH["launcher"] + "T%d " % int(n["tier"]) + (st.to_upper() if shows("relay") else "")
 		elif n["structure"] == "machinegoon":
@@ -1629,8 +1605,8 @@ func inspect(id: int, cam: Camera3D) -> void:
 	_refresh_inspector(cam)
 
 
-const STRUCT_LABEL := {"vat": "VAT", "machinegoon": "GOOGATLING", "laser": "LASER TOWER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
-const BUILD_LABEL := {"machinegoon": "GOOGATLING", "vat": "VAT", "laser": "LASER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
+const STRUCT_LABEL := {"vat": "VAT", "machinegoon": "GOOGATLING", "laser": "LASER TOWER", "forge": "JUICER", "monster_hub": "MONSTER HUB"}
+const BUILD_LABEL := {"machinegoon": "GOOGATLING", "vat": "VAT", "laser": "LASER", "forge": "JUICER", "monster_hub": "MONSTER HUB"}   # 3.0: the forge is the JUICER (Rules.JUICER)
 const RELAY_ACCENT := Color("ffb238")   # 0.19.0: SWITCH's own accent (Daniele: "add some visibility to the
                                          # buttons / models of the relays") - distinct from the seat colour
 
@@ -2037,7 +2013,7 @@ class ActionWedge:
 				_ci.draw_colored_polygon(PackedVector2Array([p + Vector2(0.2, -1.0) * r, p + Vector2(-0.5, 0.12) * r,
 						p + Vector2(-0.02, 0.12) * r, p + Vector2(-0.2, 1.0) * r, p + Vector2(0.5, -0.15) * r,
 						p + Vector2(0.02, -0.15) * r]), col)
-			"FORGE":
+			"FORGE", "JUICER":
 				_ci.draw_colored_polygon(PackedVector2Array([p + Vector2(-0.8, -0.75) * r, p + Vector2(0.35, -0.75) * r,
 						p + Vector2(0.35, -0.25) * r, p + Vector2(-0.8, -0.25) * r]), col)
 				_ci.draw_line(p + Vector2(-0.15, -0.25) * r, p + Vector2(0.55, 0.95) * r, col, w * 1.3, true)
@@ -2109,9 +2085,15 @@ func _inspector_actions(n: Dictionary) -> void:
 	## allied troops are stored. Costs and disabled reasons come straight from the Sim (can_build /
 	## can_upgrade) in _refresh_inspector, so a greyed button always explains itself.
 	var id: int = n["id"]
+	# OOZE 3.0 NODE CATEGORIES (Daniele 2026-11-27, Sim.node_category): normal = vat or Googatling T1-T3 (UPGRADE to T3, swap);
+	# SPECIAL = the T4 vat, nothing to build, upgrade or swap; relay = LASER or JUICER (+ its bridge's SWITCH); relay special
+	# = the launcher (LOAD / UPGRADE, nothing to build).
+	var cat := Sim.node_category(n)
 	# (TUTORIAL: each action shows once its lesson is reached - shows(); outside the tutorial, always)
-	if n["relay"] != "":
-		if shows("relay") and not sim.relay_fixed(id):  # RELAYS 3.0: a ferry without the hold / a fixed belt runs on its own
+	if cat == "special":
+		pass
+	elif n["relay"] != "" or cat in ["relay", "relay_special"]:
+		if n["relay"] != "" and shows("relay") and not sim.relay_fixed(id):  # RELAYS 3.0: a ferry without the hold / a fixed belt runs on its own
 			var verb: String = {"launcher": "LOAD", "ferry": "HOLD"}.get(n["relay"], "SWITCH")   # round 3: the ferry HOLDS; the
 			_add_action("SWITCH", "%s\n%s" % [verb, Rules.RELAY_GLYPH[n["relay"]]], 0, "switch", id)   # turret LOADS, then fires
 		if n["relay"] == "launcher" and int(n["tier"]) < Rules.LAUNCHER_MAX_TIER and shows("upgrade"):   # LAUNCHER TURRET: T2 / T3
@@ -2120,13 +2102,13 @@ func _inspector_actions(n: Dictionary) -> void:
 			_add_action("UPGRADE", "UPGRADE T%d" % (int(n["tier"]) + 1), sim.upgrade_cost(n), "upgrade", id)   # (Sim has no hub upgrade: greyed with its reason)
 		# Daniele 2026-11-13: relay = SWITCH, LASER, FORGE; a special relay (the launcher, a MONSTER HUB) = SWITCH, UPGRADE - MONSTER
 		# HUB is a special relay, no longer a relay action (hud-lab: the player's pie only; Sim / AI rules untouched, OPEN-QUESTIONS)
-		var special: bool = n["relay"] == "launcher" or n["structure"] == "monster_hub"
+		var special: bool = cat == "relay_special" or n["relay"] == "launcher" or n["structure"] == "monster_hub"
 		for kind in ([] if special else ["laser", "forge"]):
 			if kind in n["buildable"] and n["structure"] != kind and shows("relay_build"):
 				_add_action(BUILD_LABEL[kind], BUILD_LABEL[kind], sim.build_cost(n, kind), "build", id, {"kind": kind})
 		# (hud-lab: LAUNCH left the hub's pie - max 3 slices, SWITCH + UPGRADE; the monster icon still launches it)
 	elif n["structure"] == "vat":
-		if n["tier"] < 4 and shows("upgrade"):
+		if n["tier"] < Rules.VAT_MAX_UPGRADE and shows("upgrade"):   # 3.0: normal vats stop at T3 (a T4 is a SPECIAL node)
 			_add_action("UPGRADE", "UPGRADE T%d" % (n["tier"] + 1), sim.upgrade_cost(n), "upgrade", id)
 		if "machinegoon" in n["buildable"] and shows("machinegoon"):
 			_add_action("MACHINEGOON", BUILD_LABEL["machinegoon"], sim.build_cost(n, "machinegoon"), "build", id, {"kind": "machinegoon"})
@@ -2659,7 +2641,7 @@ func _structure_word(n: Dictionary) -> String:
 	if n["relay"] == "launcher":
 		return "LAUNCHER"
 	if n["relay"] == "laser_relay":                           # LASER RELAY (2026-11-09): one title; 0.25.3: + FORGE when it holds one
-		return "LASER RELAY" + (" + FORGE" if n["structure"] == "forge" else "")
+		return "LASER RELAY" + (" + JUICER" if n["structure"] == "forge" else "")
 	if n["relay"] != "":
 		return "%s RELAY" % str(n["relay"]).to_upper() + (" + %s" % STRUCT_LABEL.get(n["structure"], str(n["structure"]).to_upper()) if n["structure"] != "" else "")
 	if n["structure"] == "machinegoon":
@@ -2798,11 +2780,11 @@ func gat_line(n: Dictionary) -> String:
 	var ammo := float(n["units"])
 	var line := "ammo %d/%d · +%.1f/s · fires %.1f/s" % [Rules.shown(ammo), Rules.shown(Sim.gat_cap(n)),
 			Rules.shown_f(sim.gat_rate(n)), Rules.shown_f(Sim.gat_fire_rate(n))]
-	if float(Rules.lab_opt("gat_range")) > 0.0:        # LAB gat_range: its reach in m (Sim.gat_reach)
-		line += " · reach %d m" % int(round(Sim.gat_reach()))
-	elif bool(Rules.lab_opt("gat_own_platform")):      # LAB: it fires only over its own platform (Sim.gat_reach)
+	if is_equal_approx(Sim.gat_reach(), Rules.R):      # 3.0 (Rules.GAT_REACH = R): it fires only over its own platform
 		line += " · own platform"
-	if not is_equal_approx(Sim.gat_ammo(), 1.0):       # LAB gat_ammo: the own units each kill costs
+	else:                                             # (legacy reach, the old tests' 0.25 rules)
+		line += " · reach %d m" % int(round(Sim.gat_reach()))
+	if not is_equal_approx(Sim.gat_ammo(), 1.0):       # 3.0 Rules.GAT_AMMO: the own units each kill costs
 		line += " · " + ("ammo free" if Sim.gat_ammo() <= 0.0 else "1 unit / %d kills" % int(round(1.0 / Sim.gat_ammo())))
 	return line + (" · EMPTY" if ammo < 0.5 * Rules.SCALE and Sim.gat_ammo() > 0.0 else "")
 
@@ -2822,7 +2804,7 @@ func _structure_line(n: Dictionary) -> String:
 	if n["relay"] == "launcher":
 		return "LAUNCHER T%d" % int(n["tier"])
 	if n["relay"] == "laser_relay":
-		return "LASER RELAY" + ("" if n["structure"] == "laser" else (" + FORGE" if n["structure"] == "forge" else " (empty socket)"))
+		return "LASER RELAY" + ("" if n["structure"] == "laser" else (" + JUICER" if n["structure"] == "forge" else " (empty socket)"))
 	if n["relay"] != "":
 		return "%s RELAY" % n["relay"].to_upper() + (" + %s" % STRUCT_LABEL.get(n["structure"], str(n["structure"]).to_upper()) if n["structure"] != "" else " (empty socket)")
 	if n["structure"] == "machinegoon":
@@ -2848,7 +2830,7 @@ func close_inspector() -> void:
 # every message goes where it belongs, drawn by HudCallouts. A map event is a callout at its node / deck / spot
 # (callout_node / callout_at, an edge arrow when that place is off screen); a skill dock refusal a small line just
 # above the slot tapped (skill_refusal); a network line about a seat a line under that seat's top-bar chip; the
-# Last Stand's announcement a pulse of its own status line (pulse_last_stand); the start lines a short banner
+# node-level line (WP4b) a word on that node's screen (VatCount.notice), no Last Stand announcement; the start lines a short banner
 # (start_banner); online loading the waiting text (set_waiting). toast() stays as the thin router for every other
 # caller (other sessions' TUTORIAL / CAMPAIGN / PROGRESSION lines, Net's feedback): the seat chip when the line
 # starts with a seat, else a centred line under the top bar. TUTORIAL: nothing of it before the "notices" reveal (L3).
@@ -2858,11 +2840,8 @@ static var _SEAT_WORD := RegEx.create_from_string("(?i)\\bseat ([A-F])\\b(?: \\(
 const GOOD_WORDS := ["captured", "Sending", "Recalled", "reconnected", "Upgrade started", "construction started", "Restoring", "Relay fired"]
 const INFO_COLOR := Color("7fe9f5")
 var callouts: HudCallouts               # every placed message (see above)
-var status_glow: Panel                  # behind the status line while the Last Stand announcement pulses it
 var _status_secs: Control               # Neon Noir: the amber capsule round the status line's seconds
 var _secs_re := RegEx.create_from_string("\\d+ s\\b")
-var _ls_pulse := 0.0                    # s of that pulse left
-var _ls_how := ""                       # the method's one-line explanation, shown in the line meanwhile
 
 
 func toast(msg: String, kind := "") -> void:
@@ -2929,14 +2908,19 @@ func _icon_opts(seat: String, kind: String) -> Dictionary:
 
 
 func callout_node(id: int, text: String, kind := "warn", seat := "", place := "") -> void:
-	## A map event at a node (its own place: the same node again refreshes it).
+	## A map event at a node (its own place: the same node again refreshes it). OOZE 3.0 (WP4b, Daniele 2026-11-27: "no more
+	## conquest and other notifications as it's on screen"): a word on that node's screen (VatCount.notice), no callout.
 	if id < 0 or id >= sim.nodes.size():
+		return
+	if main and main.get("vat_count") != null:
+		if shows("notices"):
+			main.vat_count.notice(id, text, kind_color(kind))
 		return
 	callout_at(sim.nodes[id]["pos"], place if place != "" else "node:%d" % id, text, kind, seat)
 
 
 func callout_at(pos: Vector3, place: String, text: String, kind := "warn", seat := "") -> void:
-	## A map event at a world point (a deck, a monster, a skill's target): one line in Fx.floater's look.
+	## A map event at a world point (a deck, a monster, a skill's target): one outlined line (HudCallouts).
 	if not shows("notices") or callouts == null:
 		return
 	var col := kind_color(kind)
@@ -3069,12 +3053,6 @@ func _place_catchup() -> void:
 	catchup_tag.position = Vector2(x, y)
 
 
-func pulse_last_stand(how: String) -> void:
-	## The Last Stand's announcement: its own status line pulses for HUD_LS_PULSE s and says how the method falls.
-	_ls_pulse = Rules.HUD_LS_PULSE
-	_ls_how = how
-
-
 func _under_top() -> float:
 	## The first free y under the top bar, the status line and a mission's strip.
 	var y := top_panel.position.y + top_panel.size.y if top_panel.visible else margins.y
@@ -3152,29 +3130,6 @@ func top_band_rects() -> Array:
 	if catchup_tag.is_visible_in_tree():
 		out.append(catchup_tag.get_global_rect())
 	return out
-
-
-func _sync_status_pulse(dt: float) -> void:
-	## The Last Stand announcement (pulse_last_stand): the status line pops, a red frame breathes behind it
-	## about once a second, then fades - the line itself keeps saying LAST STAND for the rest of the match.
-	if _ls_pulse <= 0.0 or status_label.text == "":
-		_ls_pulse = maxf(_ls_pulse - dt, 0.0)
-		status_glow.visible = false
-		status_label.scale = Vector2.ONE
-		return
-	_ls_pulse = maxf(_ls_pulse - dt, 0.0)
-	var age := Rules.HUD_LS_PULSE - _ls_pulse
-	var wave := 0.5 + 0.5 * cos(age * TAU / 1.1)                     # 1 -> 0 -> 1, about once a second
-	var fade := clampf(_ls_pulse / 0.6, 0.0, 1.0)
-	var font := status_label.get_theme_font("font")
-	var sw := font.get_string_size(status_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, status_label.get_theme_font_size("font_size")).x
-	var gw := sw + 36.0 * ui_scale
-	status_glow.visible = not Hud43.on()
-	status_glow.size = Vector2(gw, status_label.size.y + 4.0 * ui_scale)
-	status_glow.position = Vector2(status_label.position.x + (status_label.size.x - gw) * 0.5, status_label.position.y - 2.0 * ui_scale)
-	status_glow.modulate = Color(1, 1, 1, (0.45 + 0.55 * wave) * fade)
-	status_label.pivot_offset = status_label.size * 0.5
-	status_label.scale = Vector2.ONE * (1.0 + 0.1 * wave * fade * clampf(1.0 - age / 2.5, 0.35, 1.0))
 
 
 func skill_event(ev: Dictionary) -> void:

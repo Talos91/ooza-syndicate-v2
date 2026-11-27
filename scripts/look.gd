@@ -16,12 +16,10 @@ extends RefCounted
 static var lab := _arg() in ["lab", "lab2"]
 static var v2 := _arg() == "lab2"   # designer v2 (2026-11-12): cream satin shell kept under the glow, owner rim ~2x and brighter,
                                     # goo shows through clearer glass; floor / surround / lights as v1
-const RIM_IN := Rules.R - 0.14      # v2 owner rim: a 0.28 m flat band on the platform lip (the kit band is 0.14 m on the side);
-const RIM_OUT := Rules.R + 0.14     # Ooze 3.0: on the lip of the slot platform at Rules.R (was 5.86 / 6.14 at R 6.0)
-const RIM_ENERGY := 1.5             # v2 owned rim emission (Mats.light: 3.0)
+const RIM_OUT := Rules.R + 0.14     # the platform lip's outer edge at Rules.R (was 6.14 at R 6.0; the v2 owner rim band lay there until WP4b)
+const RIM_ENERGY := 1.5             # v2 owner neon emission (Mats.light: 3.0)
 const KIT_RIM_ENERGY := 1.5         # vat-neon round 2: 4.5 / 2.2 tonemapped every channel > 1 to WHITE (the owner colour only in the halo); <= ~1.5 keeps the hue. Was 2.2 (owner neon far too faint on a phone, Daniele 2026-11-13); owner reads at a glance
 const KIT2 := ["Platform_Standard", "Vat_T1", "Vat_T2", "Vat_T3", "Vat_T4"]   # KIT2 look keys (Rules.kit2: assets/kit/kit2/)
-static var _rim_mesh: ArrayMesh
 static var _missing := {}
 
 const GLASS := Color("#AECAC7")    # 26S GLASS (neutral mint)
@@ -122,56 +120,9 @@ static func lab_world(main: Node) -> void:
 					env.tonemap_exposure = 0.5     # 0.9 clipped 19 % of the 1920 board at >= 250 luma; 0.5: 2.5 % (baseline 2.9 %)
 
 
-static func rim(part: Node, seat: String) -> void:
-	## v2: owned platforms get a flat 0.28 m rim band in the owner colour on the lip (twice the kit band, seen from the
-	## game camera); neutral platforms stay rimless (the _lab2 kit band is shell cream, no emission).
-	if not v2 or not is_instance_valid(part) or not (part as Node).scene_file_path.contains("/Platform_"):
-		return
-	var mi := (part as Node).get_node_or_null("LookRim") as MeshInstance3D
-	if mi == null:
-		if _rim_mesh == null:
-			var st := SurfaceTool.new()
-			st.begin(Mesh.PRIMITIVE_TRIANGLES)
-			var n := 64
-			for i in range(n):
-				var a0 := TAU * i / n
-				var a1 := TAU * (i + 1) / n
-				var p := [Vector3(cos(a0) * RIM_IN, 0, sin(a0) * RIM_IN), Vector3(cos(a0) * RIM_OUT, 0, sin(a0) * RIM_OUT),
-						Vector3(cos(a1) * RIM_OUT, 0, sin(a1) * RIM_OUT), Vector3(cos(a1) * RIM_IN, 0, sin(a1) * RIM_IN)]
-				st.set_normal(Vector3.UP)
-				for k in [0, 2, 1, 0, 3, 2]:
-					st.add_vertex(p[k])
-			_rim_mesh = st.commit()
-		mi = MeshInstance3D.new()
-		mi.name = "LookRim"
-		mi.mesh = _rim_mesh
-		mi.position = Vector3(0, 0.03, 0)
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		mi.material_override = _rim_mat(Color.WHITE)  # an override from the start: MapBatch never adopts it (layers 0)
-		(part as Node).add_child(mi)
-	mi.visible = seat != ""
-	mi.layers = 1
-	if seat != "":
-		mi.material_override = _rim_mat(Rules.seat_color(seat))
-
-
 static func light_energy() -> float:
 	## v2: the owner neon strips brighter than the normal 3.0
 	return KIT_RIM_ENERGY if v2 and ResourceLoader.exists(LABKIT % "Platform_Standard") else (RIM_ENERGY if v2 else 3.0)
-
-
-static var _rim_mats := {}
-static func _rim_mat(c: Color) -> StandardMaterial3D:
-	var k := c.to_html()
-	if not _rim_mats.has(k):
-		var m := StandardMaterial3D.new()
-		m.albedo_color = c * 0.35
-		m.emission_enabled = true
-		m.emission = c
-		m.emission_energy_multiplier = RIM_ENERGY
-		m.cull_mode = BaseMaterial3D.CULL_DISABLED      # a flat band seen from above whatever its winding
-		_rim_mats[k] = m
-	return _rim_mats[k]
 
 
 static func kit_vc_mesh(key: String, light_k := 0.6, goo := true) -> ArrayMesh:

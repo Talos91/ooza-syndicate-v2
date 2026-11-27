@@ -1,8 +1,8 @@
 class_name ContactShade
 extends Node3D
 ## READABILITY D (0.24.5, Daniele 2026-11-15 "yes all five"): view only, no rules.
-##  - seat plates: a soft seat-colour disc (alpha PLATE_A, Rules.R x PLATE_K across) on every owned node, set when the
-##    owner changes (main._on_captured / the start), never per frame. COLOUR RULE: neon = seat colour, so the plate is too.
+##  - (seat plates: the soft seat-colour disc painted on every owned platform - REMOVED in Ooze 3.0 WP4b, Daniele 2026-11-27:
+##    "remove the painted halo around a conquered vat ... we'll introduce a less invasive effect more in theme")
 ##  - contact shadows (SHADOW_A): a soft drop shadow on the floor under each elevated platform and along each bridge, and
 ##    a grounding ring on the deck under each building. Offset = the deck's height above the floor x SUN (so a shallower
 ##    board / closer camera keeps the shadow attached); bridge band width = the kit deck's measured width x BAND_K.
@@ -10,8 +10,6 @@ extends Node3D
 ## One shader (shaders/contact_shade.gdshader), shared materials, no textures.
 
 const SHADER := preload("res://shaders/contact_shade.gdshader")
-const PLATE_A := 0.4
-const PLATE_K := 1.86                 # plate diameter / Rules.R (inside the rim)
 const SHADOW_A := 0.275               # 50 % of option C (Daniele: "shadows but at lets say 50% intensity of your step C")
 const DROP_K := 2.9                   # floor drop disc diameter / Rules.R
 const RING_K := 2.0                   # grounding ring quad / Rules.R
@@ -22,8 +20,6 @@ const SHADE := Color(0.02, 0.03, 0.05)
 const DECK_PIECE := "Deck_S"
 
 static var _deck_w := -1.0
-var plates := {}                      # node id -> MeshInstance3D
-var _plate_mats := {}                 # seat -> ShaderMaterial
 
 
 static func wanted() -> bool:
@@ -93,14 +89,10 @@ func setup(sim: Sim, vis: Dictionary, floor_y: float) -> void:
 	var ring := _mat(SHADOW_A * 1.1, 0.0, 2, Color(0, 0, 0))
 	var has_floor := not is_nan(floor_y)
 	for n in sim.nodes:
-		var id: int = n["id"]
 		if not _platformed(vis, n):
 			continue
 		var p: Vector3 = n["pos"]
 		_quad(Vector2.ONE * Rules.R * RING_K, ring, Transform3D(Basis.IDENTITY, p + Vector3.UP * 0.07))
-		var plate := _quad(Vector2.ONE * Rules.R * PLATE_K, _plate_mat("A"), Transform3D(Basis.IDENTITY, p + Vector3.UP * 0.05))
-		plate.visible = false
-		plates[id] = plate
 		var h := p.y - floor_y
 		if has_floor and h >= MIN_H:
 			_quad(Vector2.ONE * Rules.R * DROP_K, drop, Transform3D(Basis.IDENTITY, Vector3(p.x + SUN.x * h, floor_y + 0.06, p.z + SUN.y * h)))
@@ -120,20 +112,3 @@ func setup(sim: Sim, vis: Dictionary, floor_y: float) -> void:
 		var c := (a + b) / 2.0
 		_quad(Vector2(L, w), band, Transform3D(Basis(Vector3.UP, atan2(d.x, d.z) + PI / 2.0),
 				Vector3(c.x + SUN.x * h, floor_y + 0.05, c.z + SUN.y * h)))
-
-
-func _plate_mat(seat: String) -> ShaderMaterial:
-	if not _plate_mats.has(seat):
-		_plate_mats[seat] = _mat(PLATE_A, 0.80, 0, Rules.seat_color(seat))
-	return _plate_mats[seat]
-
-
-func set_seat(id: int, owner: String) -> void:
-	## The node's plate in its owner's seat colour, hidden while neutral.
-	var mi: MeshInstance3D = plates.get(id)
-	if mi == null:
-		return
-	var owned := Rules.SEATS.has(owner)
-	mi.visible = owned
-	if owned:
-		mi.material_override = _plate_mat(owner)

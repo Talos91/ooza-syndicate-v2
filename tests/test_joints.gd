@@ -163,4 +163,53 @@ func _init() -> void:
 	Rules.JOINTS = true
 
 	print("test_joints: %d failure(s)" % failures)
+	_tap_cases()
 	quit(1 if failures else 0)
+
+
+func _tap_cases() -> void:
+	## OOZE 3.0 WP4: NEAREST-NODE TAP on touching platforms (TapPick.nearest = main._node_at's ground pick). On every joint of the
+	## Z cluster maps: a point 1 m off either centre picks that node, a point just either side of the contact picks the near side,
+	## and a phone finger past the rim (R + 2 m, away from the partner) still picks it.
+	var maps := []
+	for f in DirAccess.get_files_at("res://maps4/"):
+		if f.begins_with("Z-") and f.ends_with(".json"):
+			maps.append("res://maps4/" + f)
+	var joints := 0
+	var bad := 0
+	for path in maps:
+		var sim := _sim(path)
+		for ei in range(sim.edges.size()):
+			if sim.edge_kind(ei) != "joint":
+				continue
+			joints += 1
+			var a: int = sim.edges[ei]["a"]
+			var b: int = sim.edges[ei]["b"]
+			var pa: Vector3 = sim.nodes[a]["pos"]
+			var pb: Vector3 = sim.nodes[b]["pos"]
+			var dir := (pb - pa).normalized()
+			var mid := (pa + pb) * 0.5
+			var cases := [[pa + dir, a, true], [pb - dir, b, true], [mid - dir * 0.2, a, true], [mid + dir * 0.2, b, true],
+					[mid - dir * 0.2, a, false], [mid + dir * 0.2, b, false]]
+			for end in [[a, pa], [b, pb]]:                # a phone finger past the rim, on the side with no other platform near
+				var far := _open_side(sim, int(end[0]))
+				if far != Vector3.ZERO:
+					cases.append([(end[1] as Vector3) + far * (Rules.R + 2.0), end[0], true])
+			for c in cases:
+				var got := TapPick.nearest(sim, c[0], c[2])
+				if got != int(c[1]):
+					bad += 1
+					print("FAIL  tap %s joint %d-%d at %s (%s): got %d, want %d" % [path.get_file(), a, b, str(c[0]), "phone" if c[2] else "desktop", got, c[1]])
+	check(joints > 0, "Z cluster maps have joints to tap (%d)" % joints)
+	check(bad == 0, "nearest-node tap holds on every joint of the Z maps (%d joints x 6-8 taps, %d wrong)" % [joints, bad])
+
+
+func _open_side(sim: Sim, id: int) -> Vector3:
+	## A unit direction from node id whose point at R + 2 m is farther than R + 2.5 m from every other node (ZERO if none).
+	var c: Vector3 = sim.nodes[id]["pos"]
+	for k in range(16):
+		var d := Vector3(cos(TAU * k / 16.0), 0.0, sin(TAU * k / 16.0))
+		var p := c + d * (Rules.R + 2.0)
+		if sim.nodes.all(func(n): return int(n["id"]) == id or (n["pos"] as Vector3).distance_to(p) > Rules.R + 2.5):
+			return d
+	return Vector3.ZERO

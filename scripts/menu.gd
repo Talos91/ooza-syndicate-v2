@@ -32,6 +32,7 @@ var map_path := ""                                # setup() takes main's, or the
 var ai_level := "Standard"
 var mode := "1v1"
 var colour := "A"
+const MODES_OFFERED := ["1v1"]   # OOZE 3.0 (Daniele 2026-11-27): BRAWL 1v1 only; 2v2 / FFA code stays until WP6, never offered
 const MODE_NAMES := {"1v1": "1 V 1", "2v2": "2 V 2", "FFA3": "FFA 3", "FFA4": "FFA 4"}   # max 4 seats: FFA5 / 3v3 / 2v2v2 deleted 2026-11-23 (Daniele 2026-11-18)
 const COLOUR_NAMES := {"A": "CYAN", "B": "GREEN", "C": "PURPLE", "D": "RED", "E": "GOLD", "F": "ROSE", "faction": "FACTION"}
 var maps: Array = []
@@ -186,6 +187,8 @@ func setup(m: Node3D) -> void:
 		map_path = maps[0]["path"]                     # the pool is maps4/: the old roster is archive
 	if not Net.in_room() and Net.status == "":         # UX pass: HOME's PLAY and MATCH SETUP start from the last DEPLOY
 		_load_last_setup()
+	if not mode in MODES_OFFERED:                      # 3.0: an old setup's 2v2 / FFA falls back to 1v1
+		mode = MODES_OFFERED[0]
 	Net.lobby_changed.connect(_on_net_changed)
 	Net.order_feedback.connect(_on_lobby_note)         # READY: the host's notices show in the lobby's foot
 	show_main()
@@ -1132,6 +1135,8 @@ func show_options() -> void:
 			st.txt(("AUTO = %s on this device. " % ("PHONE" if PerfProfile.is_phone() else "FULL")) + PerfProfile.fps_label(), L[0], L[1], 355, 46, 12.5, UiKit.MUTED, false, 0, 3)
 			_opt45(st, R, "Detail", [["FULL", not Rules.low_detail, func(): Rules.low_detail = false], ["LOW", Rules.low_detail, func(): Rules.low_detail = true]])
 			_opt45(st, R, "Colour-blind", [["OFF", not Rules.colour_blind(), func(): Rules.set_colour_blind(false)], ["ON", Rules.colour_blind(), func(): Rules.set_colour_blind(true)]])
+			_step45(st, R, "Count size", Rules.COUNT_SIZES.size(), Rules.count_size(),   # 3.0 WP4: the counts on the node screens
+					"%s  x%s" % [Rules.COUNT_SIZE_NAMES[Rules.count_size()], str(Rules.count_scale())], func(i): Rules.set_count_size(i))
 			st.txt("LOW detail trims the river patches and vat residents. Colour-blind picks seat colours anyone can tell apart.", R[0], R[1], 355, 46, 12.5, UiKit.MUTED, false, 0, 3)
 	st.txt(Rules.version_label() + " · settings apply at once", 15, 307, 560, 16, 12.5, UiKit.MUTED)
 	var dn := st.key("PRIMARY-WIDE", 610, 299, 187, 33, "DONE  →", back, true)
@@ -4098,7 +4103,7 @@ func _pool_modes() -> Array:
 	for e in maps:
 		for md in _modes_of(e["data"]):
 			have[md] = true
-	return ["1v1", "2v2", "FFA3", "FFA4"].filter(func(md): return have.has(md))
+	return MODES_OFFERED.filter(func(md): return have.has(md))
 
 
 func _refilter() -> void:
@@ -4117,7 +4122,7 @@ func _relay_kinds(m: Dictionary) -> String:
 
 func _modes_of(m: Dictionary) -> Array:
 	var out := []
-	for k in ["1v1", "2v2", "FFA3", "FFA4"]:
+	for k in MODES_OFFERED:
 		if m.get("seats", {}).has(k) and MapPool.mode_offered(str(m.get("code", "")), k):   # 0.23.0: a kept older map fills gaps only
 			out.append(k)
 	return out if not out.is_empty() else ["1v1"]
@@ -4993,16 +4998,17 @@ func _lobby_sheet_body(host: bool) -> void:
 	var locked := Net.ready_locked() or Net.active
 	if which == "mode":
 		var r := _sheet_frame("ROOM / MODE", "HOW MANY PLAY." if host else "THE HOST PICKS THE MODE.", Vector2(900, 330))
+		var room_modes: Array = Net.MODES.filter(func(x): return x in MODES_OFFERED)   # 3.0: 1v1 only
 		var mcols := 4
 		var mw := floorf((r.size.x - 10.0 * (mcols - 1)) / mcols)
 		var mh := UiKit.tap_h(self, 60.0)
-		for i in range(Net.MODES.size()):
-			var m2: String = Net.MODES[i]
+		for i in range(room_modes.size()):
+			var m2: String = room_modes[i]
 			var mb := UiKit.btn(self, Net.MODE_LABELS[m2], r.position + Vector2((i % mcols) * (mw + 10.0), (i / mcols) * (mh + 10.0)), Vector2(mw, 60), func():
 				Net.set_mode(m2)
 				_close_lobby_sheet(), "selected" if m2 == Net.mode else "secondary", shell_f, 18)
 			mb.disabled = not host or Net.roster.size() > Net.SLOTS[m2] or Net.maps_for(m2).is_empty()
-		var hh := ceilf(Net.MODES.size() / float(mcols)) * (mh + 10.0) - 10.0
+		var hh := ceilf(room_modes.size() / float(mcols)) * (mh + 10.0) - 10.0
 		_say("A mode needs a map that seats it; greyed modes have none, or fewer seats than players in the room.",
 				r.position + Vector2(0, hh + 10.0), 13, UiKit.MUTED, r.size.x)
 	elif which == "rules":
@@ -5606,6 +5612,27 @@ func _opt45(st: Kit45.Stage, at: Array, label: String, opts: Array, off := false
 		kx += kw + gap
 	at[1] = y + 41.0
 
+
+
+func _step45(st: Kit45.Stage, at: Array, label: String, n: int, now: int, shown: String, set_i: Callable) -> void:
+	## A stepper row (3.0 WP4, OPTIONS > GAME > Count size): the label, a "-" key, the value, a "+" key; each tap moves one step
+	## (greyed at either end) and applies at once.
+	var x: float = at[0]
+	var y: float = at[1]
+	st.txt(label, x, y + 9, 96, 16, 12.5, UiKit.INK, true)
+	var kw := 60.0
+	var minus := st.key("KEY-SMALL", x + 100.0, y, kw, 34, "-", func():
+		set_i.call(now - 1)
+		show_options(), false, now <= 0)
+	minus.size_pt = 16.0
+	minus.name = "Step- " + label
+	st.txt(shown, x + 100.0 + kw + 4.0, y + 9, 355.0 - 100.0 - 2.0 * kw - 8.0, 16, 12.5, UiKit.INK, true, 1)
+	var plus := st.key("KEY-SMALL", x + 355.0 - kw, y, kw, 34, "+", func():
+		set_i.call(now + 1)
+		show_options(), false, now >= n - 1)
+	plus.size_pt = 16.0
+	plus.name = "Step+ " + label
+	at[1] = y + 41.0
 
 
 func _vol45(st: Kit45.Stage, at: Array, label: String, steps: Array, now: int, shown: String, set_v: Callable, off := false) -> void:

@@ -191,6 +191,9 @@ static func ghost_alpha(time: float, id: int) -> float:
 	return clampf(k, 0.4, 0.92)
 
 
+var node_word: Callable                   # WP4b: (node id, text, colour) -> a word on that node's screen (main.screen_notice)
+
+
 func setup(s: Sim, v: Dictionary, who: String) -> void:
 	sim = s
 	vis = v
@@ -1870,6 +1873,13 @@ func _ring_at(p: Vector3, col: Color, radius: float, dur: float) -> void:
 
 
 func _label_at(text: String, p: Vector3, col: Color, dur: float, frac: float) -> void:
+	## WP4b (Daniele 2026-11-27, the vat screens "should eat most of the current notifications"): a word over a NODE goes on
+	## that node's screen (main.screen_notice via node_word); only a word over a deck or a line still floats here.
+	if node_word.is_valid():
+		for n in sim.nodes:
+			if Vector2(p.x - n["pos"].x, p.z - n["pos"].z).length() < 0.5:
+				node_word.call(int(n["id"]), text, col)
+				return
 	var e: Dictionary = _labels[_label_i]
 	_label_i = (_label_i + 1) % _labels.size()
 	var l: Label3D = e["l"]

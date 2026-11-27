@@ -65,8 +65,8 @@ func _run() -> void:
 	sim.nodes[vat]["units"] = cost
 	await _snap(inst, "chev-2-at-cost")
 	var hud = inst.get("hud")
-	var cr: Rect2 = hud.overlay.upgrade_chip_rect(vat)
-	print("chip rect ", cr, " can_upgrade '", sim.can_upgrade(vat, human), "' under_attack ", sim.node_under_attack(vat, human))
+	var vc = inst.get("vat_count")                      # WP4b: the ▲ is the tab on the vat's screen (VatCount)
+	print("screen tab ▲ ", vc.upgrade_ready(vat), " can_upgrade '", sim.can_upgrade(vat, human), "' under_attack ", sim.node_under_attack(vat, human))
 	# double-tap the node while the chevron shows: upgrades
 	var cam = inst.get("cam")
 	var nc: Vector2 = hud.overlay._node_screen(vat, cam)[0]
@@ -82,11 +82,11 @@ func _run() -> void:
 	if rid >= 0:
 		sim.nodes[rid]["owner"] = human
 		await _snap(inst, "relay-1-ready")
-		print("relay ", rid, " kind ", sim.nodes[rid]["relay"], " ready chip ", hud.overlay.relay_chip_rect(rid))
+		print("relay ", rid, " kind ", sim.nodes[rid]["relay"], " ready tab ", vc.relay_ready(rid))
 		var rs: Array = hud.overlay._node_screen(rid, cam)
 		var bs: Array = RelayView.button_screen(cam, inst.get("vis"), rid)
 		await _dtap((bs[0] if not bs.is_empty() else rs[0]) as Vector2)
-		print("DOUBLE-TAP relay: phase '", sim.nodes[rid]["relay_phase"], "' ready ", hud.overlay.relay_ready(rid))
+		print("DOUBLE-TAP relay: phase '", sim.nodes[rid]["relay_phase"], "' ready ", vc.relay_ready(rid))
 		await _snap(inst, "relay-2-fired")
 	else:
 		print("NO RELAY on R-01")

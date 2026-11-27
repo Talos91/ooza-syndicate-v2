@@ -20,6 +20,8 @@ const GAP := 2.0                 # s (match time) between two reaction starts on
 const STALE := 3.5               # s a queued reaction waits before it is dropped
 const IDLE_TAUNT := 10.0         # s without a reaction before the screen taunts
 const PLATE_FONT_PT := 12.5     # the plate line (the 12.5 pt floor), in the HUD unit: the screen zone is AI_H_PT tall
+const QUOTA_DIGIT_PT := 20.0     # 3.0 QUOTA score on the plate (Daniele 11-27: "quota score shown in the AI message area"):
+const QUOTA_WORD_PT := 12.5      # Rajdhani digits are 0.643 em, so 20 pt -> 12.9 pt digits (the >= 12.5 pt digit floor)
 const AI_H_PT := 65.0            # hud43 ai_l / ai_r height (min(AI_PT.y, 66 + 2 - AI_Y))
 const PLATE_TEXT_X := 0.5        # text start, in plate heights
 const PLATE_LAMP := Vector2(0.1, 0.28)   # lamp x, size (plate heights)
@@ -767,6 +769,7 @@ func _draw_plate(i: int, ci: Node2D) -> void:
 		m = "CALM"
 	var col: Color = MOODS[m][0]
 	var word: String = PERSONA[_faction(shown[i])]["lines"].get(id, MOODS[m][1]) if id != "" else MOODS[m][1]
+	var quota := quota_shown()                        # 3.0 LAST STAND = QUOTA: the plate (the AI's message area) carries the score
 	var pw := r.size.x - side + side * 0.12
 	var ph := side * 0.3
 	var px := (side * 0.5 - side * 0.06) if i == 0 else (-side * 0.5 + side * 0.06 - pw)
@@ -787,6 +790,43 @@ func _draw_plate(i: int, ci: Node2D) -> void:
 	# designer 12 FIX: every line at 12.5 pt (never shrunk), one left padding for all; lines are written to fit (test_ai_reactions audits)
 	var fs := int(round(PLATE_FONT_PT * side / AI_H_PT))
 	var font := HudLab.bold()
-	ci.draw_string(font, Vector2(pr.position.x + ph * PLATE_TEXT_X, pr.get_center().y + font.get_ascent(fs) * 0.36), word,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("30202a"))
+	if quota:
+		_draw_quota(i, ci, pr, side)
+	else:
+		rigs[i]["quota"] = Rect2()
+		ci.draw_string(font, Vector2(pr.position.x + ph * PLATE_TEXT_X, pr.get_center().y + font.get_ascent(fs) * 0.36), word,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("30202a"))
 	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+func quota_shown() -> bool:
+	## 3.0 LAST STAND = QUOTA: the score sits on the AI screens from the Last Stand's countdown on (and on the end screen's frame).
+	var sim = hud.sim if hud != null else null
+	if sim == null or not Rules.quota:
+		return false
+	return sim.last_stand_active or sim.very_last_stand_active or sim.over 			or (Rules.last_stand and sim.time > Rules.LAST_STAND_TIME - 15.0) or sim.quota_of("A") + sim.quota_of("B") > 0
+
+
+func quota_rect(i: int) -> Rect2:
+	## Where screen i's quota tag is (screen units, rig space; tests / the HUD's overlap check). Empty when not shown.
+	return rigs[i].get("quota", Rect2()) if i < rigs.size() else Rect2()
+
+
+func _draw_quota(i: int, ci: Node2D, pr: Rect2, side: float) -> void:
+	## Inside the plate, after its lamp: "QUOTA" (12.5 pt, plate ink) + the side's points (20 pt: digits >= 12.5 pt tall) in its
+	## seat neon, darkened to read on the cream plate (neon = seat). Each screen shows its own side (1v1: left you, right the enemy).
+	var font := HudLab.bold()
+	var u := side / AI_H_PT                           # px per HUD pt on this screen
+	var fd := int(round(QUOTA_DIGIT_PT * u))
+	var fw := int(round(QUOTA_WORD_PT * u))
+	var pts := str(hud.sim.quota_of(shown[i]))
+	var x0 := pr.position.x + pr.size.y * PLATE_TEXT_X
+	var dw := font.get_string_size(pts, HORIZONTAL_ALIGNMENT_LEFT, -1, fd).x
+	var room := pr.end.x - pr.size.y * 0.12 - x0 - dw - 4.0 * u
+	var word := "QUOTA" if font.get_string_size("QUOTA", HORIZONTAL_ALIGNMENT_LEFT, -1, fw).x <= room else "Q"
+	var cy := pr.get_center().y
+	ci.draw_string(font, Vector2(x0, cy + font.get_ascent(fw) * 0.36), word, HORIZONTAL_ALIGNMENT_LEFT, -1, fw, Color("30202a"))
+	var dx := pr.end.x - pr.size.y * 0.12 - dw
+	var neon := Rules.seat_color(shown[i])
+	ci.draw_string(font, Vector2(dx, cy + fd * 0.643 * 0.5), pts, HORIZONTAL_ALIGNMENT_LEFT, -1, fd, neon.darkened(0.45))
+	rigs[i]["quota"] = Rect2(Vector2(dx, cy - fd * 0.643 * 0.5), Vector2(dw, fd * 0.643))

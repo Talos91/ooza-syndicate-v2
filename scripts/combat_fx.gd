@@ -7,7 +7,7 @@ extends Node3D
 ## a shock flash per resolved clash, all following the fight's rate, gone when the fight ends. The
 ## conquest tier-down (Daniele: "and an animation for when a tower is conquered and its tier is lowered
 ## by 1"): a ghost of the old tier sinks into the socket in a burst of debris while the new tier rises,
-## "T3 -> T2" and a falling chevron over the node in the new owner's colour. The cannon laser (Daniele:
+## "▼T2" on the node's screen in the new owner's colour (WP4b; was a label and a chevron over it). The cannon laser (Daniele:
 ## "laser needs to be made looking good, right now it's still default mode"): a shader beam with a hot
 ## white core and the owner's glow, energy scrolling toward the target, a muzzle flash at the cannon's
 ## top, an impact burst and a flickering scorch where it hits, charge-in and fade-out over the burst.
@@ -47,7 +47,6 @@ var sim: Sim
 var vis: Dictionary
 var fx: Fx
 var _frame := 0
-var top_limit := 0.0        # screen y the top bar and its toasts reach (main._on_resized): tier-down lines stay below it
 var _fights := {}           # node id -> {ring, mat, life, heat, rate, best, att, angle, share, prog, target, frame}
 var _alarms := {}           # node id -> {ring, mat, life, angle, ally, frame, spark_t} (your / an ally's node under attack)
 var _start_angle := 0.0     # the contest ring's sweep starts here: the platforms' far side (top of the screen)
@@ -56,7 +55,7 @@ var _cannons := {}          # node id -> {beam, bmat, muzzle, mmat, hit, hmat, s
 var _guns := {}             # node id -> machinegoon view state (see _machinegoons_step)
 var _tier_owner := {}       # node id -> owner last frame (tier-down detection)
 var _tier_level := {}       # node id -> vat / cannon tier last frame
-var _downs: Array = []      # running tier-downs: {node, t, ghost, ghost_mis, base_y, new, new_y, label, chev, ring, rmat}
+var _downs: Array = []      # running tier-downs: {node, t, ghost, ghost_mis, base_y, new, new_y, ring, rmat}
 var _annulus: ArrayMesh
 var _alarm_mesh: ArrayMesh  # the under-attack arc's thinner ring, just outside the platform (Rules.ALARM_R)
 var _strip: ArrayMesh
@@ -732,8 +731,7 @@ func before_swap(n: Dictionary, entry: Dictionary) -> void:
 			mis.append(mi)
 	var col := Rules.seat_color(n["owner"])
 	var top: Vector3 = (entry.get("centre", n["pos"]) as Vector3) + Vector3(0, 4.0 + 0.9 * lv, 0)
-	var label := _tier_label("T%d → T%d" % [lv, now], col, 96)
-	var chev := _tier_label("▼", col, 150)
+	_screen(id, "▼T%d" % now, col)                  # WP4b: the tier-down is said on the node's screen
 	var ring := MeshInstance3D.new()                   # the dust wave over the platform
 	ring.mesh = _plane
 	var rmat := ShaderMaterial.new()
@@ -755,8 +753,8 @@ func before_swap(n: Dictionary, entry: Dictionary) -> void:
 				randf_range(0.14, 0.34), randf_range(0.5, 1.0), 16.0)
 	_spark(top, Vector3.ZERO, old_col.lerp(Color.WHITE, 0.5) * 1.6, 3.2, 0.3, 0.0)
 	_downs.append({"node": id, "t": 0.0, "ghost": ghost, "mis": mis, "base_y": ghost.position.y if ghost else 0.0,
-			"new": null, "new_y": 0.0, "label": label, "chev": chev, "ring": ring, "rmat": rmat,
-			"top": top, "col": col, "landed": false, "below": null, "superseded": false})
+			"new": null, "new_y": 0.0, "ring": ring, "rmat": rmat,
+			"top": top, "col": col, "landed": false, "superseded": false})
 
 
 func _sunk_by(id: int) -> Dictionary:
@@ -787,8 +785,7 @@ func _sink_down(n: Dictionary, entry: Dictionary, ev: Dictionary, was: String) -
 	var from := int(ev.get("from", 1))
 	var destroyed: bool = ev.get("destroyed", false)
 	var top: Vector3 = (entry.get("centre", n["pos"]) as Vector3) + Vector3(0, 4.0 + 0.9 * from, 0)
-	var label := _tier_label("SUNK" if destroyed else "T%d → T%d" % [from, int(ev.get("to", from - 1))], col, 96)
-	var chev := _tier_label("▼", col, 150)
+	_screen(id, "SUNK" if destroyed else "▼T%d" % int(ev.get("to", from - 1)), col)   # WP4b: on the node's screen
 	var ring := MeshInstance3D.new()                   # a dark wave over the platform
 	ring.mesh = _plane
 	var rmat := ShaderMaterial.new()
@@ -807,8 +804,8 @@ func _sink_down(n: Dictionary, entry: Dictionary, ev: Dictionary, was: String) -
 		_spark(top + Vector3(randf_range(-1, 1), randf_range(-1.2, 0.4), randf_range(-1, 1)), v, old_col if randf() < 0.5 else Color(0.3, 0.3, 0.36),
 				randf_range(0.14, 0.3), randf_range(0.5, 0.9), 16.0)
 	_downs.append({"node": id, "t": 0.0, "ghost": ghost, "mis": mis, "base_y": ghost.position.y if ghost else 0.0,
-			"new": null, "new_y": 0.0, "label": label, "chev": chev, "ring": ring, "rmat": rmat,
-			"top": top, "col": col, "landed": false, "below": null, "superseded": false, "sink": true})
+			"new": null, "new_y": 0.0, "ring": ring, "rmat": rmat,
+			"top": top, "col": col, "landed": false, "superseded": false, "sink": true})
 
 
 func after_swap(n: Dictionary, entry: Dictionary) -> void:
@@ -819,25 +816,13 @@ func after_swap(n: Dictionary, entry: Dictionary) -> void:
 			d["new_y"] = (entry["vat_node"] as Node3D).position.y if entry["vat_node"] else 0.0
 
 
-func _tier_label(text: String, col: Color, size: int) -> Label3D:
-	var l := Label3D.new()
-	TopBand.tag(l)
-	l.text = text
-	l.font = Hud.UI_FONT
-	l.font_size = size
-	l.outline_size = int(size * 0.22)
-	l.outline_modulate = Color(0.02, 0.02, 0.05, 0.95)
-	l.modulate = col.lerp(Color.WHITE, 0.15)
-	l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	l.no_depth_test = true
-	l.render_priority = 3
-	l.outline_render_priority = 2
-	l.visible = false
-	add_child(l)
-	return l
+func _screen(id: int, text: String, col: Color) -> void:
+	## WP4b: a tier-down / Sinkhole word on node id's screen (main.screen_notice -> VatCount), no label over the map.
+	if world != null and world.has_method("screen_notice"):
+		world.call("screen_notice", id, text, col)
 
 
-func _tier_downs(dt: float, cam: Camera3D) -> void:
+func _tier_downs(dt: float, _cam: Camera3D) -> void:
 	var i := 0
 	while i < _downs.size():
 		var d: Dictionary = _downs[i]
@@ -877,38 +862,12 @@ func _tier_downs(dt: float, cam: Camera3D) -> void:
 		ring.visible = rk < 1.0 and not gone
 		ring.scale = Vector3.ONE * lerpf(3.0, Rules.R * 2.4, sqrt(rk))
 		(d["rmat"] as ShaderMaterial).set_shader_parameter("intensity", 1.4 * (1.0 - rk))
-		# "T3 -> T2" and the falling chevron over the node, sized for the screen (about 5 % of its height)
-		var label: Label3D = d["label"]
-		var chev: Label3D = d["chev"]
-		var fade := 1.0 - smoothstep(TIER_DOWN_TIME - 0.5, TIER_DOWN_TIME, t)
-		var pop := 1.0 + 0.5 * (1.0 - smoothstep(0.0, 0.25, t))
-		var base: Vector3 = n["pos"] + Vector3(0, 9.5, 0)
-		var h := 5.0
-		if cam:
-			h = cam.global_position.distance_to(base) * 0.05
-		label.visible = not gone and not d["superseded"]
-		chev.visible = not gone and not d["superseded"]
-		Mats.label_pixel(label, h / float(label.font_size) * pop)   # (by scale: pixel_size rebuilds the mesh)
-		var above := base + Vector3(0, h * 1.1, 0)
-		if d["below"] == null:                        # a node under the top bar and its toasts: the line
-			d["below"] = cam != null and not cam.is_position_behind(above) 					and cam.unproject_position(above + Vector3(0, h * 0.6, 0)).y < top_limit   # goes under the platform
-		if d["below"]:                                 # toward the viewer, past the badge under the platform
-			label.position = (n["pos"] as Vector3) + Rules.front_dir() * (Rules.R + 3.3 + h * 1.2) + Vector3(0, 0.4, 0)
-		else:
-			label.position = above
-		Mats.label_look(label, Color(label.modulate, fade), 0.95 * fade)
-		var ck := fmod(t, 0.8) / 0.8                  # the chevron keeps falling toward the tower
-		Mats.label_pixel(chev, h * 0.9 / float(chev.font_size))
-		chev.position = base + Vector3(0, -h * 0.9 * ck, 0)
-		Mats.label_look(chev, Color(chev.modulate, fade * sin(ck * PI)), 0.95 * fade * sin(ck * PI))
 		if t >= TIER_DOWN_TIME:
 			if nw and is_instance_valid(nw):
 				nw.position.y = d["new_y"]
 				nw.scale = Vector3.ONE
 			if ghost and is_instance_valid(ghost):
 				ghost.queue_free()
-			label.queue_free()
-			chev.queue_free()
 			ring.queue_free()
 			_downs.remove_at(i)
 			continue

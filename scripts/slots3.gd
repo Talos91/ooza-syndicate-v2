@@ -7,7 +7,7 @@ extends RefCounted
 ##   kit piece MapBuilder.piece loads (light / HD / skins as before), later the new GLB.
 ## - platform: slots/Platform_slot.tscn (named "Platform_*" so MapBatch batches it as a static kit piece); origin = deck
 ##   centre, deck top y 0; the art is scaled Rules.R / ART_R["platform"] (7.6 / 6.0 in this build: no pier); set_seat(seat,
-##   faction) and the conquest parameter 0..1 drive today's owner rim (the conquest texture swaps the shader next round).
+##   faction) and the conquest parameter 0..1 (no owner rim since WP4b; the conquest effect / texture reads it next round).
 ## - structure_<kind>_t<n>.tscn: origin = deck centre; Marker3D ScreenMount over the model (the count screen mounts there,
 ##   WP4); structures are NOT scaled in this build. Node categories (Daniele 2026-11-27) each have their slots:
 ##     normal         vat T1-T3, Googatling (kit Machinegoon) T1-T3 - no upgrade to T4
@@ -35,6 +35,8 @@ const STRUCTURES := {
 	"structure_launcher_t3": ["launcher", 3, "relay_special"],
 	"structure_hub_t1": ["hub", 1, "legacy"],
 }
+
+const COUNT_SCREEN_SCENE := "res://slots/count_screen.tscn"   # WP4: the count screen, one per node, on the structure's ScreenMount
 
 static var _scenes := {}
 static var _slot_of := {}             # model key -> slot name ("" = not a slot key), cached (called per structure swap)
@@ -99,6 +101,20 @@ static func make(key: String) -> Node3D:
 	return node
 
 
+static func make_count_screen() -> Node3D:
+	## The count screen model (slots/count_screen.tscn; VatCount mounts it on the structure slot's ScreenMount).
+	if not _scenes.has(COUNT_SCREEN_SCENE):
+		_scenes[COUNT_SCREEN_SCENE] = load(COUNT_SCREEN_SCENE)
+	return (_scenes[COUNT_SCREEN_SCENE] as PackedScene).instantiate()
+
+
+static func screen_mount(slot_node: Node) -> Marker3D:
+	## A structure slot's ScreenMount (null for anything else).
+	if slot_node == null or not is_instance_valid(slot_node):
+		return null
+	return slot_node.get_node_or_null("ScreenMount") as Marker3D
+
+
 static func art(slot_node: Node) -> Node3D:
 	## The model inside a slot (the node itself when it is not a slot).
 	if slot_node != null and slot_node.has_method("mount"):
@@ -111,6 +127,6 @@ static func category(slot_node: Node) -> String:
 
 
 static func set_seat(part: Node, seat: String, faction := "") -> void:
-	## MapBuilder.apply_owner: a slot platform's owner (rim + conquest); a no-op for anything else.
+	## MapBuilder.apply_owner: a slot platform's owner (its conquest hook); a no-op for anything else.
 	if is_instance_valid(part) and part.has_method("set_seat"):
 		part.call("set_seat", seat, faction)

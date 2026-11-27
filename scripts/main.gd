@@ -72,7 +72,7 @@ var proto_view: ProtoRelayView       # RELAYS 3.0 PROTOTYPES: only on a map that
 var door_view: DoorView             # TWO DOORS (Rules.TWO_DOORS): a floor arrow at both doors of every platform
 var combat: CombatFx                               # fights for a tower, conquest tier-downs, the cannon laser
 var world_layer: WorldLayer                         # WORLD LAYER: floor, node tubes, splats (view only)
-var contact_shade: ContactShade                     # READABILITY D (0.24.5): seat plates + contact shadows (view only)
+var contact_shade: ContactShade                     # READABILITY D (0.24.5): contact shadows (view only; WP4b: no seat plates)
 var fog_lead: FogLead                              # FOG LEAD: the arena's air leans to the leading seat's colour (view only)
 var _world_probe := -1.0                           # --world-probe=T: a 100-unit fall at T, frame times printed
 var _probe_ft: Array = []
@@ -82,7 +82,7 @@ var forge_pulse: ForgePulse                        # a forge coming online: the 
 var skill_fx: SkillFx                              # Skills 2.0 in the world: every cast, lasting effect and end
 var scenery: Scenery
 var hud: Hud
-var vat_count: Node3D                               # LAB card COUNT SIZE (vat_count.gd), null otherwise
+var vat_count: Node3D                               # OOZE 3.0: the count screens (vat_count.gd); null on the room server
 var cam: Camera3D
 var cam_target := Vector3.ZERO
 var cam_dist := 90.0
@@ -163,9 +163,7 @@ var _swallow_release := false
 var mode := "1v1"                             # 1v1 / 2v2 / FFA3-4 (the map's seats key; max 4 seats since 2026-11-18)
 var color_choice := "A"                       # your ownership colour: palette key or "faction"
 var menu_layer: CanvasLayer
-const LabMenu := preload("res://scripts/lab_menu.gd")         # LAB BUILD (Rules.lab): the test-card screen
-const LabOverlay := preload("res://scripts/lab_overlay.gd")   # LAB BUILD: the in-match debug readout
-const VatCountScript := preload("res://scripts/vat_count.gd")   # LAB card COUNT SIZE: counts on the vat screens
+const VatCountScript := preload("res://scripts/vat_count.gd")   # OOZE 3.0: the counts on each node's count screen
 static var relaunch := {}                     # survives a scene reload: Play again / Main menu
 static var last_map_path := ""                 # MAIN MENU remembers the last map played (0.19.0)
 # --- TUTORIAL (TUTORIAL-DESIGN.md §8): the lesson director, its coach overlay, the half-speed clock ---
@@ -240,10 +238,6 @@ func _ready() -> void:
 			map_explicit = true
 		elif arg == "--demo":
 			demo = true
-		elif arg.begins_with("--lab-card=") and Rules.lab:   # LAB (dev / headless runs): a test card's lab_opts, as its tap sets them
-			var lab_card: Dictionary = preload("res://scripts/lab_cards.gd").find(arg.substr(11))
-			if not lab_card.is_empty():
-				preload("res://scripts/lab_menu.gd").apply_card(lab_card)
 		elif arg.begins_with("--ai="):
 			ai_level = arg.substr(5)
 		elif arg.begins_with("--shots="):
@@ -340,7 +334,7 @@ func _ready() -> void:
 		start_tutorial(tut_id, tut_first)
 	elif map_explicit or demo or scenario != "" or not shots.is_empty():
 		_start_map(map_path)
-	elif not LabMenu.wanted() and TutorialDirector.first_launch_due(OS.get_cmdline_user_args(), Net.online() or Net.in_room() or Net.status != "" \
+	elif TutorialDirector.first_launch_due(OS.get_cmdline_user_args(), Net.online() or Net.in_room() or Net.status != "" \
 			or not Net.rejoin.is_empty()):
 		start_tutorial(TutorialDirector.FIRST_ID, true)   # TUTORIAL §7: the first launch opens the quick start (skippable)
 	else:
@@ -348,12 +342,8 @@ func _ready() -> void:
 			map_path = last_map_path
 		if not Net.in_room():                          # the menu, no room: a new build may reload the page
 			Net.set_busy(false)
-		if LabMenu.wanted() and not Net.in_room() and Net.status == "" and menu_open in ["", "lab"]:
-			var lab_menu := LabMenu.new()                # LAB BUILD: the test cards in front of HOME (lab_menu.gd; NORMAL MENU = HOME)
-			add_child(lab_menu)
-			lab_menu.setup(self)
+		if menu_open == "lab":                         # OOZE 3.0: no LAB screen (WP4); an old relaunch that asked for it gets HOME
 			menu_open = ""
-			return
 		menu_layer = Menu.new()
 		add_child(menu_layer)
 		(menu_layer as Menu).setup(self)
@@ -415,9 +405,10 @@ func _start_map(path: String) -> void:
 	LookTheme.pick(str(map.get("code", "")), mission == null)   # THEMES / SETTING PICK: the match's setting before the world is built
 	_lm("map_json")
 	if not pitch_forced:                               # Alpha 18: each map's own camera angle (phone-fit probe)
-		cam_pitch = MapCamera.pitch_for(str(map.get("code", "")), str((map.get("tags", {}) as Dictionary).get("size", "")))
-		if _lab_cam_locked():
-			cam_pitch = Rules.LAB_CAM_PITCH
+		if board3_cam():                               # OOZE 3.0: the one Board3 camera; the per-map table is not read
+			cam_pitch = Board3.CAM_PITCH
+		else:
+			cam_pitch = MapCamera.pitch_for(str(map.get("code", "")), str((map.get("tags", {}) as Dictionary).get("size", "")))
 	_base_pitch = cam_pitch
 	if not map["seats"].has(mode):                     # this map doesn't offer the mode: its first one
 		mode = "1v1" if map["seats"].has("1v1") else map["seats"].keys()[0]
@@ -455,7 +446,7 @@ func _start_map(path: String) -> void:
 		lo = lo.min(n["pos"])
 		hi = hi.max(n["pos"])
 	Rules.view_yaw = PI / 2.0 if (hi - lo).z > (hi - lo).x else 0.0
-	if _lab_cam_locked():                              # LAB ZOOM BOX: the box is in the map's own axes (x across, y = depth)
+	if board3_cam():                                   # OOZE 3.0 BOARD: the box is in the map's own axes (x across, y = depth)
 		Rules.view_yaw = 0.0
 	# --- SERVER HOST (Alpha 21, the server session): the room server's match host runs the Sim, the AI and Net only.
 	# Nobody sees its screen, so no world, views, effects or HUD are built (_process has the matching block); the
@@ -517,7 +508,7 @@ func _start_map(path: String) -> void:
 		world_layer = WorldLayer.new()
 		add_child(world_layer)
 		world_layer.setup(self, sim, vis, mobile)
-	if ContactShade.wanted():                          # READABILITY D (0.24.5): seat plates + contact shadows (view only)
+	if ContactShade.wanted():                          # READABILITY D (0.24.5): contact shadows (view only; WP4b: no seat plates)
 		contact_shade = ContactShade.new()
 		add_child(contact_shade)
 		contact_shade.setup(sim, vis, world_layer.floor_y if world_layer != null else NAN)
@@ -543,6 +534,7 @@ func _start_map(path: String) -> void:
 	skill_fx = SkillFx.new()
 	add_child(skill_fx)
 	skill_fx.setup(sim, vis, HUMAN)
+	skill_fx.node_word = screen_notice                 # WP4b: words over a node go on its screen
 	drag_line = MeshInstance3D.new()
 	drag_line.mesh = drag_mesh
 	drag_line.visible = false                       # ui-node: the HUD overlay draws the send ribbon / rings (Neon Noir)
@@ -585,8 +577,6 @@ func _start_map(path: String) -> void:
 	for n in sim.nodes:
 		vis[n["id"]]["model_key"] = MapBuilder.model_for(n)
 		MapBuilder.apply_owner(vis[n["id"]]["parts"], n["owner"])
-		if contact_shade:
-			contact_shade.set_seat(n["id"], n["owner"])
 	# --- 0.19.0 cosmetics (HUD agent, spec E/I): each seat's structure look, applied once. Offline:
 	# your ARMIES pick for your seat, every other seat (AI) the default. Online: every seat's pick came
 	# from the host's launch packet (net.gd's "cosmetics", built from each player's roster "cosmetic" -
@@ -600,8 +590,8 @@ func _start_map(path: String) -> void:
 	hud = Hud.new()
 	add_child(hud)
 	hud.setup(self)
-	if Rules.lab:                                      # lab4 job 6: the scale the HUD was built at (_on_resized rebuilds it)
-		_hud_built_ppt = UiKit.hud_px_per_pt(get_viewport().get_visible_rect().size, mobile)
+	# lab4 job 6 (3.0: every build): the scale the HUD was built at (_on_resized rebuilds it)
+	_hud_built_ppt = UiKit.hud_px_per_pt(get_viewport().get_visible_rect().size, mobile)
 	if scenery and scenery.pit:
 		scenery.pit.build_mounts(hud)                 # ROUND 44 B4: the HUD sits on the painted mounts
 	if director:
@@ -611,11 +601,7 @@ func _start_map(path: String) -> void:
 		await _staged_frame("hud", 5)
 		_release_held()                                # the world is whole: every view runs from here
 	get_viewport().size_changed.connect(_on_resized)
-	if Rules.lab and thumb_path == "" and not Net.dedicated:   # LAB BUILD: the debug readout (lab_overlay.gd)
-		var lab_overlay := LabOverlay.new()
-		add_child(lab_overlay)
-		lab_overlay.setup(self)
-	if Rules.lab and bool(Rules.lab_opt("count_on_screen")) and not Net.dedicated:   # LAB card COUNT SIZE: counts on the vat screens
+	if not Net.dedicated:                              # OOZE 3.0 (WP4): the counts are on each node's count screen (vat_count.gd)
 		vat_count = VatCountScript.new()
 		add_child(vat_count)
 		vat_count.setup(self)
@@ -1036,8 +1022,6 @@ func to_menu(page := "") -> void:
 			"loadout": LOADOUTS.get(HUMAN, {})}
 	if page != "" and not online:                      # UI: "play" (CONTINUE) / "armies" (CHANGE LOADOUT)
 		relaunch["menu"] = page
-	if LabMenu.wanted() and LabMenu.card_id != "" and not online:   # LAB BUILD: a test card's match goes back to the LAB screen
-		relaunch["menu"] = "lab"
 	get_tree().reload_current_scene()
 
 
@@ -1055,17 +1039,16 @@ func _on_resized() -> void:
 		return
 	var vp := get_viewport().get_visible_rect().size
 	_fitted_size = vp
-	if Rules.lab:                                      # lab4 job 6: the pt size and insets this layout used; a HUD built at
-		_fitted_ppp = UiKit.pt_per_px(vp)              # another scale (a portrait or not-yet-settled page) is built again
-		_fitted_ins = UiKit.safe_insets(vp)
-		_ins_check_t = 0.0
-		var ppt := UiKit.hud_px_per_pt(vp, mobile)
-		if _hud_built_ppt > 0.0 and absf(ppt / _hud_built_ppt - 1.0) > 0.03:
-			_rebuild_hud()
+	# lab4 job 6 (3.0: every build): the pt size and insets this layout used; a HUD built at
+	_fitted_ppp = UiKit.pt_per_px(vp)              # another scale (a portrait or not-yet-settled page) is built again
+	_fitted_ins = UiKit.safe_insets(vp)
+	_ins_check_t = 0.0
+	var ppt := UiKit.hud_px_per_pt(vp, mobile)
+	if _hud_built_ppt > 0.0 and absf(ppt / _hud_built_ppt - 1.0) > 0.03:
+		_rebuild_hud()
 	RenderScale.sync()                                 # hotfix-02319: the scaled 3D's size first - the fit below measures through it
 	_apply_safe_area()
 	hud.layout(vp, margins)
-	combat.top_limit = hud.top_used() + 3.0 * 38.0 * hud.ui_scale   # the top bar and up to three toasts
 	_fit_camera()
 
 
@@ -1103,36 +1086,17 @@ func _rebuild_hud() -> void:
 
 
 func _apply_safe_area() -> void:
+	## The HUD's margins: the device's safe area PER SIDE (UiKit.safe_insets: the web page's env() insets, the cut-out side from
+	## the screen's angle on iOS, a native phone's display safe area; Ooze 3.0 WP4, Daniele 2026-11-27: "the side panels hug each
+	## edge by the real safe area", both landscape rotations) and the HUD's own small padding. Only when a phone reports nothing
+	## at all does the old symmetric side margin (3.5 % of the width on both sides) stand in.
 	var vp := get_viewport().get_visible_rect().size
-	var left := 16.0
-	var right := 16.0
-	var top := 10.0
-	var bottom := 12.0
-	# Alpha 21 (iPhone 14 Pro home-screen app): on the web the safe-area insets come from the page (CSS env(),
-	# web/viewport-fix.js) - the notch / Dynamic Island side and the home indicator stay clear of the HUD
-	if OS.has_feature("web") and Engine.has_singleton("JavaScriptBridge"):
-		var js = JavaScriptBridge.eval("window.OozeViewport ? OozeViewport.safe().concat(OozeViewport.size()).join(',') : ''", true)
-		var f := str(js).split(",")
-		if f.size() == 6 and float(f[4]) > 0.0:
-			var kw := vp.x / float(f[4])                 # CSS px -> viewport units
-			left = maxf(float(f[0]) * kw, left)
-			top = maxf(float(f[1]) * kw, top)
-			right = maxf(float(f[2]) * kw, right)
-			bottom = maxf(float(f[3]) * kw, bottom)
-	if UiKit.test_insets.x >= 0.0:                     # hud-tank-margin: --safe-insets=l,t,r,b (viewport px) stands for a notched phone here too
-		left = maxf(left, UiKit.test_insets.x)
-		top = maxf(top, UiKit.test_insets.y)
-		right = maxf(right, UiKit.test_insets.z)
-		bottom = maxf(bottom, UiKit.test_insets.w)
-	if OS.has_feature("mobile"):
-		var screen := Vector2(DisplayServer.screen_get_size())
-		var safe := Rect2(DisplayServer.get_display_safe_area())
-		safe.position -= Vector2(DisplayServer.screen_get_position())
-		var k := vp.x / maxf(screen.x, 1.0)
-		left = maxf(safe.position.x * k, left)
-		right = maxf((screen.x - safe.end.x) * k, right)
-		top = maxf(safe.position.y * k, top)
-	if mobile:
+	var ins := UiKit.safe_insets(vp)
+	var left := maxf(16.0, ins.x)
+	var right := maxf(16.0, ins.z)
+	var top := maxf(10.0, ins.y)
+	var bottom := maxf(12.0, ins.w)
+	if mobile and not UiKit.insets_known:             # nothing read (no page insets, no engine safe area): symmetric fallback
 		left = maxf(left, vp.x * 0.035)
 		right = maxf(right, vp.x * 0.035)
 	margins = Vector4(left, top, right, bottom)
@@ -1174,9 +1138,10 @@ func _fit_camera() -> void:
 		_base_pitch = cam_pitch                       # (a probe may have set it after _start_map)
 	cam_pitch = _base_pitch                           # the start view stays exactly as it was
 	_start_fit = _fit_nodes(sim.nodes)
-	_start_fit[1] *= MapCamera.zoom_for(str(map.get("code", "")))   # Daniele 2026-11-13: "zoom in a bit" (per map, phone_fit)
-	if _lab_cam_locked():                             # LAB ZOOM BOX: one fixed camera on the map frame's centre (layout 0, 0);
-		_start_fit = [Vector3(0.0, 0.0, Rules.LAB_CAM_AIM_Z), Rules.LAB_CAM_DIST]   # the map is built into its box (Rules.LAB_BOX_*)
+	if board3_cam():                                  # OOZE 3.0 BOARD (plan 2.3): one fixed camera on the map frame's centre
+		_start_fit = [Vector3(0.0, 0.0, Board3.CAM_AIM_Z), Board3.CAM_DIST]   # (layout 0, 0); the map is built into Board3's box
+	else:
+		_start_fit[1] *= MapCamera.zoom_for(str(map.get("code", "")))   # Daniele 2026-11-13: "zoom in a bit" (per map, phone_fit)
 	cam_target = _start_fit[0]
 	cam_dist = _start_fit[1]
 	if _fit_gone > 0 and scenario_focus == Vector3.INF:   # resized after a Last Stand zoom: keep the survivors framed
@@ -1198,10 +1163,16 @@ func _fit_camera() -> void:
 	_place_camera()
 
 
-func _lab_cam_locked() -> bool:
-	## LAB ZOOM BOX (lab4): a lab map on a lab build with lab_opt("cam_lock") starts at Rules.LAB_CAM_* instead of its own fit.
-	## Scenario / thumbnail framings and the Last Stand survivor zoom are unchanged.
-	return Rules.lab_opt("cam_lock") == true and str(map.get("code", "")) in MapPool.LAB
+func board3_cam() -> bool:
+	## OOZE 3.0 BOARD (plan 2.3, WP4): every 3.0 map - the Z pool (MapPool.POOL3) and any map baked into Board3's box (frame.box
+	## "b3-...", the reworked G maps of WP2b) - starts at Board3's camera (CAM_PITCH / CAM_DIST / CAM_AIM_Z), never at its own fit
+	## or MapCamera's per-map pitch / zoom. Scenario / thumbnail framings and the Last Stand survivor zoom are unchanged.
+	if map.is_empty():
+		return false
+	if str(map.get("code", "")) in MapPool.POOL3:
+		return true
+	var frame = map.get("frame", {})
+	return frame is Dictionary and str((frame as Dictionary).get("box", "")).begins_with("b3-")
 
 
 func _zoom_enabled() -> bool:
@@ -1439,8 +1410,6 @@ func _stage_scenario() -> void:
 			scenario_focus = (sim.nodes[1]["pos"] + sim.nodes[0]["pos"]) / 2.0
 	for n in sim.nodes:
 		MapBuilder.apply_owner(vis[n["id"]]["parts"], n["owner"])
-		if contact_shade:
-			contact_shade.set_seat(n["id"], n["owner"])
 
 
 func _debug_casts() -> void:
@@ -1650,7 +1619,7 @@ func _run_scenario() -> void:
 					1:
 						hud.callout_node(3, "FORGE LOST", "warn")
 						hud.callout_node(1, "HANDED OVER", "warn", "B")
-						fx.floater(sim.nodes[2]["pos"], "+ CAPTURED", Rules.seat_color(HUMAN))
+						screen_notice(2, "TAKEN", Rules.seat_color(HUMAN))
 						sim.last_stand_active = true
 						sim.last_stand_warn[3] = true
 						sim.last_stand_queue = [3]
@@ -1683,7 +1652,6 @@ func _run_scenario() -> void:
 							hud.skill_refusal(1, "Pick a deck")
 						sim.last_stand_active = true
 						sim.last_stand_method = "inward"
-						hud.pulse_last_stand("the rim falls first - hold the centre")
 					2:
 						var far := -1
 						var best := -1.0
@@ -1867,7 +1835,7 @@ func _process(delta: float) -> void:
 		sim.fx_events.clear()
 		return
 	# --- end SERVER HOST ---
-	if get_viewport().get_visible_rect().size != _fitted_size or (Rules.lab and _layout_stale(delta)):
+	if get_viewport().get_visible_rect().size != _fitted_size or _layout_stale(delta):
 		_on_resized()
 	var dt := minf(delta, 0.05)
 	_flush_inspect()
@@ -1942,16 +1910,8 @@ func _process(delta: float) -> void:
 		match ev["type"]:
 			"skill":                                  # a rival's skill that touches you: a callout there (SkillDock.on_event)
 				hud.skill_event(ev)
-			"last_stand":
-				# 0.20.13 (Daniele's online co-op playtest: "last stand still fills the whole screen"): this
-				# was the culprit - a 44 pt two-line banner held 5 s dead centre. The status line already
-				# says LAST STAND continuously right under the top bar, so the one-time announcement is that
-				# line's own pulse now (HUD pass: no toast), saying how the method falls meanwhile; the per-node
-				# danger symbols still carry the actual warning.
-				var how := {"inward": "the rim falls first - hold the centre", "outward": "the centre falls first - hold the rim",
-						"chaos": "nodes fall in a hidden order - your home last"}
-				if hud.shows("status_line"):
-					hud.pulse_last_stand(str(how.get(ev["method"], "")))
+			# "last_stand": no announcement (WP4b, Daniele 2026-11-27: "no more last stand alert message as it's on screen"):
+			# each warned node's screen counts its launch down (VatCount), the quota sits on the AI screens' plates.
 			# 0.20.6 declutter (Daniele: "too many notifications and many notifications cover the map...
 			# remove all notices of things like send and capture"): VERY LAST STAND repeats the status
 			# line (H5/top bar), the node's own falls are the danger symbols, and relay switches are
@@ -2022,9 +1982,7 @@ func _process(delta: float) -> void:
 				if hid >= 0 and hid < sim.nodes.size():
 					var hpos: Vector3 = sim.nodes[hid]["pos"]
 					fx._pulse(hpos, Rules.state_color("warn"), Rules.R + 1.5, 0.9)
-					fx.floater(hpos, "HUB DESTROYED", Rules.state_color("warn"))
-					if str(ev.get("seat", "")) == HUMAN:
-						hud.callout_node(hid, "HUB DESTROYED · ONE PER PLAYER", "warn")
+					hud.callout_node(hid, "HUB DESTROYED · ONE PER PLAYER" if str(ev.get("seat", "")) == HUMAN else "HUB DESTROYED", "warn")   # (WP4b: on its screen)
 			"eject":                                   # your own eject is a routine order (nothing to say, see node_action);
 				if str(ev.get("seat", "")) != HUMAN and sim.allied(str(ev.get("seat", "")), HUMAN):
 					hud.callout_node(int(ev["node"]), "STORED TROOPS SENT HOME", "info", str(ev["seat"]))
@@ -2165,20 +2123,24 @@ func _on_captured(node_id: int, new_owner: String, _old: String) -> void:
 	if hud and hud.has_method("ai_event"):
 		hud.ai_event(new_owner, _old, node_id)
 	MapBuilder.apply_owner(vis[node_id]["parts"], new_owner)
-	if contact_shade:
-		contact_shade.set_seat(node_id, new_owner)
-	# 0.20.6 declutter (Daniele: "remove all notices of things like send and capture - better is in game
-	# text coming out of the conquer place"): a fight is already visible on the node itself (fx.gd's
-	# capture pulse), so the toast becomes a short rising label there instead of covering the map.
+	# 0.20.6 declutter (Daniele: "remove all notices of things like send and capture"), WP4b (11-27: "no more conquest ... as
+	# it's on screen"): TAKEN / LOST on the node's own screen, no label rising over the map.
 	if not hud.shows("floaters"):                       # TUTORIAL: the reveal set names when this is taught
 		return
 	var last: Dictionary = sim.fx_events[-1] if not sim.fx_events.is_empty() else {}
 	if last.get("handover", false) and int(last.get("node", -1)) == node_id:
 		return                                          # a handover: its own callout says it (the fx loop, HUD pass)
 	if new_owner == HUMAN:
-		fx.floater(sim.nodes[node_id]["pos"], "+ CAPTURED", Rules.seat_color(HUMAN))
+		screen_notice(node_id, "TAKEN", Rules.seat_color(HUMAN))
 	elif _old == HUMAN:
-		fx.floater(sim.nodes[node_id]["pos"], "LOST", Color("ff5b5b"))
+		screen_notice(node_id, "LOST", Color("ff5b5b"))
+
+
+func screen_notice(id: int, text: String, col: Color) -> void:
+	## WP4b (Daniele 2026-11-27: "no more conquest and other notifications as it's on screen"): a node-level notice is a word on
+	## that node's screen (VatCount.notice), never a label floating over the map. Nothing without a screen (the room server).
+	if vat_count:
+		vat_count.notice(id, text, col)
 
 
 func _on_forge_online(seat: String, node_id: int, first: bool) -> void:
@@ -2591,18 +2553,11 @@ func _node_at(p: Vector3, screen: Vector2 = Vector2(-1, -1)) -> int:
 		var b := hud.badge_at(screen)
 		if b >= 0:
 			return b
-	if p == Vector3.INF:
-		return -1
-	var best := -1                                     # the NEAREST centre among the tap discs that hold p (touching
-	var best_d := INF                                  # platforms' discs overlap; was the lowest id, LAB WP3)
-	for n in sim.nodes:
-		if sim.collapsed.get(n["id"], false) or n.get("node_kind", "") == "junction":   # JUNCTION: not tappable
-			continue
-		var dn := (n["pos"] as Vector3).distance_to(p)
-		if dn <= Rules.R + (2.5 if mobile else 1.0) and dn < best_d:
-			best = n["id"]
-			best_d = dn
-	return best
+		if vat_count:                                  # 3.0: a count screen is its node's explicit target, as the badge was
+			var cs: int = vat_count.screen_at(screen, cam)
+			if cs >= 0:
+				return cs
+	return TapPick.nearest(sim, p, mobile)             # the NEAREST centre among the tap discs that hold p (touching platforms)
 
 
 func _relay_button_at(p: Vector3, screen: Vector2) -> int:
