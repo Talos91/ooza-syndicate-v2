@@ -45,7 +45,7 @@ func build(digit_height_m: float, digits := 3) -> void:
 	add_child(frame)
 	panel = _quad(Vector2.ONE, Color(0.03, 0.04, 0.06, 0.92), 2)
 	add_child(panel)
-	label = _label(FONT, em / FONT_PX, 4)
+	label = _label(_word_font(), em / FONT_PX, 4)
 	add_child(label)
 	tab = _label(SYMBOL_FONT, digit_h * TAB_H / FONT_PX / 0.73, 5)   # (DejaVu ▲ is ~0.73 em tall)
 	tab.visible = false
@@ -100,6 +100,18 @@ func _fit() -> void:
 	label.position = Vector3(0.0, dy, 0.02)
 	if tab.visible:
 		tab.position.y = _top() + digit_h * (FRAME + TAB_H * 0.62)
+
+
+static var _wf: FontVariation
+
+
+static func _word_font() -> Font:
+	## Rajdhani with DejaVu behind it: "▼T2" and other symbols on a web build, which has no system fonts to fall back on.
+	if _wf == null:
+		_wf = FontVariation.new()
+		_wf.base_font = FONT
+		_wf.fallbacks = [SYMBOL_FONT]
+	return _wf
 
 
 func _top() -> float:
