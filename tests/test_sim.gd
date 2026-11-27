@@ -3059,8 +3059,6 @@ func _relays_proto() -> void:
 		var bf3: Array = MapPool.battlefield().map(func(p): return p.get_file().substr(0, 4))
 		check(not bf3.is_empty() and bf3.all(func(c): return c in pool3),
 				"OOZE 3.0: the battlefield pool is the Z maps only (POOL3), no kept P maps (%s)" % str(bf3))
-	elif Rules.lab and not MapPool.LAB.is_empty():    # LAB BUILD: battlefield() is MapPool.LAB only (no G maps)
-		print("SKIP  RELAYS 3.0: kept P maps in the battlefield pool (lab build, battlefield() = MapPool.LAB %s)" % [MapPool.LAB])
 	else:
 		check(MapPool.battlefield().any(func(p): return MapBuilder.load_map(p).get("was", "").begins_with("P-")), "RELAYS 3.0: the kept P maps (G-07 / G-08 / G-09) are in the battlefield pool")
 
@@ -3421,7 +3419,7 @@ func _ferry_reach() -> float:
 func _check_r6(cond: bool, what: String) -> void:
 	## OOZE 3.0 (WP1): a timing check of the 0.25 relay PROTOTYPES on the P-9x maps, baked at R 6. At R 7.6 the route ring is
 	## wider (Rules.BRAWL_RING 6.08), so a line reaches the relay later than these timings assume. 3.0 retires both relays
-	## (tilt is archived, Rules.LAB_RELAY_ARCHIVED; the ferry is a hazard with no owner or hold), so a miss is reported, not
+	## (tilt is archived, Rules.RELAY_ARCHIVED; the ferry is a hazard with no owner or hold), so a miss is reported, not
 	## failed. PASS when it still holds.
 	if cond:
 		check(true, what)

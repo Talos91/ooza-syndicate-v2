@@ -35,14 +35,14 @@ const ENTRANCE_GLB := "res://assets/world/tube_entrance_v2.glb"
 # PITS / TUBES (Daniele 2026-11-07, 05 Handoff/PITS-TUBES-2026-11.md): v2 and the per-tier v3 doors are superseded by ONE
 # column base for every tier - 4 corner tube sockets + 4 cardinal doors with a double laser (WorldTubes.column_base_mesh);
 # the transport tubes from the sockets to the pits are world_tubes.gd. The GLBs stay in assets for comparison.
-const LAB_PIC := "res://assets/world/lab_clean_floor_rect.png"   # --floor=labpic: Daniele's painted lab floor, top-down
-const LAB_PIC_SIZE := Vector2(53.785, 40.744)    # metres (rectify_lab_clean_floor.py: 20 px/m, 1075 x 814)
-const LAB_PIC_GRID0 := Vector2(0.892, 0.375)     # metres from its top-left corner to its first 2 m grid line (x, z)
-const LAB_PIC_HAZE := 0.035                      # the picture is already dark: much less floor haze than the tiles
-const LAB_PIC_MIST := 0.5                        # and a thinner fog sheet between arena and floor (still on) so it reads
-const LAB_PIC_GAIN := 1.8                        # x brightness: at 1.0 the picture (mean #20262F) vanishes under the
+const FLOOR_PIC := "res://assets/world/lab_clean_floor_rect.png"   # --floor=labpic: Daniele's painted lab floor, top-down
+const FLOOR_PIC_SIZE := Vector2(53.785, 40.744)    # metres (rectify_lab_clean_floor.py: 20 px/m, 1075 x 814)
+const FLOOR_PIC_GRID0 := Vector2(0.892, 0.375)     # metres from its top-left corner to its first 2 m grid line (x, z)
+const FLOOR_PIC_HAZE := 0.035                      # the picture is already dark: much less floor haze than the tiles
+const FLOOR_PIC_MIST := 0.5                        # and a thinner fog sheet between arena and floor (still on) so it reads
+const FLOOR_PIC_GAIN := 1.8                        # x brightness: at 1.0 the picture (mean #20262F) vanishes under the
                                                  # arena's fog at the game camera; 1.8 lets its arcs, patches and grid read
-const LAB_PIC_MIRROR := true                     # mirror-repeat it over the floor (false: fade its edge into its mean colour)
+const FLOOR_PIC_MIRROR := true                     # mirror-repeat it over the floor (false: fade its edge into its mean colour)
 # WORLD PASS 2 (director round 5, 2026-11-07): the LAB biome's default floor is R5-lab-floor (a seamless 32 x 32 m tile,
 # mean #343C4A), the side backdrop LAB-SIDE-B-MACHINERY (--lab-side=a: A-CALM), the floor decals from one atlas
 # (world_decals.gd). --floor=lab5 forces it on any map; --floor=labpic keeps the rectified picture, --floor-v1 the
@@ -57,7 +57,7 @@ const LAB5_GAIN := 1.0
 const LAB5_FOG_HEIGHT_DENSITY := 0.035           # the scene's height fog under the decks (Scenery 0.24): the falling
                                                  # bodies stay visible down to the floor (F2) instead of fogging out at -10 m
 # the floor's far haze and the backdrop's middle meet in this colour (round 5: backdrop middle ~#2B3443, floor #333C4A)
-const LAB_FAR := Color(0.168, 0.204, 0.263)
+const SLATE_FAR := Color(0.168, 0.204, 0.263)
 # WORLD FOG (Daniele 2026-11-11: "the tubes in the background are a bit too distracting, increase the fog between the play
 # area and the background"; then: "one layer of clouds roaming the map at 0.9 and a fog underneath drifting at 0.6, where
 # they overlap it completely covers"). Two noise layers over the lab side backdrop (lab_backdrop.gdshader cloud_amt / fog_amt,
@@ -72,7 +72,7 @@ const CENTRE_LEVELS := [0.35, 0.45]   # Daniele 2026-11-11 (playground sliders):
 const CENTRE_FOG := 1.0          # x CENTRE_LEVELS for the plane between decks and floor that covers the CENTRE
                                  # (0 = off, 1 = same numbers as the sides). Off by default: it hazes the floor under the goo falls.
 var center_fog_mat: ShaderMaterial   # set by WorldDressing._backdrop; FogLead tints its fog colour
-const LAB_SIDE := "res://assets/art/backdrops/lab-side-%s-%d.jpg"   # a / b, 1184 (phone, 2.16:1) or 1440 (16:9)
+const SLATE_SIDE := "res://assets/art/backdrops/lab-side-%s-%d.jpg"   # a / b, 1184 (phone, 2.16:1) or 1440 (16:9)
 
 const FLOOR_DEPTH := 16.0        # metres under the lowest node (decks sit at 0 / -4: the floor at -16 / -20)
 const TUBE_R := 0.95             # a common platform's tube, under its machinery core
@@ -185,7 +185,7 @@ func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
 	floor_kind = _floor_kind_for(str(_main.get("map_path")) if _main.get("map_path") != null else "")
 	var args := OS.get_cmdline_user_args()
 	floor_pic = "--floor=labpic" in args
-	var demo_default: bool = (Rules.demo or Rules.WORLD_LAB_FLOOR) and not Array(args).any(func(a): return str(a).begins_with("--floor"))   # DEMO BUILD: lab5 floor by default (Daniele, world pass 2)
+	var demo_default: bool = (Rules.demo or Rules.WORLD_PIC_FLOOR) and not Array(args).any(func(a): return str(a).begins_with("--floor"))   # DEMO BUILD: lab5 floor by default (Daniele, world pass 2)
 	if floor_pic or "--floor=lab5" in args or demo_default or Look.lab:   # LAB LOOK TEST: the lab floor path, TILE-LAB below
 		floor_kind = "lab"
 	floor_lab5 = floor_kind == "lab" and not floor_pic and not "--floor-v1" in args
@@ -195,7 +195,7 @@ func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
 	if "--floor-clear" in args:
 		floor_haze = 0.0
 	elif floor_pic:
-		floor_haze = LAB_PIC_HAZE
+		floor_haze = FLOOR_PIC_HAZE
 	elif floor_lab5:
 		floor_haze = LAB5_HAZE
 	if Look.lab:
@@ -244,7 +244,7 @@ func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
 
 
 func _lab_backdrop(main: Node) -> void:
-	## the lab biome's side backdrop (round 5) on Scenery's sky layer, hazed toward LAB_FAR in the middle so the floor's
+	## the lab biome's side backdrop (round 5) on Scenery's sky layer, hazed toward SLATE_FAR in the middle so the floor's
 	## fade ring melts into it; and the scene's height fog thinned so a fall stays visible down to the floor
 	var sc = main.get("scenery")
 	var layer: CanvasLayer = sc.backdrop if sc != null else null
@@ -252,21 +252,21 @@ func _lab_backdrop(main: Node) -> void:
 		var sky := layer.get_child(0) as TextureRect
 		var vp := get_viewport().get_visible_rect().size if get_viewport() != null else Vector2(812, 375)
 		var side := "a" if "--lab-side=a" in OS.get_cmdline_user_args() else "b"
-		sky.texture = load(PerfProfile.hi_path(LAB_SIDE % [side, 1184 if vp.x / maxf(vp.y, 1.0) >= 2.0 else 1440]))
+		sky.texture = load(PerfProfile.hi_path(SLATE_SIDE % [side, 1184 if vp.x / maxf(vp.y, 1.0) >= 2.0 else 1440]))
 		var m := sky.material as ShaderMaterial
-		m.set_shader_parameter("abyss", LAB_FAR)
+		m.set_shader_parameter("abyss", SLATE_FAR)
 		m.set_shader_parameter("tint", Color(1, 1, 1, 1))
 		m.set_shader_parameter("brightness", 0.9)
 		m.set_shader_parameter("abyss_haze", 0.55)
 	if sc != null:                                    # the arena's mist sheets: the lab's gray-blue air, not the violet void
 		for c in (sc as Node).get_children():
 			if c is MeshInstance3D and (c as MeshInstance3D).material_override is ShaderMaterial 					and ((c as MeshInstance3D).material_override as ShaderMaterial).shader == Scenery.VOID_SHADER:
-				((c as MeshInstance3D).material_override as ShaderMaterial).set_shader_parameter("mist_color", LAB_FAR.lightened(0.12))
+				((c as MeshInstance3D).material_override as ShaderMaterial).set_shader_parameter("mist_color", SLATE_FAR.lightened(0.12))
 	for c in main.get_children():
 		if c is WorldEnvironment and (c as WorldEnvironment).environment != null:
 			var env := (c as WorldEnvironment).environment
 			env.fog_height_density = LAB5_FOG_HEIGHT_DENSITY
-			env.fog_light_color = LAB_FAR
+			env.fog_light_color = SLATE_FAR
 
 
 func _lab_air(main: Node) -> void:
@@ -275,12 +275,12 @@ func _lab_air(main: Node) -> void:
 		if c is WorldEnvironment and (c as WorldEnvironment).environment != null:
 			var env := (c as WorldEnvironment).environment
 			env.fog_height_density = LAB5_FOG_HEIGHT_DENSITY
-			env.fog_light_color = LAB_FAR
+			env.fog_light_color = SLATE_FAR
 
 
 func haze_abyss() -> Color:
 	## the colour the world props haze toward (the floor's far haze is this x 0.6)
-	return LAB_FAR / 0.6 if floor_lab5 else Scenery.ABYSS
+	return SLATE_FAR / 0.6 if floor_lab5 else Scenery.ABYSS
 
 
 func _exit_tree() -> void:
@@ -319,9 +319,9 @@ func _build_mist(centre: Vector3, radius: float) -> void:
 	mat.shader = Scenery.VOID_SHADER
 	mat.set_shader_parameter("noise_tex", tex)
 	mat.set_shader_parameter("mist_color", Scenery.ABYSS.lightened(0.18))
-	mat.set_shader_parameter("density", MIST_DENSITY * (LAB_PIC_MIST if floor_pic else (LAB5_MIST if floor_lab5 else 1.0)))
+	mat.set_shader_parameter("density", MIST_DENSITY * (FLOOR_PIC_MIST if floor_pic else (LAB5_MIST if floor_lab5 else 1.0)))
 	if floor_lab5:
-		mat.set_shader_parameter("mist_color", LAB_FAR.lightened(0.1))
+		mat.set_shader_parameter("mist_color", SLATE_FAR.lightened(0.1))
 	mat.set_shader_parameter("scale", 0.009)
 	mat.set_shader_parameter("motes", 0.5)
 	mat.set_shader_parameter("wind", Vector2(0.004, 0.0018))
@@ -353,17 +353,17 @@ func _build_floor(centre: Vector3, radius: float) -> void:
 		m.set_shader_parameter("lab5_m", Look.FLOOR_M if Look.lab else LAB5_TILE_M)
 		m.set_shader_parameter("lab5_gain", LAB5_GAIN)
 		m.set_shader_parameter("haze", LAB5_HAZE)
-		m.set_shader_parameter("abyss", LAB_FAR / 0.6)   # its far haze (abyss x 0.6) is the backdrop's middle
+		m.set_shader_parameter("abyss", SLATE_FAR / 0.6)   # its far haze (abyss x 0.6) is the backdrop's middle
 	elif floor_pic:                                    # world-locked: centred under the board, its 2 m grid on the world's
-		var o := Vector2(centre.x, centre.z) - LAB_PIC_SIZE / 2.0
-		o = Vector2(snappedf(o.x + LAB_PIC_GRID0.x, 2.0) - LAB_PIC_GRID0.x, snappedf(o.y + LAB_PIC_GRID0.y, 2.0) - LAB_PIC_GRID0.y)
+		var o := Vector2(centre.x, centre.z) - FLOOR_PIC_SIZE / 2.0
+		o = Vector2(snappedf(o.x + FLOOR_PIC_GRID0.x, 2.0) - FLOOR_PIC_GRID0.x, snappedf(o.y + FLOOR_PIC_GRID0.y, 2.0) - FLOOR_PIC_GRID0.y)
 		m.set_shader_parameter("pic", true)
-		m.set_shader_parameter("t_pic", load(LAB_PIC))
+		m.set_shader_parameter("t_pic", load(FLOOR_PIC))
 		m.set_shader_parameter("pic_origin", o)
-		m.set_shader_parameter("pic_size", LAB_PIC_SIZE)
-		m.set_shader_parameter("haze", LAB_PIC_HAZE)
-		m.set_shader_parameter("pic_gain", LAB_PIC_GAIN)
-		m.set_shader_parameter("pic_mirror", LAB_PIC_MIRROR and not "--labpic-fade" in OS.get_cmdline_user_args())
+		m.set_shader_parameter("pic_size", FLOOR_PIC_SIZE)
+		m.set_shader_parameter("haze", FLOOR_PIC_HAZE)
+		m.set_shader_parameter("pic_gain", FLOOR_PIC_GAIN)
+		m.set_shader_parameter("pic_mirror", FLOOR_PIC_MIRROR and not "--labpic-fade" in OS.get_cmdline_user_args())
 	elif not v1:
 		var dir := FLOORS_V2 + floor_kind
 		m.set_shader_parameter("t_base", load(dir + "-base-v2.png"))

@@ -3288,9 +3288,6 @@ func _build_end() -> void:
 	if not main.online:                                # UX pass (board 07): PLAY AGAIN = the same setup, one tap
 		primary = ["PLAY AGAIN  →", main.restart]
 		quiet = [["HOME", main.to_menu], ["RANDOM MAP", main.rematch_random], ["CHANGE SETUP", func(): main.to_menu("setup")]]
-		var lab_menu := preload("res://scripts/lab_menu.gd")
-		if lab_menu.wanted() and lab_menu.card_id != "":   # LAB BUILD: a test card's match - PLAY AGAIN or back to the cards
-			quiet = [["LAB CARDS", main.to_menu]]
 	if _end_page == "details":
 		s.details({"name": str(main.map.get("name", "")), "sub": where, "outcome": outcome, "primary": primary,
 				"back": func():

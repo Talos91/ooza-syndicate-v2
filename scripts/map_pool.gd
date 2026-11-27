@@ -72,12 +72,9 @@ static func battlefield() -> Array:
 	if not _battlefield_cache.is_empty():
 		return _battlefield_cache
 	var offered := all().filter(func(p): return not p.get_file().substr(0, 4) in TUTORIAL_ONLY and not archived(p) and (not rework(p) or p.get_file().substr(0, 4) in MULTI_FILL))
-	if not POOL3.is_empty() and not Rules.lab:        # OOZE 3.0: the Z maps only, on every build line (release, -dev, demo, proto)
+	if not POOL3.is_empty():                          # OOZE 3.0: the POOL3 maps only, on every build line (release, -dev, demo, proto)
 		_battlefield_cache = offered.filter(func(p): return p.get_file().substr(0, 4) in POOL3)
 		return _battlefield_cache
-	if Rules.lab and not LAB.is_empty():              # LAB BUILD: the lab maps only (empty LAB = the G pool below, via proto_debug)
-		var joints: bool = Rules.lab_opt("joints") == true
-		return offered.filter(func(p): return p.get_file().substr(0, 4) in LAB and (joints or not p.get_file().substr(0, 4) in LAB_JOINT))   # (not cached: a card may switch joints)
 	if Rules.demo:                                    # DEMO BUILD: R-01 STRAIT only
 		_battlefield_cache = offered.filter(func(p): return p.get_file().substr(0, 4) in DEMO)
 		return _battlefield_cache
@@ -131,10 +128,7 @@ static func test_scope() -> Array[String]:
 	if not POOL3.is_empty():                          # OOZE 3.0 (plan 2.4): the per-map suites check the Z pool only
 		out.append_array(POOL3)
 		return out
-	if Rules.lab and not LAB.is_empty():              # a lab build checks what its picker offers
-		out.append_array(LAB.filter(func(c): return Rules.lab_opt("joints") == true or not c in LAB_JOINT))
-	else:
-		out.append_array(PROTO)
+	out.append_array(PROTO)
 	return out
 
 
@@ -175,17 +169,11 @@ const PROTO: Array[String] = ["G-01", "G-02", "G-03", "G-04", "G-05", "G-06", "G
 # json says `was`) by References/Ooze Syndicate maps 3.0/generator/gmaps3.py, next to the Z maps (Daniele decides later whether Z stays).
 const POOL3: Array[String] = ["Z-01", "Z-02", "Z-03", "Z-04", "Z-05", "Z-06", "Z-07", "Z-08",
 	"Y-01", "Y-02", "Y-03", "Y-04", "Y-05", "Y-06", "Y-07", "Y-08", "Y-09", "Y-10", "Y-11", "Y-12", "Y-13", "Y-14", "Y-15", "Y-16", "Y-17", "Y-18", "Y-19"]
-# THEMES (2026-11-13): map code -> LookTheme id (corporate_campus / golden_hour / quota_parade / wellness_retreat). Empty = the LAB
+# THEMES (2026-11-13): map code -> LookTheme id (corporate_campus / golden_hour / quota_parade / wellness_retreat). Empty = the slate look
 # on every map until Daniele assigns the round-32 settings; dev --theme=<id> forces one for shots.
 const THEMES := {}
 const DEMO: Array[String] = ["G-01", "G-02", "G-03", "G-04", "G-05", "G-06", "G-07", "G-08", "G-09", "G-10", "G-11", "G-12", "G-13", "G-14", "G-15", "G-16", "G-17", "G-18", "G-19",
 		"HX-1", "HX-2", "HX-3", "HX-4", "HX-5", "HX-6", "HX-7", "HX-8"]   # DEMO BUILD (Rules.demo): the G pool (2026-11-15; the REWORK maps left it) + the HX size ladder
-# LAB BUILD (Rules.lab, 05 Handoff/handoffs/LAB-BUILD-PLAN 2026-11-23.md): the lab test-card maps, group "L", codes of exactly 4
-# characters (all() / every filter here match on the first four characters of the file name). While the list is
-# empty a lab build offers the G pool (proto_debug) so it stays playable.
-const LAB: Array[String] = ["L09P", "L11P", "L13P", "L09C", "L11C", "L13C", "L09R"]   # WP 1: the plain reading ladder (generator References/Ooze Syndicate maps - lab 2026-11/generator/labmaps.py); WP 3: the cluster variants; WP 4: L09R (relay kill: retract + switch, neutral Googatling T3 centre)
-# LAB JOINT maps (WP3: clusters of touching platforms joined by joint edges): offered only while Rules.lab_opt("joints") is on.
-const LAB_JOINT: Array[String] = ["L09C", "L11C", "L13C"]
 # HX SIZE LADDER (map-size study 2026-11-15; Daniele: "lets do it in the demo staging, simply make lets say 4/8 maps with just a
 # honeycomb of nodes so we get the general idea of max limits"): HX-1..HX-8, generator References/Ooze Syndicate maps - size ladder
 # HX 2026-11/generator/honeycomb.py. DEMO ONLY: group "H" is not in POOL_GROUPS and the codes are not in PROTO.
@@ -204,9 +192,9 @@ static func mode_offered(code_or_path: String, mode: String) -> bool:
 	## new pool doesn't offer (it fills a gap, it doesn't compete with the new maps). Never a WITHHELD_MODES mode.
 	if mode in WITHHELD_MODES.get(code_or_path.get_file().substr(0, 4), []) or archived(code_or_path) or (rework(code_or_path) and not code_or_path.get_file().substr(0, 4) in MULTI_FILL):
 		return false
-	if not POOL3.is_empty() and not Rules.lab:        # OOZE 3.0: only the Z maps are offered, in every mode they seat
+	if not POOL3.is_empty():                          # OOZE 3.0: only the POOL3 maps are offered
 		return code_or_path.get_file().substr(0, 4) in POOL3
-	if POOL_GROUPS.is_empty() or (Rules.lab and code_or_path.get_file().substr(0, 4) in LAB):
+	if POOL_GROUPS.is_empty():
 		return true
 	var c := code_or_path.get_file().substr(0, 1)
 	if c in POOL_GROUPS or code_or_path.get_file().substr(0, 4) in MULTI_KEEP:

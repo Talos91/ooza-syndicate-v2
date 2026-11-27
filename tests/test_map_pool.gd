@@ -75,14 +75,11 @@ func _init() -> void:
 	check(not MapPool.battlefield().any(func(p): return MapPool.archived(p)), "no archived map on the battlefield")
 	# POOL G (Daniele 2026-11-15): the pool is the 19 G maps; the 18 REWORK maps stay baked but are never offered
 	check(MapPool.PROTO.size() == 19 and MapPool.PROTO.all(func(c): return MapPool.all().any(func(p): return p.get_file().begins_with(c))), "POOL G: 19 G maps, all baked")
-	var lab_pool: bool = Rules.lab and not MapPool.LAB.is_empty()   # LAB BUILD: battlefield() is the lab maps only, so the G-pool shape checks below do not apply
-	if lab_pool:
-		print("SKIP  REWORK / MULTI_FILL pool-shape checks: lab build, battlefield() = MapPool.LAB %s" % [MapPool.LAB])
-	for code in ([] if lab_pool else MapPool.REWORK):
+	for code in MapPool.REWORK:
 		var fill: bool = code in MapPool.MULTI_FILL   # hotfix 0.24.5.1: M-15 / N-06 are offered as is for the modes no G map seats
 		check(MapPool.all().any(func(p): return p.get_file().begins_with(code)) and not MapPool.mode_offered(code, "1v1")
 				and (fill or (not MapPool.mode_offered(code, "2v2") and not MapPool.battlefield().any(func(p): return p.get_file().begins_with(code)))) and not code in MapPool.DEMO, "%s: REWORK (file kept, %s)" % [code, "offered only for modes the G pool lacks" if fill else "offered nowhere"])
-	for code in ([] if lab_pool else MapPool.MULTI_FILL):
+	for code in MapPool.MULTI_FILL:
 		check(MapPool.mode_offered(code, "2v2") and MapPool.battlefield().any(func(p): return p.get_file().begins_with(code)), "%s: MULTI_FILL offered for 2v2" % code)
 	for old in MapPool.RECODED:
 		check(not MapPool.all().any(func(p): return p.get_file().begins_with(old)), "%s: re-coded %s (no old-coded file left)" % [old, MapPool.RECODED[old]])
@@ -125,24 +122,21 @@ func _init() -> void:
 
 func _pool3() -> void:
 	## OOZE 3.0 (plan 2.4, Daniele 2026-11-27: old pool-G maps are not in the 3.0 build): the pickers offer ONLY the Z maps
-	## (MapPool.POOL3) on every build line but a lab build; every older map stays baked (nothing deleted) and is offered nowhere;
+	## (MapPool.POOL3) on every build line; every older map stays baked (nothing deleted) and is offered nowhere;
 	## every Z map loads, seats 1v1, lays out every node and finishes a headless AI vs AI match.
-	var lab0 := Rules.lab
 	var demo0 := Rules.demo
 	var proto0 := Rules.proto_debug
 	for line in [[false, false, false, "release"], [false, false, true, "-dev / proto"], [false, true, true, "demo"]]:
-		Rules.lab = line[0]
 		Rules.demo = line[1]
 		Rules.proto_debug = line[2]
 		MapPool._battlefield_cache = []
 		var bf := MapPool.battlefield()
 		var codes := bf.map(func(p): return p.get_file().substr(0, 4))
 		check(codes == Array(MapPool.POOL3), "%s line: the picker offers exactly the Z maps %s (got %s)" % [line[3], str(MapPool.POOL3), str(codes)])
-		for code in ["G-01", "G-19", "L09C", "N-06", "M-15", "T-02"]:
+		for code in ["G-01", "G-19", "N-06", "M-15", "T-02"]:
 			check(not MapPool.mode_offered(code, "1v1") and not MapPool.mode_offered(code, "2v2"), "%s line: old map %s offered in no mode" % [line[3], code])
 		for code in MapPool.POOL3:
 			check(MapPool.mode_offered(code, "1v1"), "%s line: %s offered in 1v1" % [line[3], code])
-	Rules.lab = lab0
 	Rules.demo = demo0
 	Rules.proto_debug = proto0
 	MapPool._battlefield_cache = []

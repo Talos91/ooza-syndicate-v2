@@ -34,8 +34,6 @@ func check(cond: bool, what: String) -> void:
 
 
 func _initialize() -> void:
-	for k in ["gat_own_platform", "gat_start", "quota_tier", "relay_set"]:   # LAB WP4 rule options: the map checks run on the
-		Rules.lab_opts[k] = false                     # real game's rules (tests/test_lab_rules.gd tests the options)
 	_run.call_deferred()
 
 
@@ -266,7 +264,7 @@ func _ooze3(m: Dictionary, path: String) -> void:
 	for n in m["nodes"]:
 		if n.get("relay") != null and str(n.get("relay")) != "":
 			relay_ids[int(n["id"])] = true
-			check(not (str(n["relay"]) in Rules.LAB_RELAY_ARCHIVED), "%s: relay %d (%s) is a kind the 3.0 relay set plays" % [code, int(n["id"]), str(n["relay"])])
+			check(not (str(n["relay"]) in Rules.RELAY_ARCHIVED), "%s: relay %d (%s) is a kind the 3.0 relay set plays" % [code, int(n["id"]), str(n["relay"])])
 			check(str(n["relay"]) == "launcher" or not (Rules.NODE_BUILDS["relay"] as Array).is_empty(), "%s: relay %d offers its build option (%s)" % [code, int(n["id"]), str(Rules.NODE_BUILDS["relay"])])
 	for e in m["edges"]:
 		if bool(e.get("joint", false)):

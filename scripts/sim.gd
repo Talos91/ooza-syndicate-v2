@@ -112,7 +112,7 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 		if owner != "":
 			homes[owner] = id
 		var relay: String = n["relay"] if n.get("relay") != null else ""
-		if relay in Rules.LAB_RELAY_ARCHIVED and Rules.RELAY_SET:   # 3.0 RELAY SET (was lab relay_set): archived kinds never play
+		if relay in Rules.RELAY_ARCHIVED and Rules.RELAY_SET:   # 3.0 RELAY SET (was lab relay_set): archived kinds never play
 			push_warning("3.0 relay set: node %d's %s relay is archived; it plays as a plain node" % [id, relay])
 			relay = ""
 		# a relay node has no vat (GAME-RULES sec6, centreHasNoVat): it is a modest neutral

@@ -12,7 +12,7 @@ extends RefCounted
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
 const VERSION := "0.30.0-lab5"   # OOZE 3.0 WP0 (branch ooze3): main 0.25.2 (cleanup) + lab4 61c2eb6e merged, lab still on; LAB 4: zoom box + locked camera, unit speed card, Googatling range/power/ammo options, relay-kill L09R redo, count on the vat screen (LAB 1-3: rule options, joint edges, cluster ladder); history in CHANGELOG.md
-const WORLD_LAB_FLOOR := true   # the demo's lab5 floor on every map (the fog / tube work was tuned on it); was Rules.demo only
+const WORLD_PIC_FLOOR := true   # the demo's lab5 floor on every map (the fog / tube work was tuned on it); was Rules.demo only
 const LOOK_LAB2 := true   # the lab2 world look (cream decks, owner rim band, lab floor + surround) is the default (Daniele 2026-11-12: "the new status quo"); dev --look-old = the 0.24.1 look, --look=lab = test v1
 const HUD_LAB := true    # hud-lab (2026-11-13): the round-29/30 lab HUD pack (HudLab) is THE in-match HUD (false = the pre-lab HUD)
 const VERSION_NAME := "Alpha 23"
@@ -168,68 +168,24 @@ static var proto_debug: bool = VERSION.contains("-proto") or VERSION.contains("-
 static var demo: bool = VERSION.contains("-demo")
 # LAB BUILD (Daniele 2026-11-23: "build the lab with all the test so we test and tweak the game"; 05 Handoff/handoffs/LAB-BUILD-PLAN
 # 2026-11-23.md): VERSION "...-lab<n>" = grey-box test cards at oozesyndicate.com/lab/. Turns on proto_debug, NOT demo or quota.
-# Every lab rule sits behind lab_opts (read through lab_opt(): off when lab is false), never a deletion.
-# OOZE 3.0 (plan 3.0-ARCHITECTURE-PLAN sec 2.2, WP1): the lab rules ARE the game now. lab is false in every build (the VERSION
-# may still say "-lab<n>" while ooze3 is built, which only keeps proto_debug on); lab_opt() is a shim that answers the 3.0
-# values below, so files not yet ported (main, hud, map_pool) see the 3.0 game. No rule in sim.gd / seat_ai.gd reads lab_opts.
-# The shim, lab_opts and the LAB_* names go in WP6.
-static var lab: bool = false
+# OOZE 3.0 (plan 3.0-ARCHITECTURE-PLAN sec 2.2): the lab rules ARE the game now. The lab build, its cards, the lab option shim and
+# the lab-prefixed names were deleted in WP6 (2026-11-27; tag ooze3-pre-wp6 / lab4-final keep them). A VERSION "-lab<n>" only keeps
+# proto_debug on.
 # ---- OOZE 3.0 RULES (Daniele 2026-11-27, Hub Desk answers). Static vars, so old tests can run the legacy game (comments say what
 # the 0.25 game did).
 static var JOINTS := true            # joint edges (clusters): no deck, unbreakable, vat-to-vat path (0.25: no joints)
-static var RELAY_SET := true         # LAB_RELAY_ARCHIVED kinds (lift, tilt, remote, laser_relay) play as plain nodes (0.25: all kinds)
+static var RELAY_SET := true         # RELAY_ARCHIVED kinds (lift, tilt, remote, laser_relay) play as plain nodes (0.25: all kinds)
 static var GAT_REACH: float = R      # Googatling reach from its node centre = its own platform, 7.6 m (0.25: MACHINEGOON_RANGE 10 m)
 static var GAT_POWER := 1.0          # x Googatling fire rate (MACHINEGOON_RATE[tier] x this)
 static var GAT_AMMO := 1.0 / 3.0     # own garrison units spent per unit killed: 1 unit per 3 kills (0.25: 1.0, one per kill)
 static var UNIT_SPEED := 0.75        # x BRAWL unit speed and door rate: 3.0 trial, Daniele 11-27 "x0.75 (try)" (0.25: 1.0)
-static var lab_opts := {
-	"joints": true,             # joint edges (clusters): no deck, unbreakable, vat-to-vat path
-	"gat_own_platform": true,   # the Googatling fires only over its own platform
-	"gat_start": false,         # card GOOGATLING: each seat starts with a T1 Googatling next to home (Sim._setup_lab_gat_start)
-	"quota_tier": false,        # quota: 1 point per tier, relays do not launch (on by the QUOTA card only: it changes the end)
-	"relay_set": true,          # the lab relay set (rotate, retract, switch, launcher; ferry / belt as hazards)
-	"count_on_screen": false,   # lab4 job 3 (WP 6): the unit count on each vat's screen, in the world (vat_count.gd). Card COUNT SIZE
-	"count_scale": 1.0,         # vat-screen digit size x (1.0 = VatCount.DIGIT_H 1.15 m; card choices x1.0 / x1.15 / x1.3)
-	"hud_badge": true,          # the HUD count badge (Hud._badges); off only with count_on_screen (card COUNT SIZE)
-	"cam_lock": true,           # LAB ZOOM BOX: lab maps (MapPool.LAB) start at the fixed camera below, not fitted to the map
-	# lab4 jobs 2 + 5 (Daniele's phone test of lab3, points 5 and 8): numbers picked on a card's choice sheet (lab_cards "choices").
-	"unit_speed": 1.0,          # x BRAWL unit travel speed AND door rate (Rules.move_speed / exit_rate; spacing kept). Card CLUSTER HOP
-	"gat_range": 0.0,           # Googatling reach, m from its node centre; 0 = as before (gat_own_platform: R 6 m, else MACHINEGOON_RANGE 10 m)
-	"gat_power": 1.0,           # x Googatling fire rate (kills/s = MACHINEGOON_RATE[tier] x this; Sim.gat_fire_rate)
-	"gat_ammo": 1.0,            # own garrison units spent per unit killed (1 = before: one per kill; 0.5 = 1 per 2 kills; 0 = free)
-}
-const _LAB_OFF := {"joints": false, "gat_own_platform": false, "gat_start": false, "quota_tier": false, "relay_set": false,
-		"count_on_screen": false, "count_scale": 1.0, "hud_badge": true, "cam_lock": false,
-		"unit_speed": 1.0, "gat_range": 0.0, "gat_power": 1.0, "gat_ammo": 1.0}   # what the real game does (lab off)
 
 
-# LAB ZOOM BOX (lab4 job 1; Daniele's phone test of lab3: "if we trying maps more zoomed in the maps need to be buildt at zoom in
-# target ... the map size needs to allow for that zoom"). With lab_opt("cam_lock") a lab map's start view is ONE fixed camera
-# (main._lab_cam_locked): yaw 0, pitch LAB_CAM_PITCH, distance LAB_CAM_DIST, aimed LAB_CAM_AIM_Z m (+z, towards the viewer) off the map frame's centre
-# (layout 0, 0 = the generator's frame point (80, 40); a map may sit off-centre to use the wider far side). LAB_CAM_DIST = pool G's median start-view platform size x 1.18 (the half-bridge zoom gain of
-# MAP-PLANNING-NUMBERS 2026-11-22): 69.4 pt x 1.18 = 81.9 pt at 844 x 390 pt (no notch), tests/lab_box_probe.gd ref=1 (lab3's own
-# fits: L09P 68.8 m, L09C 73.5, L11P 78.7, L13C 106.2). The BOX is the ground a platform RIM
-# (LAB_BOX_RIM, Look.RIM_OUT) may reach at that camera and still show inside main.pit_rect() (the HUD columns, the top band, the
-# bottom strip and the side safe areas out) on BOTH reference phones (844 x 390 pt, 47 pt notch insets; 812 x 375 pt, 44 pt):
-# a trapezoid in metres from the frame centre, +z towards the viewer (the screen's bottom, the map's +y): far edge z = FAR_Z
-# (half-width FAR_HALF_W), near edge z = NEAR_Z (half-width NEAR_HALF_W); the far edge also keeps a 7.5 m tower in view.
-# The lab map generator (References/Ooze Syndicate maps - lab 2026-11/generator/labmaps.py) reads these lines and refuses
-# a map outside the box. Re-measure with tests/lab_box_probe.gd after changing the camera, the pit or the HUD bands.
-const LAB_CAM_PITCH := 45.0
-const LAB_CAM_DIST := 74.5
-const LAB_CAM_AIM_Z := 0.4            # probe: 0.57 (844 x 390) / 0.18 (812 x 375); the box below is the two phones' overlap
-const LAB_BOX_RIM := R + 0.14          # the platform rim (Look.RIM_OUT; 6.14 at R 6)
-const LAB_BOX_FAR_Z := -27.2          # probe: -27.95 / -27.48 from each phone's own aim (the tower top sets it, not the ground)
-const LAB_BOX_NEAR_Z := 27.2          # probe: 27.95 / 27.48
-const LAB_BOX_FAR_HALF_W := 51.8      # probe: 52.79 / 52.06 at the far edge
-const LAB_BOX_NEAR_HALF_W := 30.5     # probe: 30.75 / 30.55 at the near edge (inscribed rectangle 61.0 x 54.4 m)
-
-
-# LAB RELAY SET (option relay_set; Daniele 2026-11-23: "keep rotate, retract, switch and launcher; turn ferry and conveyor to hazard
+# RELAY SET (3.0 rule, was the lab option relay_set; Daniele 2026-11-23: "keep rotate, retract, switch and launcher; turn ferry and conveyor to hazard
 # only; replace laser relay with simply nodes starting at googatling T3 and archive the rest"): the relay kinds a lab match never
-# creates nor offers (Sim.setup turns such a node into a plain one; tests/test_lab_rules.gd checks no lab map uses them). Their
-# code stays (options, not deletions).
-const LAB_RELAY_ARCHIVED := ["lift", "tilt", "remote", "laser_relay"]
+# creates nor offers (Sim.setup turns such a node into a plain one while RELAY_SET is on; tests/test_rules3.gd checks no 3.0 map
+# uses them). Their code stays for the old maps.
+const RELAY_ARCHIVED := ["lift", "tilt", "remote", "laser_relay"]
 
 
 # LAST STAND = QUOTA (Daniele 2026-11-15, the demo prototype bd016a0d in ooze-wt/demo-river-quota; ported to the lab by WP4 with
@@ -238,8 +194,7 @@ const LAB_RELAY_ARCHIVED := ["lift", "tilt", "remote", "laser_relay"]
 # to its owner's side at liftoff (neutral: nobody). Relay nodes never launch (nor fall) and junctions never score. The Very
 # Last Stand runs down to the last platform. The match ends on elimination, on a lead nobody can catch (lead > the points still
 # on the board; FFA: against the leader) or after the last launch: most quota wins, a tie goes to the side that held the last
-# platform (neutral: DRAW). On only in a lab build with lab_opt("quota_tier") (its card); a map's lastStand.quota block (rings
-# + orders) is its launch order. Main play is untouched.
+# platform (neutral: DRAW). A map's lastStand.quota block (rings + orders) is its launch order.
 # OOZE 3.0: the quota IS the Last Stand (Daniele 11-27 "Last Stand = the quota"); false = the 0.25 ring collapse (old tests).
 static var quota: bool = true
 const QUOTA_END_SPARE := 1.0         # s: the Very Last Stand's last launch lands this long before the hard end (Sim._vls_queue_next)
@@ -250,26 +205,6 @@ const QUOTA_AI_ARRIVE := 2.0         # s: the AI's line must land at least this 
 const QUOTA_AI_KEEP := 3.0           # shown units the AI leaves on its own doomed platform when it evacuates (to hold it)
 
 
-static func lab_opt(key: String) -> Variant:
-	## SHIM (OOZE 3.0, until WP6 removes it): a lab option's lab_opts value in a lab build, else the 3.0 game's value - the
-	## rule vars above for the rule keys, the 3.0 view choices for the rest. Rules never call it; views not yet ported do.
-	if lab:
-		return lab_opts.get(key)
-	match key:
-		"joints": return JOINTS
-		"relay_set": return RELAY_SET
-		"quota_tier": return quota
-		"unit_speed": return UNIT_SPEED
-		"gat_own_platform": return true
-		"gat_range": return GAT_REACH
-		"gat_power": return GAT_POWER
-		"gat_ammo": return GAT_AMMO
-		"count_on_screen": return true      # the count on every vat screen (WP4)
-		"count_scale": return 1.0           # default count size (WP4: OPTIONS stepper, Rules.COUNT_SIZES)
-		"hud_badge": return false           # the HUD count badge goes (the screen count replaces it)
-		"cam_lock": return true             # every 3.0 map starts at the fixed camera (WP2 / WP4)
-		"gat_start": return false           # lab card only, dropped
-	return _LAB_OFF.get(key)
 # KIT2 at drill node SIZE D (Daniele 2026-11-18 "also in staging gogogogo"; kit2-staging, from bg-44b4 ea662788 / demo2-kit 24c346f):
 # the platform + vats baked from Models/2.0/kit-v2-detail at x0.68 (bake_demo2.py) and the full-size column (r 1.088) with its
 # wine bands (bake_demo2_D.py) in assets/kit/kit2/. VIEW ONLY and STATIC on staging: no launcher, no QUOTA, no river (the collar,
