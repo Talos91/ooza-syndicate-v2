@@ -16,8 +16,8 @@ extends RefCounted
 static var lab := _arg() in ["lab", "lab2"]
 static var v2 := _arg() == "lab2"   # designer v2 (2026-11-12): cream satin shell kept under the glow, owner rim ~2x and brighter,
                                     # goo shows through clearer glass; floor / surround / lights as v1
-const RIM_IN := 5.86                # v2 owner rim: a 0.28 m flat band on the platform lip (the kit band is 0.14 m on the side)
-const RIM_OUT := 6.14
+const RIM_IN := Rules.R - 0.14      # v2 owner rim: a 0.28 m flat band on the platform lip (the kit band is 0.14 m on the side);
+const RIM_OUT := Rules.R + 0.14     # Ooze 3.0: on the lip of the slot platform at Rules.R (was 5.86 / 6.14 at R 6.0)
 const RIM_ENERGY := 1.5             # v2 owned rim emission (Mats.light: 3.0)
 const KIT_RIM_ENERGY := 1.5         # vat-neon round 2: 4.5 / 2.2 tonemapped every channel > 1 to WHITE (the owner colour only in the halo); <= ~1.5 keeps the hue. Was 2.2 (owner neon far too faint on a phone, Daniele 2026-11-13); owner reads at a glance
 const KIT2 := ["Platform_Standard", "Vat_T1", "Vat_T2", "Vat_T3", "Vat_T4"]   # KIT2 look keys (Rules.kit2: assets/kit/kit2/)

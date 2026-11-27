@@ -150,7 +150,9 @@ static func _warm_kit2() -> void:
 
 
 static func put(parent: Node3D, name: String, pos: Vector3, heading := 0.0, stretch := 1.0) -> Node3D:
-	var n := piece(name)
+	## Ooze 3.0 MODEL SLOTS: a platform or a structure key comes back as its Slots3 slot (the kit piece inside, as "Art");
+	## everything else (decks, piers, gates, ...) is the kit piece itself.
+	var n: Node3D = Slots3.make(name) if Slots3.owns(name) else piece(name)
 	parent.add_child(n)
 	n.position = pos
 	n.rotation.y = heading
@@ -542,7 +544,10 @@ static func apply_owner(parts: Array, seat: String) -> void:
 					if mi.has_meta("vat_liquid"):             # a living liquid (Scenery) colours itself
 						continue
 					mi.set_surface_override_material(s, Mats.ooze(seat) if seat != "" else (Mats.ooze_neutral() if seat_a else null))
-		Look.rim(p, seat)                               # LAB LOOK TEST v2: the owner rim band (no-op otherwise)
+		if (p as Node).has_method("set_seat"):          # Ooze 3.0: a slot platform (rim + conquest, Slots3)
+			Slots3.set_seat(p, seat)
+		else:
+			Look.rim(p, seat)                           # LAB LOOK TEST v2: the owner rim band (no-op otherwise)
 		MapBatch.refresh(p)                             # Alpha 21: a batched piece's light / ooze slots follow
 
 

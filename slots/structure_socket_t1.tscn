@@ -1,0 +1,11 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://slots/slot_structure.gd" id="1_slot"]
+
+[node name="structure_socket_t1" type="Node3D"]
+script = ExtResource("1_slot")
+kind = "socket"
+tier = 1
+category = "relay"
+
+[node name="ScreenMount" type="Marker3D" parent="."]
