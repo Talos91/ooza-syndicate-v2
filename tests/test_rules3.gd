@@ -497,6 +497,29 @@ func _part_f() -> void:
 	var sp: Dictionary = sim.nodes[4]
 	check(Sim.node_category(sp) == "special" and int(sp["tier"]) == 4 and sp["structure"] == "vat" and sp["buildable"] == ["vat"],
 			"SPECIAL: a map T4 is its own category, a T4 vat, builds only its vat (%s T%d %s)" % [Sim.node_category(sp), int(sp["tier"]), str(sp["buildable"])])
+	# the HOTSPOT (Daniele 11-27: "start with huge neutral garrison but once conquered offer the most production in the game")
+	check(sp["owner"] == "" and float(sp["units"]) == float(Rules.SPECIAL_GARRISON)
+			and Rules.SPECIAL_GARRISON > int(Rules.NEUTRAL_UNITS[3]),
+			"HOTSPOT: starts NEUTRAL with the biggest garrison (%d shown; a neutral T3 %d)" % [Rules.shown(sp["units"]), Rules.shown(Rules.NEUTRAL_UNITS[3])])
+	var g0: float = sp["units"]
+	for i in range(40):
+		sim.step(0.05)
+	check(sp["owner"] == "" and is_equal_approx(float(sp["units"]), g0) and sim.production(sp) == 0.0,
+			"HOTSPOT: a neutral one holds its garrison (%.0f -> %.0f in 2 s, makes nothing)" % [g0, float(sp["units"])])
+	check(not sim.homes.values().has(4) and _sim_m(_special_map()).nodes.all(func(n): return not (Sim.is_special(n) and n["owner"] != "")),
+			"HOTSPOT: never a home node (no seat starts on a SPECIAL)")
+	sim._land_classic(sp, "B", g0 + 50.0)
+	check(sp["owner"] == "B" and int(sp["tier"]) == 4 and float(sp["units"]) > 0.0, "HOTSPOT: a bigger line conquers it (owner %s, T%d)" % [sp["owner"], int(sp["tier"])])
+	var best := 0.0
+	for t in [1, 2, 3]:
+		best = maxf(best, float(Rules.PROD[t]))
+	var pr_sp: float = sim.production(sp)
+	var cmp: Dictionary = sim.nodes[sim.homes["B"]]
+	cmp["tier"] = 3
+	var pr_t3: float = sim.production(cmp)
+	check(pr_sp > pr_t3 and Rules.SPECIAL_PROD > best and is_equal_approx(sim._base_production(sp), Rules.SPECIAL_PROD * sim.stat("B", "production")),
+			"HOTSPOT: conquered, it makes the most in the game (%.2f shown/s vs a T3 vat %.2f; SPECIAL_PROD %.3f)" % [Rules.shown_f(pr_sp), Rules.shown_f(pr_t3), Rules.SPECIAL_PROD])
+	check(is_equal_approx(sim.node_cap(sp), float(Rules.SPECIAL_CAP)), "HOTSPOT: its cap is SPECIAL_CAP (%d shown)" % Rules.shown(Rules.SPECIAL_CAP))
 	sp["owner"] = "B"
 	sp["units"] = 500.0
 	check(sim.can_build(4, "B", "machinegoon") != "", "SPECIAL: irreplaceable - no Googatling (%s)" % sim.can_build(4, "B", "machinegoon"))

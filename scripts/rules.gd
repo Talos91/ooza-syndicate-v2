@@ -710,6 +710,13 @@ static var CANNON_RANGE := 12.0
 # refill up to that"): 15 / 30 / 60 / 100 shown, derived from CAPS (apply_balance re-derives them unless a
 # preset names its own NEUTRAL_UNITS).
 static var NEUTRAL_UNITS := neutral_from_caps(CAPS)
+# OOZE 3.0 SPECIAL T4 HOTSPOT (Daniele 2026-11-27: "T4 are special nodes we want player to fight for as they start with huge neutral
+# garrrison but once conquered offere the most production in the game, so they are perfect hotspot"; never a home node). He gave
+# no numbers: these are PLACEHOLDERS FOR DANIELE TO TUNE, set to today's T4 vat values (the most conservative reading). Sim reads
+# them for every SPECIAL node (Sim.is_special): its neutral start garrison, its cap and its production (above every T1-T3 vat).
+static var SPECIAL_GARRISON: int = NEUTRAL_UNITS[4]   # 500 = 100 shown (a neutral T1 starts with 75 = 15 shown, T3 300 = 60)
+static var SPECIAL_CAP: int = CAPS[4]                 # 1000 = 200 shown
+static var SPECIAL_PROD: float = PROD[4]              # 14.875 units/s = 2.98 shown/s, the game's highest (a T3 vat 10.2 = 2.04)
 
 
 static func neutral_from_caps(caps: Dictionary) -> Dictionary:
