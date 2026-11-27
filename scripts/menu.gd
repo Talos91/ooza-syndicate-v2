@@ -4588,7 +4588,9 @@ func _toggle(text: String, on: bool, pos: Vector2, dims: Vector2, call: Callable
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	var bs := minf(22.0, b.size.y - 16.0)
 	for st in ["normal", "hover", "pressed", "hover_pressed"]:
-		(b.get_theme_stylebox(st) as StyleBoxFlat).content_margin_left = 12.0 + bs + 10.0
+		var sb := b.get_theme_stylebox(st).duplicate() as StyleBox   # (a MenuSkin StyleBoxTexture since 0.24.5: no StyleBoxFlat cast)
+		sb.content_margin_left = 12.0 + bs + 10.0
+		b.add_theme_stylebox_override(st, sb)
 	b.tooltip_text = "%s: %s" % [text, "ON" if on else "OFF"]
 	var box := Control.new()
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE

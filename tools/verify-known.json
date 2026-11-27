@@ -47,14 +47,9 @@
    "errors": ["re:Compile Error: Identifier not found: Net$", "re:Compile Error: Failed to compile depended scripts\\.$"],
    "note": "Net autoload missing under -s, so no taps register; main f1b184cc. got 1 since ooze3-screens-fix: UiKit.acknowledge no longer waits for frame_post_draw headless, so the two emitted presses answer once"
   },
-  "test_ui_nav": {
-   "errors": ["re:Invalid assignment of property or key 'content_margin_left' with value of type 'float' on a base object of type 'Nil'"],
-   "note": "REAL BUG, not noise (WP0 2026-11-27): menu.gd _toggle (line 4586) casts the button stylebox to StyleBoxFlat, but since 0.24.5 secondary / selected buttons use MenuSkin StyleBoxTexture -> null; _toggle stops there, so every ON / OFF toggle loses its check box and tooltip (18 per run). Owner: WP4 (menu.gd); drop this entry with the fix"
-  },
   "test_ui_sweep": {
    "fails": ["re:^FAIL  [a-z_]+: .* - off the screen at \\("],
-   "errors": ["re:Invalid assignment of property or key 'content_margin_left' with value of type 'float' on a base object of type 'Nil'"],
-   "note": "359 'off the screen' FAILs headless at 1136x640 + the 18 menu.gd:4586 errors (see test_ui_nav); main f1b184cc; WP4 owns"
+   "note": "359 'off the screen' FAILs headless at 1136x640; main f1b184cc; WP4 owns (the 18 menu.gd _toggle errors were fixed in WP6)"
   },
   "test_kit_hd": {
    "fails": ["re:^FAIL  (desktop|phone): \\S+ resolves to (kit_hd|kit_hd/skins|light kit)$", "re:^FAILURES \\(\\d+ failed\\)$"],
