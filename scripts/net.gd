@@ -1049,7 +1049,7 @@ func _reseat(teams := {}) -> void:
 
 
 func publish_lobby() -> void:
-	_broadcast("lobby", {"roster": roster, "mode": mode, "map": map_path, "siege": false,   # SIEGE deleted 2026-11-23: the field stays, fixed
+	_broadcast("lobby", {"roster": roster, "mode": mode, "map": map_path,
 			"last_stand": last_stand, "round": match_round, "ai_fill": ai_fill, "abilities": abilities, "owner": room_owner,
 			"backdrop": room_backdrop, "ai_picks": ai_picks})   # UI: an older client ignores them
 	lobby_changed.emit()
@@ -1185,10 +1185,7 @@ func launch_round(fill := "") -> void:
 			"players": players, "roster": roster, "ai": ai, "ai_fill": ai_fill, "colours": room_colours(), "loadouts": loadouts,
 			"backdrop": _backdrop_index(),             # UI: the round's background, the same on every screen
 			"cosmetics": cosmetics,
-			# SIEGE deleted 2026-11-23: bridge_combat and its four tunables stay on the wire at their old fixed values (ignored)
-			"rules": {"bridge_combat": false, "last_stand": last_stand, "abilities_on": abilities, "deck_speed": 5.0,
-					"node_speed_mult": 1.0, "door_rate": 48.0,
-					"node_fight_mult": 1.0, "forge_bonus": Rules.forge_bonus,
+			"rules": {"last_stand": last_stand, "abilities_on": abilities, "forge_bonus": Rules.forge_bonus,
 					"hide_enemy_counts": Rules.hide_enemy_counts, "balance_preset": Rules.BALANCE_PRESET}}
 	_broadcast("launch", info)
 	_launch(info)
@@ -1204,8 +1201,8 @@ func _launch(info: Dictionary) -> void:
 	mode = str(info["mode"])
 	map_path = str(info["map"])
 	var r: Dictionary = info["rules"]
-	last_stand = bool(r["last_stand"])                 # (r["bridge_combat"] / deck_speed / node_speed_mult / door_rate /
-	Rules.last_stand = last_stand                      # node_fight_mult are SIEGE's, ignored since 2026-11-23)
+	last_stand = bool(r["last_stand"])
+	Rules.last_stand = last_stand
 	Rules.apply_balance(str(r.get("balance_preset", "")))   # the host's balance preset (0.18.7; "" = default numbers)
 	Rules.forge_bonus = float(r["forge_bonus"])
 	Rules.hide_enemy_counts = bool(r.get("hide_enemy_counts", false))   # the host's option, the same for all

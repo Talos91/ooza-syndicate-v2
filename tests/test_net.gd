@@ -228,8 +228,8 @@ func _run() -> void:
 	check(host.active and int(info["round"]) == 1 and info["players"].size() == 2, "launch: round 1 with both players")
 	_deliver()
 	check(g.active and g.match_round == 1 and g.match_info["seed"] == info["seed"], "guest receives the launch (same seed)")
-	check(info["rules"]["bridge_combat"] == false and not host.has_method("toggle_siege"),
-			"rooms play BRAWL: the launch says so and no room control switches SIEGE on (deleted 2026-11-23)")
+	check(not info["rules"].has("bridge_combat") and not host.has_method("toggle_siege"),
+			"rooms play BRAWL: no SIEGE field on the wire and no room control switches SIEGE on (deleted 2026-11-23, WP6 2026-11-27)")
 	var hs := _build_sim(info)
 	var gs := _build_sim(g.match_info)
 	# ONLINE VERSUS (0.22.3): the card is a loading screen on both ends - up from the launch, gone only once this
