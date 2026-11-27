@@ -139,13 +139,7 @@ static func world_texts(inst: Node) -> Array:
 				if bl.under_band(cr):
 					cr.position.y = r.end.y            # (drawn under the badge instead)
 				out.append(["chip#%d" % id, cr])
-		if hud.overlay:
-			var s: Rect2 = hud.overlay.sign_rect(id)
-			if s.size.x > 0.0:
-				out.append(["sign#%d" % id, s])
-			var u: Rect2 = hud.overlay.upgrade_chip_rect(id)
-			if u.size.x > 0.0:
-				out.append(["upgrade#%d" % id, u])
+		# (WP4b: no Last Stand sign or upgrade chip in the HUD any more - both are on the node's screen, VatCount._keep_clear)
 	if hud.callouts:
 		var i := 0
 		for r in hud.callouts.rects():

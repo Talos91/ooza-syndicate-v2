@@ -1,8 +1,8 @@
 extends Node
 ## 0.25.3 HOTFIX (Daniele 2026-11-27, four bugs on live 0.25.2) - the HUD side, in the real game scene:
 ##   Godot --headless --audio-driver Dummy --path . res://tests/test_hotfix_0253.tscn -- --map=res://maps4/G-02-fort.json
-## (a) once the ring collapse is done the status line says when the Very Last Stand comes (not CONQUEST DECIDES over a minute
-##     where nothing falls), and no line names the method (INWARD / OUTWARD);
+## (a) no line names the method (INWARD / OUTWARD) - since WP4b (Ooze 3.0) there is no Last Stand line at all, the warned
+##     node's screen counts its drop down and gives the count back;
 ## (b) a laser relay holding its laser offers FORGE in its pie; (c) a node a sinkhole emptied offers VAT in its pie.
 ## The Sim side of (b) / (c) / (d) is test_sim --only=hotfix_0253. Exit code 0 = all passed.
 
@@ -13,15 +13,6 @@ func check(cond: bool, what: String) -> void:
 	print(("PASS  " if cond else "FAIL  ") + what)
 	if not cond:
 		failures += 1
-
-
-func _check_025_hud(cond: bool, what: String) -> void:
-	## OOZE 3.0 (WP1): the 0.25.3 HUD wording for the RING collapse lived in hud.gd; the ooze3 merge kept ooze3's hud.gd (3.0's Last
-	## Stand is the quota, its line is WP4's "Last Stand text" job). Reported, not failed, until WP4 owns the 3.0 line.
-	if cond:
-		check(true, what)
-	else:
-		print("SKIP  (0.25 ring-collapse HUD line; 3.0 Last Stand text = WP4) " + what)
 
 
 func _frames(n: int) -> void:
@@ -70,22 +61,40 @@ func _ready() -> void:
 	sim._sinkhole("B", v)
 	pie = _pie(main, vid)
 	check(v["structure"] == "" and "VAT" in pie, "0.25.3 (c): a node a sinkhole emptied offers VAT (pie %s)" % [pie])
-	# (a) the Last Stand: run the ring collapse to its end, before 6:00
+	# (a) the Last Stand: run the ring collapse to its end, before 6:00. WP4b (Daniele 2026-11-27: "no more last stand alert
+	# message as it's on screen"): no status line while it runs (so no line can name the method), the warned node's own screen
+	# counts its drop down (VatCount) and the count comes back on it.
 	sim.time = Rules.LAST_STAND_TIME
 	sim._step_last_stand(0.0)
-	main.hud.pulse_last_stand("the rim falls first - hold the centre")   # what main does on the "last_stand" fx
 	main.hud.sync(0.0, main.cam)
 	var first: String = main.hud.status_label.text
-	_check_025_hud(not ("INWARD" in first.to_upper() or "OUTWARD" in first.to_upper()) and first.begins_with("LAST STAND"),
-			"0.25.3 (a): the Last Stand announcement names no method ('%s')" % first)
+	check(sim.last_stand_active and first == "", "WP4b (a): no Last Stand line in the HUD while it runs ('%s')" % first)
+	var guard := 0
+	while sim.last_stand_queue.is_empty() and guard < 4000:            # to the first warned ring
+		sim._step_last_stand(0.05)
+		sim.time += 0.05
+		guard += 1
+	var vc = main.vat_count
+	var warned := -1
+	for id in vc.screens:
+		if sim.is_warned(id):
+			warned = id
+			break
+	check(warned >= 0, "WP4b (a): a node is warned (time %.0f s)" % sim.time)
+	if warned >= 0:
+		vc._clock = 0.0                                               # the cycle's notice part: the seconds
+		vc.sync()
+		var said: String = vc.screens[warned]["text"]
+		check(said.ends_with("s") and said.contains(str(int(ceil(sim.drop_in(warned))))),
+				"WP4b (a): the warned node's screen counts its drop down ('%s', drop in %.1f s)" % [said, sim.drop_in(warned)])
+		vc._clock = 2.0                                               # past VatCount.NOTICE_S (1.6 of 2.4 s): the count again
+		vc.sync()
+		said = vc.screens[warned]["text"]
+		check(said == vc.count_text(sim.nodes[warned]), "WP4b (a): then the count comes back on that screen ('%s')" % said)
 	while sim.time < Rules.VERY_LAST_STAND_TIME - 5.0 and not (sim.last_stand_queue.is_empty() and sim.last_stand_next >= sim.last_stand_waves.size()):
 		sim._step_last_stand(0.05)
 		sim.time += 0.05
 	check(sim.time < Rules.VERY_LAST_STAND_TIME - 5.0, "G-02's ring collapse ends before the Very Last Stand (%.0f s)" % sim.time)
-	main.hud.sync(10.0, main.cam)                                 # the pulse is long over (it counts down after the line is set)
-	main.hud.sync(0.0, main.cam)
-	var after: String = main.hud.status_label.text
-	_check_025_hud(after.contains("VERY LAST STAND in"), "0.25.3 (a): after the ring collapse the line says when the Very Last Stand comes ('%s')" % after)
 	# (a) in 3.0: the Last Stand is the quota, so the sim never holds an INWARD / OUTWARD method for the HUD to show
 	Rules.quota = true
 	var q := Sim.new()

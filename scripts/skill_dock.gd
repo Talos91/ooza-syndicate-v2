@@ -1299,6 +1299,10 @@ func on_event(ev: Dictionary) -> void:
 		"evac": what = "your garrison is forced out"   # (offensive since 2026-10-07)
 	# HUD pass: at the place the skill landed (the event's pos), the caster's emblem as the icon
 	if hud and hud.has_method("callout_at") and ev.get("pos") is Vector3:
+		for n in sim.nodes:                           # WP4b: a cast on a node is a word on that node's screen (its name)
+			if (n["pos"] as Vector3).distance_to(ev["pos"]) < 0.5 and hud.main and hud.main.get("vat_count") != null:
+				hud.callout_node(int(n["id"]), ArmyPresets.skill_name(id), "warn", seat)
+				return
 		hud.callout_at(ev["pos"], "skill:%s" % seat, "%s%s" % [ArmyPresets.skill_name(id).to_upper(), (" - " + what) if what != "" else ""], "warn", seat)
 		return
 	_toast("seat %s cast %s%s" % [seat, ArmyPresets.skill_name(id).to_upper(), (" - " + what) if what != "" else ""], "warn")

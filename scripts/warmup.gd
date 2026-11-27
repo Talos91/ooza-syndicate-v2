@@ -95,7 +95,7 @@ func _effects(sim: Sim) -> void:
 		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mmi.custom_aabb = AABB(Vector3(-1, -1, -1), Vector3(2, 2, 2))
 		_add(mmi)
-	for spec in [[72, 16], [72, 18], [48, 10], [64, 14]]:   # Fx.floater, the route label, tier-down / skill labels
+	for spec in [[72, 16], [72, 18], [48, 10], [64, 14]]:   # (were the floaters), the route label, (tier-down) / skill labels
 		var l := Label3D.new()
 		TopBand.tag(l)
 		l.font = Hud.UI_FONT

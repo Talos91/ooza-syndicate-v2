@@ -72,7 +72,7 @@ var proto_view: ProtoRelayView       # RELAYS 3.0 PROTOTYPES: only on a map that
 var door_view: DoorView             # TWO DOORS (Rules.TWO_DOORS): a floor arrow at both doors of every platform
 var combat: CombatFx                               # fights for a tower, conquest tier-downs, the cannon laser
 var world_layer: WorldLayer                         # WORLD LAYER: floor, node tubes, splats (view only)
-var contact_shade: ContactShade                     # READABILITY D (0.24.5): seat plates + contact shadows (view only)
+var contact_shade: ContactShade                     # READABILITY D (0.24.5): contact shadows (view only; WP4b: no seat plates)
 var fog_lead: FogLead                              # FOG LEAD: the arena's air leans to the leading seat's colour (view only)
 var _world_probe := -1.0                           # --world-probe=T: a 100-unit fall at T, frame times printed
 var _probe_ft: Array = []
@@ -508,7 +508,7 @@ func _start_map(path: String) -> void:
 		world_layer = WorldLayer.new()
 		add_child(world_layer)
 		world_layer.setup(self, sim, vis, mobile)
-	if ContactShade.wanted():                          # READABILITY D (0.24.5): seat plates + contact shadows (view only)
+	if ContactShade.wanted():                          # READABILITY D (0.24.5): contact shadows (view only; WP4b: no seat plates)
 		contact_shade = ContactShade.new()
 		add_child(contact_shade)
 		contact_shade.setup(sim, vis, world_layer.floor_y if world_layer != null else NAN)
@@ -534,6 +534,7 @@ func _start_map(path: String) -> void:
 	skill_fx = SkillFx.new()
 	add_child(skill_fx)
 	skill_fx.setup(sim, vis, HUMAN)
+	skill_fx.node_word = screen_notice                 # WP4b: words over a node go on its screen
 	drag_line = MeshInstance3D.new()
 	drag_line.mesh = drag_mesh
 	drag_line.visible = false                       # ui-node: the HUD overlay draws the send ribbon / rings (Neon Noir)
@@ -576,8 +577,6 @@ func _start_map(path: String) -> void:
 	for n in sim.nodes:
 		vis[n["id"]]["model_key"] = MapBuilder.model_for(n)
 		MapBuilder.apply_owner(vis[n["id"]]["parts"], n["owner"])
-		if contact_shade:
-			contact_shade.set_seat(n["id"], n["owner"])
 	# --- 0.19.0 cosmetics (HUD agent, spec E/I): each seat's structure look, applied once. Offline:
 	# your ARMIES pick for your seat, every other seat (AI) the default. Online: every seat's pick came
 	# from the host's launch packet (net.gd's "cosmetics", built from each player's roster "cosmetic" -
@@ -1050,7 +1049,6 @@ func _on_resized() -> void:
 	RenderScale.sync()                                 # hotfix-02319: the scaled 3D's size first - the fit below measures through it
 	_apply_safe_area()
 	hud.layout(vp, margins)
-	combat.top_limit = hud.top_used() + 3.0 * 38.0 * hud.ui_scale   # the top bar and up to three toasts
 	_fit_camera()
 
 
@@ -1412,8 +1410,6 @@ func _stage_scenario() -> void:
 			scenario_focus = (sim.nodes[1]["pos"] + sim.nodes[0]["pos"]) / 2.0
 	for n in sim.nodes:
 		MapBuilder.apply_owner(vis[n["id"]]["parts"], n["owner"])
-		if contact_shade:
-			contact_shade.set_seat(n["id"], n["owner"])
 
 
 func _debug_casts() -> void:
@@ -1623,7 +1619,7 @@ func _run_scenario() -> void:
 					1:
 						hud.callout_node(3, "FORGE LOST", "warn")
 						hud.callout_node(1, "HANDED OVER", "warn", "B")
-						fx.floater(sim.nodes[2]["pos"], "+ CAPTURED", Rules.seat_color(HUMAN))
+						screen_notice(2, "TAKEN", Rules.seat_color(HUMAN))
 						sim.last_stand_active = true
 						sim.last_stand_warn[3] = true
 						sim.last_stand_queue = [3]
@@ -1656,7 +1652,6 @@ func _run_scenario() -> void:
 							hud.skill_refusal(1, "Pick a deck")
 						sim.last_stand_active = true
 						sim.last_stand_method = "inward"
-						hud.pulse_last_stand("the rim falls first - hold the centre")
 					2:
 						var far := -1
 						var best := -1.0
@@ -1915,16 +1910,8 @@ func _process(delta: float) -> void:
 		match ev["type"]:
 			"skill":                                  # a rival's skill that touches you: a callout there (SkillDock.on_event)
 				hud.skill_event(ev)
-			"last_stand":
-				# 0.20.13 (Daniele's online co-op playtest: "last stand still fills the whole screen"): this
-				# was the culprit - a 44 pt two-line banner held 5 s dead centre. The status line already
-				# says LAST STAND continuously right under the top bar, so the one-time announcement is that
-				# line's own pulse now (HUD pass: no toast), saying how the method falls meanwhile; the per-node
-				# danger symbols still carry the actual warning.
-				var how := {"inward": "the rim falls first - hold the centre", "outward": "the centre falls first - hold the rim",
-						"chaos": "nodes fall in a hidden order - your home last"}
-				if hud.shows("status_line"):
-					hud.pulse_last_stand(str(how.get(ev["method"], "")))
+			# "last_stand": no announcement (WP4b, Daniele 2026-11-27: "no more last stand alert message as it's on screen"):
+			# each warned node's screen counts its launch down (VatCount), the quota sits on the AI screens' plates.
 			# 0.20.6 declutter (Daniele: "too many notifications and many notifications cover the map...
 			# remove all notices of things like send and capture"): VERY LAST STAND repeats the status
 			# line (H5/top bar), the node's own falls are the danger symbols, and relay switches are
@@ -1995,9 +1982,7 @@ func _process(delta: float) -> void:
 				if hid >= 0 and hid < sim.nodes.size():
 					var hpos: Vector3 = sim.nodes[hid]["pos"]
 					fx._pulse(hpos, Rules.state_color("warn"), Rules.R + 1.5, 0.9)
-					fx.floater(hpos, "HUB DESTROYED", Rules.state_color("warn"))
-					if str(ev.get("seat", "")) == HUMAN:
-						hud.callout_node(hid, "HUB DESTROYED · ONE PER PLAYER", "warn")
+					hud.callout_node(hid, "HUB DESTROYED · ONE PER PLAYER" if str(ev.get("seat", "")) == HUMAN else "HUB DESTROYED", "warn")   # (WP4b: on its screen)
 			"eject":                                   # your own eject is a routine order (nothing to say, see node_action);
 				if str(ev.get("seat", "")) != HUMAN and sim.allied(str(ev.get("seat", "")), HUMAN):
 					hud.callout_node(int(ev["node"]), "STORED TROOPS SENT HOME", "info", str(ev["seat"]))
@@ -2138,20 +2123,24 @@ func _on_captured(node_id: int, new_owner: String, _old: String) -> void:
 	if hud and hud.has_method("ai_event"):
 		hud.ai_event(new_owner, _old, node_id)
 	MapBuilder.apply_owner(vis[node_id]["parts"], new_owner)
-	if contact_shade:
-		contact_shade.set_seat(node_id, new_owner)
-	# 0.20.6 declutter (Daniele: "remove all notices of things like send and capture - better is in game
-	# text coming out of the conquer place"): a fight is already visible on the node itself (fx.gd's
-	# capture pulse), so the toast becomes a short rising label there instead of covering the map.
+	# 0.20.6 declutter (Daniele: "remove all notices of things like send and capture"), WP4b (11-27: "no more conquest ... as
+	# it's on screen"): TAKEN / LOST on the node's own screen, no label rising over the map.
 	if not hud.shows("floaters"):                       # TUTORIAL: the reveal set names when this is taught
 		return
 	var last: Dictionary = sim.fx_events[-1] if not sim.fx_events.is_empty() else {}
 	if last.get("handover", false) and int(last.get("node", -1)) == node_id:
 		return                                          # a handover: its own callout says it (the fx loop, HUD pass)
 	if new_owner == HUMAN:
-		fx.floater(sim.nodes[node_id]["pos"], "+ CAPTURED", Rules.seat_color(HUMAN))
+		screen_notice(node_id, "TAKEN", Rules.seat_color(HUMAN))
 	elif _old == HUMAN:
-		fx.floater(sim.nodes[node_id]["pos"], "LOST", Color("ff5b5b"))
+		screen_notice(node_id, "LOST", Color("ff5b5b"))
+
+
+func screen_notice(id: int, text: String, col: Color) -> void:
+	## WP4b (Daniele 2026-11-27: "no more conquest and other notifications as it's on screen"): a node-level notice is a word on
+	## that node's screen (VatCount.notice), never a label floating over the map. Nothing without a screen (the room server).
+	if vat_count:
+		vat_count.notice(id, text, col)
 
 
 func _on_forge_online(seat: String, node_id: int, first: bool) -> void:

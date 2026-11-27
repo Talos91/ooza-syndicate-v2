@@ -401,11 +401,6 @@ func setup(m: Node3D) -> void:
 			top_right.add_child(spacer)
 		for seat in g:
 			_build_top_chip(seat, into, seat == human)
-	status_glow = Panel.new()                         # HUD pass: the Last Stand announcement pulses its own line
-	status_glow.add_theme_stylebox_override("panel", HudNoir.box("status_pill", Color(0, 0, 0, 0), Vector4.ZERO))
-	status_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	status_glow.visible = false
-	root.add_child(status_glow)
 	status_label = text_label("", 18, Color("ffb0b0"))
 	ui_scale = keep_s
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1165,11 +1160,6 @@ func _quota_place(vp: Vector2, u: float, sz: Vector2) -> Vector2:
 	return spots[spots.size() - 1]
 
 
-func _ls_word() -> String:
-	## LAST STAND = QUOTA: platforms launch instead of dropping.
-	return "NEXT LAUNCH" if Rules.quota else "NEXT DROP"
-
-
 func sync(dt: float, cam: Camera3D) -> void:
 	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
 	if main.online:
@@ -1205,30 +1195,10 @@ func sync(dt: float, cam: Camera3D) -> void:
 				(c["panel"] as Control).add_theme_stylebox_override("panel", _score_box(seat, "score_pill_out"))
 	if not shows("status_line"):
 		status_label.text = ""
-	elif sim.very_last_stand_active:
-		# 0.23.23 (Daniele: "last stand message is too long"): the line says what drops when, nothing more
-		# 3.0 (Daniele 11-27, "Last Stand = the quota"): the line names the quota and what still launches
-		if Rules.quota:
-			status_label.text = ("VERY LAST STAND · QUOTA · LAUNCH EVERY %d s" % int(round(sim.very_last_stand_gap))) 					if sim.very_last_stand_gap > 0.0 else "VERY LAST STAND · QUOTA DECIDES"
-		else:
-			status_label.text = ("VERY LAST STAND · DROP EVERY %d s" % int(round(sim.very_last_stand_gap))) 					if sim.very_last_stand_gap > 0.0 else "VERY LAST STAND · CONQUEST DECIDES"
-	elif sim.last_stand_active:
-		var next := ""
-		var pending: int = sim.last_stand_waves.size() if sim.v3 else sim.last_stand_order.size()
-		if sim.v3 and not sim.last_stand_warn.is_empty():
-			next = _ls_word() + " %d s · %d LEFT" % [int(ceil(sim.last_stand_warn_t)), sim.last_stand_queue.size()]
-		elif sim.last_stand_warn_node >= 0:
-			next = _ls_word() + " %d s" % int(ceil(sim.last_stand_warn_t))
-		elif sim.last_stand_next < pending:
-			next = _ls_word() + " %d s" % int(ceil(maxf(sim._next_wave_at - sim.time, 0.0)))
-		else:
-			next = "QUOTA DECIDES" if Rules.quota else "CONQUEST DECIDES"
-		# the method and how it falls only while the announcement pulses (HUD_LS_PULSE s); then just the next drop
-		# (3.0 quota: "LAST STAND · QUOTA · NEXT LAUNCH 6 s · 4 LEFT"; the score itself is on the AI screens' plates)
-		if Rules.quota and not (_ls_pulse > 0.0 and _ls_how != ""):
-			status_label.text = "LAST STAND · QUOTA · %s" % next if next != "QUOTA DECIDES" else "LAST STAND · QUOTA DECIDES"
-		else:
-			status_label.text = ("LAST STAND · %s · %s" % [sim.last_stand_method.to_upper(), _ls_how]) if _ls_pulse > 0.0 and _ls_how != "" 					else "LAST STAND · %s" % next
+	elif sim.very_last_stand_active or sim.last_stand_active:
+		# WP4b (Daniele 2026-11-27: "no more last stand alert message as it's on screen"): no line while it runs - each warned
+		# node's screen counts its launch down (VatCount), the quota is on the AI screens' plates.
+		status_label.text = ""
 	elif Rules.last_stand and not sim.over and sim.time > Rules.LAST_STAND_TIME - 15.0 and sim.time < Rules.LAST_STAND_TIME and not (sim.v3 and (sim._map_last_stand.get("methods", []) as Array).is_empty()):
 		# mirrors sim._step_last_stand: no countdown when the Last Stand is off, over, or the map has none
 		status_label.text = ("QUOTA LAST STAND in %d s" if Rules.quota else "LAST STAND in %d s") % int(ceil(Rules.LAST_STAND_TIME - sim.time))
@@ -1249,7 +1219,6 @@ func sync(dt: float, cam: Camera3D) -> void:
 	if dock.visible:
 		dock.sync(dt)
 	_refresh_inspector(cam)
-	_sync_status_pulse(dt)
 	if not callouts.items.is_empty():
 		callouts.sync(dt, cam, callout_area(root.get_viewport_rect().size), callout_blocked())
 	if _band_keeper == null:                          # calm-pass: no in-world text under the score bar / status line - run
@@ -1291,7 +1260,7 @@ func _badges(cam: Camera3D) -> bool:
 			panel.visible = false
 			continue
 		# ui-neon (Daniele 2026-11-02, "unit count HUD disappearing"): a warned node keeps its badge - the count stays readable
-		# all through the Last Stand; the neon alarm sign (HudOverlay._draw_danger_symbols) sits beside it, clear of it.
+		# all through the Last Stand (3.0: no badge; the screen counts the launch down, vat_count.gd).
 		# (0.19.0 hid the badge here, when the sign replaced a round badge; with a whole ring warned at once that hid 6 counts.)
 		panel.visible = true
 		var owner: String = n["owner"]
@@ -2861,7 +2830,7 @@ func close_inspector() -> void:
 # every message goes where it belongs, drawn by HudCallouts. A map event is a callout at its node / deck / spot
 # (callout_node / callout_at, an edge arrow when that place is off screen); a skill dock refusal a small line just
 # above the slot tapped (skill_refusal); a network line about a seat a line under that seat's top-bar chip; the
-# Last Stand's announcement a pulse of its own status line (pulse_last_stand); the start lines a short banner
+# node-level line (WP4b) a word on that node's screen (VatCount.notice), no Last Stand announcement; the start lines a short banner
 # (start_banner); online loading the waiting text (set_waiting). toast() stays as the thin router for every other
 # caller (other sessions' TUTORIAL / CAMPAIGN / PROGRESSION lines, Net's feedback): the seat chip when the line
 # starts with a seat, else a centred line under the top bar. TUTORIAL: nothing of it before the "notices" reveal (L3).
@@ -2871,11 +2840,8 @@ static var _SEAT_WORD := RegEx.create_from_string("(?i)\\bseat ([A-F])\\b(?: \\(
 const GOOD_WORDS := ["captured", "Sending", "Recalled", "reconnected", "Upgrade started", "construction started", "Restoring", "Relay fired"]
 const INFO_COLOR := Color("7fe9f5")
 var callouts: HudCallouts               # every placed message (see above)
-var status_glow: Panel                  # behind the status line while the Last Stand announcement pulses it
 var _status_secs: Control               # Neon Noir: the amber capsule round the status line's seconds
 var _secs_re := RegEx.create_from_string("\\d+ s\\b")
-var _ls_pulse := 0.0                    # s of that pulse left
-var _ls_how := ""                       # the method's one-line explanation, shown in the line meanwhile
 
 
 func toast(msg: String, kind := "") -> void:
@@ -2942,14 +2908,19 @@ func _icon_opts(seat: String, kind: String) -> Dictionary:
 
 
 func callout_node(id: int, text: String, kind := "warn", seat := "", place := "") -> void:
-	## A map event at a node (its own place: the same node again refreshes it).
+	## A map event at a node (its own place: the same node again refreshes it). OOZE 3.0 (WP4b, Daniele 2026-11-27: "no more
+	## conquest and other notifications as it's on screen"): a word on that node's screen (VatCount.notice), no callout.
 	if id < 0 or id >= sim.nodes.size():
+		return
+	if main and main.get("vat_count") != null:
+		if shows("notices"):
+			main.vat_count.notice(id, text, kind_color(kind))
 		return
 	callout_at(sim.nodes[id]["pos"], place if place != "" else "node:%d" % id, text, kind, seat)
 
 
 func callout_at(pos: Vector3, place: String, text: String, kind := "warn", seat := "") -> void:
-	## A map event at a world point (a deck, a monster, a skill's target): one line in Fx.floater's look.
+	## A map event at a world point (a deck, a monster, a skill's target): one outlined line (HudCallouts).
 	if not shows("notices") or callouts == null:
 		return
 	var col := kind_color(kind)
@@ -3082,12 +3053,6 @@ func _place_catchup() -> void:
 	catchup_tag.position = Vector2(x, y)
 
 
-func pulse_last_stand(how: String) -> void:
-	## The Last Stand's announcement: its own status line pulses for HUD_LS_PULSE s and says how the method falls.
-	_ls_pulse = Rules.HUD_LS_PULSE
-	_ls_how = how
-
-
 func _under_top() -> float:
 	## The first free y under the top bar, the status line and a mission's strip.
 	var y := top_panel.position.y + top_panel.size.y if top_panel.visible else margins.y
@@ -3165,29 +3130,6 @@ func top_band_rects() -> Array:
 	if catchup_tag.is_visible_in_tree():
 		out.append(catchup_tag.get_global_rect())
 	return out
-
-
-func _sync_status_pulse(dt: float) -> void:
-	## The Last Stand announcement (pulse_last_stand): the status line pops, a red frame breathes behind it
-	## about once a second, then fades - the line itself keeps saying LAST STAND for the rest of the match.
-	if _ls_pulse <= 0.0 or status_label.text == "":
-		_ls_pulse = maxf(_ls_pulse - dt, 0.0)
-		status_glow.visible = false
-		status_label.scale = Vector2.ONE
-		return
-	_ls_pulse = maxf(_ls_pulse - dt, 0.0)
-	var age := Rules.HUD_LS_PULSE - _ls_pulse
-	var wave := 0.5 + 0.5 * cos(age * TAU / 1.1)                     # 1 -> 0 -> 1, about once a second
-	var fade := clampf(_ls_pulse / 0.6, 0.0, 1.0)
-	var font := status_label.get_theme_font("font")
-	var sw := font.get_string_size(status_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, status_label.get_theme_font_size("font_size")).x
-	var gw := sw + 36.0 * ui_scale
-	status_glow.visible = not Hud43.on()
-	status_glow.size = Vector2(gw, status_label.size.y + 4.0 * ui_scale)
-	status_glow.position = Vector2(status_label.position.x + (status_label.size.x - gw) * 0.5, status_label.position.y - 2.0 * ui_scale)
-	status_glow.modulate = Color(1, 1, 1, (0.45 + 0.55 * wave) * fade)
-	status_label.pivot_offset = status_label.size * 0.5
-	status_label.scale = Vector2.ONE * (1.0 + 0.1 * wave * fade * clampf(1.0 - age / 2.5, 0.35, 1.0))
 
 
 func skill_event(ev: Dictionary) -> void:

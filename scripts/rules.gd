@@ -1622,7 +1622,7 @@ const PERF_BUDGET_FULL_OBJECTS := 1400
 # --- end PERF PASS ---
 
 # --- HUD pass (2026-09-28, Daniele's "option A": no notification box - each message where it belongs) ---
-# HudCallouts: a short callout at the node / deck / spot it is about (Fx.floater's look + a small icon), one per
+# HudCallouts: a short callout at the node / deck / spot it is about (an outlined line + a small icon), one per
 # place, an edge arrow when that place is off screen; sizes in canvas units x Hud.ui_scale, phones floored in real
 # points (UiKit.pt_per_px). Seconds include the fade.
 const HUD_CALLOUT_LIFE := 2.6          # a map callout (monster, forge, handover, eject, a refused order at its node)
@@ -1639,7 +1639,6 @@ const HUD_REFUSAL_MIN_PT := 12.0
 const HUD_BANNER_LIFE := 1.6           # the match-start banner (map, who you are, the dock's start note)
 const HUD_BANNER_FONT := 30
 const HUD_LINE_LIFE := 2.4             # a line with no place of its own (tutorial / campaign / debug), under the top bar
-const HUD_LS_PULSE := 4.5              # the Last Stand status line pulses and explains the method this long
 const HUD_DOCK_MIN_PT := 11.0          # the dock's ACTIVE / MAP / ULTIMATE and status words on a phone (iPhone sweep)
 const HUD_DOCK_PHONE_W := 130.0        # Alpha 24: the skill column's width on a phone (desktop: SkillDock.SLOT_W) - its words still fit at HUD_DOCK_MIN_PT
 const HUD_NAME_MAX := 12               # characters of a player's name before it is cut with an ellipsis

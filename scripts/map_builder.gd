@@ -544,10 +544,7 @@ static func apply_owner(parts: Array, seat: String) -> void:
 					if mi.has_meta("vat_liquid"):             # a living liquid (Scenery) colours itself
 						continue
 					mi.set_surface_override_material(s, Mats.ooze(seat) if seat != "" else (Mats.ooze_neutral() if seat_a else null))
-		if (p as Node).has_method("set_seat"):          # Ooze 3.0: a slot platform (rim + conquest, Slots3)
-			Slots3.set_seat(p, seat)
-		else:
-			Look.rim(p, seat)                           # LAB LOOK TEST v2: the owner rim band (no-op otherwise)
+		Slots3.set_seat(p, seat)                        # Ooze 3.0: a slot platform's owner (its conquest hook; no rim since WP4b)
 		MapBatch.refresh(p)                             # Alpha 21: a batched piece's light / ooze slots follow
 
 

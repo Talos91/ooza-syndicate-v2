@@ -1,7 +1,7 @@
 class_name HudCallouts
 extends Control
 ## HUD pass (2026-09-28, Daniele's "option A": "no notification box at all" - the top-left stack "feels weird"):
-## every message is a short callout AT the place it is about, in Fx.floater's look (Rajdhani in the message's
+## every message is a short callout AT the place it is about, in the old capture floaters' look (Rajdhani in the message's
 ## colour, a thick dark outline, no box) with a small icon - the seat's emblem in its colour, or a warn / good /
 ## info mark. A place is a node or a deck on the map (a world point), the seat chip in the top bar, the skill slot
 ## that was tapped, the centre under the top bar (a line with no place of its own, the match-start banner, the

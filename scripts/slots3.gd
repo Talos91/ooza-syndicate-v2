@@ -7,7 +7,7 @@ extends RefCounted
 ##   kit piece MapBuilder.piece loads (light / HD / skins as before), later the new GLB.
 ## - platform: slots/Platform_slot.tscn (named "Platform_*" so MapBatch batches it as a static kit piece); origin = deck
 ##   centre, deck top y 0; the art is scaled Rules.R / ART_R["platform"] (7.6 / 6.0 in this build: no pier); set_seat(seat,
-##   faction) and the conquest parameter 0..1 drive today's owner rim (the conquest texture swaps the shader next round).
+##   faction) and the conquest parameter 0..1 (no owner rim since WP4b; the conquest effect / texture reads it next round).
 ## - structure_<kind>_t<n>.tscn: origin = deck centre; Marker3D ScreenMount over the model (the count screen mounts there,
 ##   WP4); structures are NOT scaled in this build. Node categories (Daniele 2026-11-27) each have their slots:
 ##     normal         vat T1-T3, Googatling (kit Machinegoon) T1-T3 - no upgrade to T4
@@ -127,6 +127,6 @@ static func category(slot_node: Node) -> String:
 
 
 static func set_seat(part: Node, seat: String, faction := "") -> void:
-	## MapBuilder.apply_owner: a slot platform's owner (rim + conquest); a no-op for anything else.
+	## MapBuilder.apply_owner: a slot platform's owner (its conquest hook); a no-op for anything else.
 	if is_instance_valid(part) and part.has_method("set_seat"):
 		part.call("set_seat", seat, faction)
