@@ -1,5 +1,14 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.25.3 "hotfix" - 2026-11-27 (staging, then LIVE 2026-11-27 on Daniele's "go live")
+
+- main + tag v0.25.3 = e33f9c90; gh-pages 4c91619d; index.pck 83,627,200; live room ooze20-net-8 / 0.25.3, test_dedicated + test_relay PASS. Checked headless / curl; Daniele's phone check of staging was the gate.
+  - Last Stand: the line counts down to the Very Last Stand and no longer ends in nothing; no OUTWARD / INWARD text.
+  - Laser relays (G-02/04/06/13) and the G-07 ferry take a laser or a forge again.
+  - Rebuild after a sinkhole (player and AI).
+  - Relay build option on maps that lacked it (launcher-only G-05 / G-08 stay without a relay slot, Daniele OK).
+  - Live app icon = cyan goo drop with the dragon crest; staging = pink goo drop with the WIP badge.
+
 ## 0.25.2 "cleanup" - 2026-11-23 (staging, then LIVE 2026-11-23 on Daniele's word after his staging phone check)
 
 - **LIVE 2026-11-23**: main tag v0.25.2 = 229fd590; gh-pages 5e1c966c (root = staging bytes; staging/, lab/, CNAME untouched); live index.pck 82,995,348 (was 88,822,112) = staging; live room ooze20-net-8 / 0.25.2, test_dedicated + test_relay PASS. Staging first: gh-pages e17d70a4. Checked headless / curl only; no real-phone check of the live build beyond Daniele's staging check.
