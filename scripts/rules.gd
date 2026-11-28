@@ -12,7 +12,7 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.30.0-lab5"   # OOZE 3.0 WP0 (branch ooze3): main 0.25.2 (cleanup) + lab4 61c2eb6e merged, lab still on; LAB 4: zoom box + locked camera, unit speed card, Googatling range/power/ammo options, relay-kill L09R redo, count on the vat screen (LAB 1-3: rule options, joint edges, cluster ladder); history in CHANGELOG.md
+const VERSION := "0.30.0"   # OOZE 3.0 first staging (branch ooze3): 3.0 rules, 19 Y + 8 Z maps, wide bridges, Board3 camera, vat screens, net-9, BRAWL 1v1 only; history in CHANGELOG.md
 const WORLD_PIC_FLOOR := true   # the demo's lab5 floor on every map (the fog / tube work was tuned on it); was Rules.demo only
 const LOOK_LAB2 := true   # the lab2 world look (cream decks, owner rim band, lab floor + surround) is the default (Daniele 2026-11-12: "the new status quo"); dev --look-old = the 0.24.1 look, --look=lab = test v1
 const HUD_LAB := true    # hud-lab (2026-11-13): the round-29/30 lab HUD pack (HudLab) is THE in-match HUD (false = the pre-lab HUD)

@@ -1,5 +1,23 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.30.0 "Ooze 3.0, first staging" - 2026-11-28 (STAGING only; live stays 0.25.3)
+
+- Release = branch ooze3 a7e4e352 + this version commit (tag v0.30.0-staging). ooze3 = main 0.25.3 e33f9c90 + lab4 (tag lab4-final 61c2eb6e) + 3.0 work packages WP1-WP6 (plan handoffs/3.0-ARCHITECTURE-PLAN 2026-11-27.md). Protocol tag ooze20-net-9 (was net-8): the staging room pack moves with the build; live rooms stay net-8 / 0.25.3. Base build only: no new art (Daniele 11-27).
+  - 3.0 rules (Daniele 11-27, from the lab): platform R 7.6 with no pier; joints (vat-to-vat edges without a deck); relays rotate / retract / switch, relays never in clusters; Last Stand = the quota (1 point per tier), quota score in the AI message area; unit speed x0.75 (trial); Googatling reach = its own platform, power x1.0, ammo 1 unit per 3 kills; vats keep producing while they upgrade; sinkhole rebuild allowed; the forge relay is now the JUICER.
+  - Node categories: normal (vat or Googatling T1-T3), SPECIAL T4 vats = neutral hotspots with a big garrison and the top production (placeholder numbers to tune), relay (laser or juicer).
+  - Maps: the 19 POOL G maps rebaked as Y maps for the 3.0 camera (fewer nodes, clusters, longer bridges, relays alone) + 8 new Z maps; wide bridges (deck 4.488 m); Board3 fixed camera, map and top bar centred on screen.
+  - Vat screens: the count, conquests and the Last Stand line live on the vat screens; no HUD troop count, no Last Stand banner, no painted halo round a conquered vat. HUD hugs each edge by the device safe area. OPTIONS: count size stepper, 5 sizes, default 1.0.
+  - Modes: BRAWL 1v1 only. SIEGE leftovers, 2v2 / FFA / co-op code and the lab build switches deleted (tag ooze3-pre-wp6 keeps them); tutorial and campaign stay COMING SOON. The Web pack ships the 3.0 pool only (index.pck about 82 MB).
+
+## 0.25.3 "hotfix" - 2026-11-27 (staging, then LIVE 2026-11-27 on Daniele's "go live")
+
+- main + tag v0.25.3 = e33f9c90; gh-pages 4c91619d; index.pck 83,627,200; live room ooze20-net-8 / 0.25.3, test_dedicated + test_relay PASS. Checked headless / curl; Daniele's phone check of staging was the gate.
+  - Last Stand: the line counts down to the Very Last Stand and no longer ends in nothing; no OUTWARD / INWARD text.
+  - Laser relays (G-02/04/06/13) and the G-07 ferry take a laser or a forge again.
+  - Rebuild after a sinkhole (player and AI).
+  - Relay build option on maps that lacked it (launcher-only G-05 / G-08 stay without a relay slot, Daniele OK).
+  - Live app icon = cyan goo drop with the dragon crest; staging = pink goo drop with the WIP badge.
+
 ## 0.25.2 "cleanup" - 2026-11-23 (staging, then LIVE 2026-11-23 on Daniele's word after his staging phone check)
 
 - **LIVE 2026-11-23**: main tag v0.25.2 = 229fd590; gh-pages 5e1c966c (root = staging bytes; staging/, lab/, CNAME untouched); live index.pck 82,995,348 (was 88,822,112) = staging; live room ooze20-net-8 / 0.25.2, test_dedicated + test_relay PASS. Staging first: gh-pages e17d70a4. Checked headless / curl only; no real-phone check of the live build beyond Daniele's staging check.
