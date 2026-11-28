@@ -55,6 +55,13 @@
   const cs = getComputedStyle(probe), px = s => parseFloat(s) || 0;
   return [px(cs.paddingLeft), px(cs.paddingTop), px(cs.paddingRight), px(cs.paddingBottom)];
  }
+ function angle() {                         // the screen's rotation: 90 = the device's top on the LEFT, 270 = on the RIGHT, 0 / 180
+  try {                                     // portrait; -1 unknown (3.0 WP4: iOS gives the same inset both sides in landscape,
+   if (screen.orientation && typeof screen.orientation.angle === 'number') return screen.orientation.angle;   // this says which
+  } catch (e) {}                            // side the notch / Dynamic Island is on - UiKit.resolve_sides)
+  if (typeof window.orientation === 'number') return (window.orientation + 360) % 360;
+  return -1;
+ }
  function settle() {                        // iOS finishes a rotation (and hides its bars) a little later
   if (covering()) window.scrollTo(0, 0);
   for (const ms of [50, 250, 600, 1200]) setTimeout(() => { if (covering()) window.scrollTo(0, 0); dispatchEvent(new Event('ooze-viewport')); }, ms);
@@ -83,5 +90,5 @@
    mem: navigator.deviceMemory || 0, cores: navigator.hardwareConcurrency || 0, segments: segs, posture: posture};
   return capsCache;
  }
- window.OozeViewport = {size, safe, nativeSize: () => [nativeW(), nativeH()], covering, caps};
+ window.OozeViewport = {size, safe, angle, nativeSize: () => [nativeW(), nativeH()], covering, caps};
 })();
